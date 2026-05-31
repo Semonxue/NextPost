@@ -12,6 +12,7 @@ interface Post {
   content: string;
   scheduledTime: string | null;
   status: string;
+  mediaUrls: string | null;
   account: { name: string; handle: string };
 }
 
@@ -204,23 +205,29 @@ export default function CalendarPage() {
                       </span>
                       {dayPosts.length > 0 && (
                         <div className="mt-1 space-y-1">
-                          {dayPosts.slice(0, 2).map((post) => (
-                            <div
-                              key={post.id}
-                              className="text-xs px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded truncate"
-                            >
-                              {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </div>
-                          ))}
-                          {dayPosts.length > 2 && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              +{dayPosts.length - 2} 更多
-                            </div>
-                          )}
+                      {dayPosts.slice(0, 2).map((post) => {
+                        const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+                        return (
+                          <div
+                            key={post.id}
+                            className="text-xs px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded truncate flex items-center gap-1"
+                          >
+                            {mediaArr.length > 0 && (
+                              <img src={mediaArr[0]} alt="" className="w-4 h-4 rounded object-cover" />
+                            )}
+                            {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        );
+                      })}
+                      {dayPosts.length > 2 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          +{dayPosts.length - 2} 更多
                         </div>
+                      )}
+                    </div>
                       )}
                     </>
                   )}
@@ -260,9 +267,18 @@ export default function CalendarPage() {
                         })}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-900 dark:text-white line-clamp-2">
-                      {post.content || "（无文字内容）"}
-                    </p>
+                    <div className="flex items-start gap-2">
+                      {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
+                        <img 
+                          src={JSON.parse(post.mediaUrls)[0]} 
+                          alt="媒体预览" 
+                          className="w-10 h-10 object-cover rounded"
+                        />
+                      )}
+                      <p className="text-sm text-gray-900 dark:text-white line-clamp-2 flex-1">
+                        {post.content || "（无文字内容）"}
+                      </p>
+                    </div>
                   </Link>
                 ))
               )}

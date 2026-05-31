@@ -13,6 +13,7 @@ interface Post {
   content: string;
   scheduledTime: string | null;
   status: string;
+  mediaUrls: string | null;
   account: { name: string; handle: string };
 }
 
@@ -142,9 +143,20 @@ export default function PostsPage() {
                 {posts.map((post) => (
                   <tr key={post.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="text-sm text-gray-900 dark:text-white line-clamp-2 max-w-md">
-                        {post.content || "（无文字内容）"}
-                      </p>
+                      <div className="flex items-start gap-3">
+                        {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
+                          <div className="flex-shrink-0">
+                            <img 
+                              src={JSON.parse(post.mediaUrls)[0]} 
+                              alt="媒体预览" 
+                              className="w-12 h-12 object-cover rounded-lg"
+                            />
+                          </div>
+                        )}
+                        <p className="text-sm text-gray-900 dark:text-white line-clamp-2 max-w-md">
+                          {post.content || "（无文字内容）"}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-600 dark:text-gray-400">@{post.account?.handle || "未知"}</span>
@@ -157,15 +169,13 @@ export default function PostsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          post.status === "published"
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                            : post.status === "scheduled"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                            : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                        }`}
-                      >
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        post.status === "published"
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : post.status === "scheduled"
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                      }`}>
                         {post.status === "published" ? "已发布" : post.status === "scheduled" ? "已计划" : "草稿"}
                       </span>
                     </td>

@@ -203,6 +203,74 @@ describe('Posts API', () => {
       const response = await POST(request)
       expect(response.status).toBe(404)
     })
+
+    it('should create post with mediaUrls', async () => {
+      mockAccountFindFirst.mockResolvedValue({ id: 'acct-1', userId: 'user-123' })
+      mockPostCreate.mockResolvedValue({
+        id: 'post-new',
+        content: '帖子内容',
+        status: 'scheduled',
+        accountId: 'acct-1',
+        mediaUrls: '["https://example.com/image.jpg"]',
+      })
+
+      const request = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId: 'acct-1',
+          content: '帖子内容',
+          mediaUrls: ['https://example.com/image.jpg'],
+          scheduledTime: '2024-12-01T10:00:00',
+        }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            mediaUrls: expect.any(String),
+          }),
+        })
+      )
+    })
+
+    it('should store scheduledTime with timezone', async () => {
+      mockAccountFindFirst.mockResolvedValue({ id: 'acct-1', userId: 'user-123' })
+      mockPostCreate.mockResolvedValue({
+        id: 'post-new',
+        content: '帖子内容',
+        status: 'scheduled',
+        accountId: 'acct-1',
+        scheduledTime: new Date('2024-12-01T10:00:00'),
+        timezone: 'Asia/Shanghai',
+      })
+
+      const request = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId: 'acct-1',
+          content: '帖子内容',
+          scheduledTime: '2024-12-01T10:00:00',
+          timezone: 'Asia/Shanghai',
+        }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            scheduledTime: expect.any(Date),
+            timezone: 'Asia/Shanghai',
+          }),
+        })
+      )
+    })
   })
 
   describe('GET /api/posts/:id', () => {

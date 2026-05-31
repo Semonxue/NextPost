@@ -62,13 +62,19 @@ export async function PATCH(
       }
     }
 
+    // datetime-local 返回的是本地时间，直接存储
+    let scheduledTimeFinal = existingPost.scheduledTime;
+    if (scheduledTime !== undefined) {
+      scheduledTimeFinal = scheduledTime ? new Date(scheduledTime) : null;
+    }
+
     const post = await prisma.post.update({
       where: { id },
       data: {
         accountId: accountId || existingPost.accountId,
         content: content !== undefined ? content : existingPost.content,
         mediaUrls: mediaUrls !== undefined ? JSON.stringify(mediaUrls) : existingPost.mediaUrls,
-        scheduledTime: scheduledTime !== undefined ? (scheduledTime ? new Date(scheduledTime) : null) : existingPost.scheduledTime,
+        scheduledTime: scheduledTimeFinal,
         timezone: timezone || existingPost.timezone,
         status: status || existingPost.status,
       },

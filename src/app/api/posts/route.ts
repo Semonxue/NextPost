@@ -63,13 +63,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "账号不存在" }, { status: 404 });
     }
 
+    // datetime-local 返回的是本地时间，直接存储
+    // 前端正确定义时区，显示时直接使用该时区
+    const scheduledTimeFinal = scheduledTime ? new Date(scheduledTime) : null;
+    
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
         accountId,
         content: content || "",
         mediaUrls: JSON.stringify(mediaUrls || []),
-        scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
+        scheduledTime: scheduledTimeFinal,
         timezone: timezone || "Asia/Shanghai",
         status: status || (scheduledTime ? "scheduled" : "draft"),
       },

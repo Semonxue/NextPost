@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
-import { Plus, Edit2, Trash2, Twitter } from "lucide-react";
+import { Plus, Edit2, Trash2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -124,8 +124,8 @@ export default function AccountsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts.length === 0 ? (
-          <div className="col-span-full bg-white dark:bg-gray-800 rounded-xl p-8 text-center border border-gray-200 dark:border-gray-700">
-            <Twitter className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <div className="col-span-full bg-white dark:bg-gray-800 rounded-xl p-8 text-center border border-gray-200 dark:border-gray-700">
+              <Globe className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">暂无账号</h3>
             <p className="text-gray-500 dark:text-gray-400 mb-4">添加你的第一个社交媒体账号开始使用</p>
             <Button onClick={() => setModalOpen(true)}>
@@ -142,7 +142,7 @@ export default function AccountsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Twitter className="text-blue-500" size={24} />
+                    <Globe className="text-blue-500" size={24} />
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white">{account.name}</h3>

@@ -27,6 +27,22 @@ export default function NewPostPage() {
     timezone: "Asia/Shanghai",
   });
   const [saving, setSaving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // 设置默认发布时间为24小时后
+  useEffect(() => {
+    const tomorrow = new Date();
+    tomorrow.setHours(tomorrow.getHours() + 24);
+    const year = tomorrow.getFullYear();
+    const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const day = String(tomorrow.getDate()).padStart(2, '0');
+    const hours = String(tomorrow.getHours()).padStart(2, '0');
+    const minutes = String(tomorrow.getMinutes()).padStart(2, '0');
+    setFormData(prev => ({ ...prev, scheduledTime: `${year}-${month}-${day}T${hours}:${minutes}` }));
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -66,11 +82,37 @@ export default function NewPostPage() {
     setSaving(true);
 
     try {
+      // 如果有新文件，先上传
+      let mediaUrls: string[] = [];
+      if (mediaFile) {
+        const uploadFormData = new FormData();
+        uploadFormData.append("file", mediaFile);
+        
+        const uploadRes = await fetch("/api/media/upload", {
+          method: "POST",
+          body: uploadFormData,
+        });
+        
+        if (!uploadRes.ok) {
+          const error = await uploadRes.json();
+          addToast({ type: "error", message: error.error || "上传失败" });
+          setSaving(false);
+          return;
+        }
+        
+        const uploadData = await uploadRes.json();
+        mediaUrls = [uploadData.url];
+      } else if (mediaPreview && mediaPreview.startsWith("/uploads/")) {
+        // 如果是已上传的文件，使用已有URL
+        mediaUrls = [mediaPreview];
+      }
+      
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          mediaUrls,
           scheduledTime: formData.scheduledTime || null,
           status: asDraft ? "draft" : formData.scheduledTime ? "scheduled" : "draft",
         }),
@@ -88,6 +130,110 @@ export default function NewPostPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // 生成缩略图（用于预览）
+  const generateThumbnail = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new window.Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const maxSize = 200;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > height) {
+              if (width > maxSize) {
+                height = (height * maxSize) / width;
+                width = maxSize;
+              }
+            } else {
+              if (height > maxSize) {
+                width = (width * maxSize) / height;
+                height = maxSize;
+              }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.7));
+          };
+          img.src = e.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+      } else if (file.type.startsWith("video/")) {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.muted = true;
+        video.playsInline = true;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          video.src = e.target?.result as string;
+        };
+        
+        video.onloadeddata = () => {
+          video.currentTime = 0.1;
+        };
+        
+        video.onseeked = () => {
+          const canvas = document.createElement("canvas");
+          const maxSize = 200;
+          let width = video.videoWidth;
+          let height = video.videoHeight;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(video, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.7));
+        };
+        
+        reader.readAsDataURL(file);
+      } else {
+        resolve("");
+      }
+    });
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    
+    // 检查文件大小（10MB）
+    if (file.size > 10 * 1024 * 1024) {
+      addToast({ type: "error", message: "文件大小不能超过 10MB" });
+      return;
+    }
+    
+    // 检查文件类型
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      addToast({ type: "error", message: "请上传图片或视频文件" });
+      return;
+    }
+    
+    setMediaFile(file);
+    
+    // 生成缩略图用于预览
+    const thumbnail = await generateThumbnail(file);
+    setMediaPreview(thumbnail);
   };
 
   if (status === "loading") {
@@ -159,20 +305,58 @@ export default function NewPostPage() {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             媒体（可选）
           </label>
-          <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex gap-4">
-                <Image size={32} className="text-gray-400" />
-                <Video size={32} className="text-gray-400" />
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+              isDragging
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                : "border-gray-300 dark:border-gray-600 hover:border-blue-500"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              handleFileUpload(e.dataTransfer.files);
+            }}
+            onClick={() => document.getElementById('media-upload')?.click()}
+          >
+            <input
+              id="media-upload"
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => handleFileUpload(e.target.files)}
+            />
+            {mediaPreview ? (
+              <div className="relative">
+                <img src={mediaPreview} alt="Preview" className="max-h-40 mx-auto rounded-lg" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); setMediaPreview(null); setMediaFile(null); }}
+                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full text-xs"
+                >
+                  ✕
+                </button>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                点击上传或拖拽图片/视频到这里
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-500">
-                支持 JPG, PNG, GIF, MP4（最大 10MB）
-              </p>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex gap-4">
+                  <Image size={32} className="text-gray-400" />
+                  <Video size={32} className="text-gray-400" />
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  点击上传或拖拽图片/视频到这里
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500">
+                  支持 JPG, PNG, GIF, MP4（最大 10MB）
+                </p>
+              </div>
+            )}
           </div>
+          {mediaFile && (
+            <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+              已选择: {mediaFile.name} (提交时会自动上传)
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
