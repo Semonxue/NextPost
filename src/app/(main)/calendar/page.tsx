@@ -1,0 +1,279 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
+import { redirect } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { useUIStore } from "@/stores/uiStore";
+
+interface Post {
+  id: string;
+  content: string;
+  scheduledTime: string | null;
+  status: string;
+  account: { name: string; handle: string };
+}
+
+export default function CalendarPage() {
+  const { status } = useSession();
+  const { addToast } = useUIStore();
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      redirect("/login");
+    }
+    if (status === "authenticated") {
+      fetchPosts();
+    }
+  }, [status]);
+
+  const fetchPosts = async () => {
+    try {
+      const res = await fetch("/api/posts?status=scheduled");
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(data.posts || []);
+      }
+    } catch (error) {
+      console.error("获取帖子失败:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay();
+    
+    const days: (number | null)[] = [];
+    
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < startingDay; i++) {
+      days.push(null);
+    }
+    
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+    
+    return days;
+  };
+
+  const getPostsForDate = (day: number) => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    return posts.filter((post) => {
+      if (!post.scheduledTime) return false;
+      const postDate = new Date(post.scheduledTime);
+      return (
+        postDate.getDate() === day &&
+        postDate.getMonth() === month &&
+        postDate.getFullYear() === year
+      );
+    });
+  };
+
+  const getPostsForSelectedDate = () => {
+    if (!selectedDate) return [];
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const day = selectedDate.getDate();
+    return posts.filter((post) => {
+      if (!post.scheduledTime) return false;
+      const postDate = new Date(post.scheduledTime);
+      return (
+        postDate.getDate() === day &&
+        postDate.getMonth() === month &&
+        postDate.getFullYear() === year
+      );
+    });
+  };
+
+  const navigateMonth = (direction: number) => {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(currentDate.getMonth() + direction);
+    setCurrentDate(newDate);
+    setSelectedDate(null);
+  };
+
+  const monthNames = [
+    "一月", "二月", "三月", "四月", "五月", "六月",
+    "七月", "八月", "九月", "十月", "十一月", "十二月"
+  ];
+
+  const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
+
+  if (status === "loading" || loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  const days = getDaysInMonth(currentDate);
+  const selectedDatePosts = getPostsForSelectedDate();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">日历视图</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">按日历查看你的发布计划</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Calendar */}
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {currentDate.getFullYear()}年 {monthNames[currentDate.getMonth()]}
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigateMonth(-1)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
+              </button>
+              <button
+                onClick={() => setCurrentDate(new Date())}
+                className="px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                今天
+              </button>
+              <button
+                onClick={() => navigateMonth(1)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {dayNames.map((day) => (
+              <div
+                key={day}
+                className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 py-2"
+              >
+                {day}
+              </div>
+            ))}
+            {days.map((day, index) => {
+              const isToday =
+                day === new Date().getDate() &&
+                currentDate.getMonth() === new Date().getMonth() &&
+                currentDate.getFullYear() === new Date().getFullYear();
+              const isSelected =
+                selectedDate &&
+                day === selectedDate.getDate() &&
+                currentDate.getMonth() === selectedDate.getMonth() &&
+                currentDate.getFullYear() === selectedDate.getFullYear();
+              const dayPosts = day ? getPostsForDate(day) : [];
+
+              return (
+                <div
+                  key={index}
+                  onClick={() => day && setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
+                  className={`min-h-[80px] p-2 border border-gray-100 dark:border-gray-700 rounded-lg cursor-pointer transition-colors ${
+                    day ? "hover:bg-gray-50 dark:hover:bg-gray-700/50" : "bg-gray-50 dark:bg-gray-900 cursor-default"
+                  } ${isToday ? "bg-blue-50 dark:bg-blue-900/20" : ""} ${
+                    isSelected ? "ring-2 ring-blue-500" : ""
+                  }`}
+                >
+                  {day && (
+                    <>
+                      <span
+                        className={`text-sm font-medium ${
+                          isToday
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        {day}
+                      </span>
+                      {dayPosts.length > 0 && (
+                        <div className="mt-1 space-y-1">
+                          {dayPosts.slice(0, 2).map((post) => (
+                            <div
+                              key={post.id}
+                              className="text-xs px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded truncate"
+                            >
+                              {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          ))}
+                          {dayPosts.length > 2 && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              +{dayPosts.length - 2} 更多
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Selected Date Details */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            {selectedDate
+              ? `${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日`
+              : "选择日期"}
+          </h3>
+          
+          {selectedDate && (
+            <div className="space-y-3">
+              {selectedDatePosts.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400 text-sm">当天没有发布计划</p>
+              ) : (
+                selectedDatePosts.map((post) => (
+                  <Link
+                    key={post.id}
+                    href={`/posts/${post.id}/edit`}
+                    className="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        @{post.account?.handle}
+                      </span>
+                      <span className="text-xs text-blue-600 dark:text-blue-400">
+                        {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-900 dark:text-white line-clamp-2">
+                      {post.content || "（无文字内容）"}
+                    </p>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+
+          {!selectedDate && (
+            <p className="text-gray-500 dark:text-gray-400 text-sm">点击日历上的日期查看详情</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

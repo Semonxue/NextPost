@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status");
+    const accountId = searchParams.get("accountId");
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const offset = parseInt(searchParams.get("offset") || "0");
+
+    const where: Record<string, unknown> = { userId: session.user.id };
+    if (status) where.status = status;
+    if (accountId) where.accountId = accountId;
+
+    const [posts, total] = await Promise.all([
+      prisma.post.findMany({
+        where,
+        include: { account: { include: { platform: true } } },
+        orderBy: { scheduledTime: "desc" },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.post.count({ where }),
+    ]);
+
+    return NextResponse.json({ posts, total });
+  } catch (error) {
+    console.error("获取帖子失败:", error);
+    return NextResponse.json({ error: "服务器错误" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const { accountId, content, mediaUrls, scheduledTime, timezone, status } = await request.json();
+
+    if (!accountId) {
+      return NextResponse.json({ error: "请选择账号" }, { status: 400 });
+    }
+
+    if (!content && (!mediaUrls || mediaUrls.length === 0)) {
+      return NextResponse.json({ error: "内容或媒体不能同时为空" }, { status: 400 });
+    }
+
+    // 验证账号归属
+    const account = await prisma.account.findFirst({
+      where: { id: accountId, userId: session.user.id },
+    });
+
+    if (!account) {
+      return NextResponse.json({ error: "账号不存在" }, { status: 404 });
+    }
+
+    const post = await prisma.post.create({
+      data: {
+        userId: session.user.id,
+        accountId,
+        content: content || "",
+        mediaUrls: JSON.stringify(mediaUrls || []),
+        scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
+        timezone: timezone || "Asia/Shanghai",
+        status: status || (scheduledTime ? "scheduled" : "draft"),
+      },
+      include: { account: { include: { platform: true } } },
+    });
+
+    return NextResponse.json(post);
+  } catch (error) {
+    console.error("创建帖子失败:", error);
+    return NextResponse.json({ error: "服务器错误" }, { status: 500 });
+  }
+}

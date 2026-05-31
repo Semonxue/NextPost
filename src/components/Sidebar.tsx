@@ -1,0 +1,76 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Calendar, FileText, Users, Bot, Settings, Menu, X } from "lucide-react";
+import { useUIStore } from "@/stores/uiStore";
+
+const navItems = [
+  { href: "/", label: "仪表盘", icon: LayoutDashboard },
+  { href: "/calendar", label: "日历视图", icon: Calendar },
+  { href: "/posts", label: "帖子列表", icon: FileText },
+  { href: "/accounts", label: "账号管理", icon: Users },
+  { href: "/chat", label: "AI 对话", icon: Bot },
+  { href: "/settings", label: "设置", icon: Settings },
+];
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const { sidebarOpen, toggleSidebar } = useUIStore();
+
+  return (
+    <>
+      {/* Mobile toggle */}
+      <button
+        onClick={toggleSidebar}
+        className="fixed top-4 left-4 z-50 lg:hidden p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg"
+      >
+        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      {/* Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={toggleSidebar}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed top-0 left-0 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 z-40 transform transition-transform duration-300 lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="p-6">
+          <h1 className="text-2xl font-bold text-blue-600">NextPost</h1>
+        </div>
+
+        <nav className="px-4">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => {
+                  if (window.innerWidth < 1024) toggleSidebar();
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+                  isActive
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                <Icon size={20} />
+                <span className="font-medium">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+    </>
+  );
+}
