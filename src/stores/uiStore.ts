@@ -15,6 +15,9 @@ interface UIState {
   removeToast: (id: string) => void;
 }
 
+// Use a module-level counter for unique IDs
+let toastIdCounter = 0;
+
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   toasts: [],
@@ -22,7 +25,7 @@ export const useUIStore = create<UIState>((set) => ({
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   addToast: (toast) =>
     set((state) => ({
-      toasts: [...state.toasts, { ...toast, id: Date.now().toString() }],
+      toasts: [...state.toasts, { ...toast, id: `toast-${++toastIdCounter}` }],
     })),
   removeToast: (id) =>
     set((state) => ({

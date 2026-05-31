@@ -8,16 +8,23 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className = "", label, error, ...props }, ref) => {
+  ({ className = "", label, error, id, ...props }, ref) => {
+    // Generate unique ID for label-input association
+    const inputId = id || `input-${label?.toLowerCase().replace(/\s+/g, '-') || 'default'}`
+    
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          <label 
+            htmlFor={inputId}
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
             {label}
           </label>
         )}
         <input
           ref={ref}
+          id={inputId}
           className={`w-full px-3 py-2 border rounded-lg transition-colors duration-200
             ${error 
               ? "border-red-500 focus:ring-2 focus:ring-red-500 focus:border-red-500" 

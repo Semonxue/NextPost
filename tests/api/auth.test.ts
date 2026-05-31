@@ -1,0 +1,112 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { POST } from '@/app/api/auth/register/route'
+import { NextRequest } from 'next/server'
+
+// Mock bcrypt
+vi.mock('bcryptjs', () => ({
+  default: {
+    hash: vi.fn().mockResolvedValue('hashed_password'),
+  },
+}))
+
+// Mock Prisma - use vi.hoisted to avoid hoisting issues
+const { mockPrisma } = vi.hoisted(() => ({
+  mockPrisma: {
+    user: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    platform: {
+      upsert: vi.fn(),
+      findUnique: vi.fn(),
+    },
+  },
+}))
+
+vi.mock('@/lib/prisma', () => ({
+  __esModule: true,
+  default: mockPrisma,
+}))
+
+describe('POST /api/auth/register', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  describe('TC-AUTH-001: 用户注册成功', () => {
+    it('should create user successfully', async () => {
+      // Setup mocks
+      mockPrisma.user.findUnique.mockResolvedValue(null) // 用户不存在
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'user-new-123',
+        username: 'newuser',
+        email: null,
+      })
+      mockPrisma.platform.upsert.mockResolvedValue({ id: 'platform-twitter' })
+
+      // Create request
+      const request = new NextRequest('http://localhost/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'newuser', password: 'Test123456' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.id).toBe('user-new-123')
+      expect(data.username).toBe('newuser')
+      expect(mockPrisma.user.create).toHaveBeenCalled()
+    })
+  })
+
+  describe('TC-AUTH-002: 用户注册 - 用户名已存在', () => {
+    it('should return error when username exists', async () => {
+      // Setup mocks
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'existing-user',
+        username: 'testuser',
+      })
+
+      // Create request
+      const request = new NextRequest('http://localhost/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'testuser', password: 'Test123456' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('用户名已存在')
+    })
+  })
+
+  describe('TC-AUTH-003: 用户注册 - 必填字段验证', () => {
+    it('should return error when username is missing', async () => {
+      const request = new NextRequest('http://localhost/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ password: 'Test123456' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('用户名和密码不能为空')
+    })
+
+    it('should return error when password is missing', async () => {
+      const request = new NextRequest('http://localhost/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'newuser' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('用户名和密码不能为空')
+    })
+  })
+})

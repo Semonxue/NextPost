@@ -1,0 +1,229 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { NextRequest } from 'next/server'
+
+// Use vi.hoisted to properly hoist mock functions
+const { mockFindMany, mockFindFirst, mockCreate, mockUpdate, mockDelete, mockFindUnique } = vi.hoisted(() => ({
+  mockFindMany: vi.fn(),
+  mockFindFirst: vi.fn(),
+  mockCreate: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockDelete: vi.fn(),
+  mockFindUnique: vi.fn(),
+}))
+
+// Mock prisma module
+vi.mock('@/lib/prisma', () => ({
+  default: {
+    account: {
+      findMany: mockFindMany,
+      findFirst: mockFindFirst,
+      create: mockCreate,
+      update: mockUpdate,
+      delete: mockDelete,
+    },
+    platform: {
+      findUnique: mockFindUnique,
+    },
+  },
+}))
+
+// Mock auth
+vi.mock('@/lib/auth', () => ({
+  auth: vi.fn(),
+}))
+
+import { GET, POST } from '@/app/api/accounts/route'
+import { PATCH, DELETE } from '@/app/api/accounts/[id]/route'
+import { auth } from '@/lib/auth'
+
+describe('Accounts API', () => {
+  const mockSession = {
+    user: { id: 'user-123', name: 'testuser' },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(mockSession)
+  })
+
+  describe('GET /api/accounts', () => {
+    it('should return user accounts', async () => {
+      const mockAccounts = [
+        { id: 'acct-1', name: '账号1', handle: 'acc1', platform: { name: 'Twitter' } },
+        { id: 'acct-2', name: '账号2', handle: 'acc2', platform: { name: 'Twitter' } },
+      ]
+      mockFindMany.mockResolvedValue(mockAccounts)
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data).toHaveLength(2)
+      expect(mockFindMany).toHaveBeenCalledWith({
+        where: { userId: 'user-123' },
+        include: { platform: true },
+        orderBy: { createdAt: 'desc' },
+      })
+    })
+
+    it('should return 401 when not authenticated', async () => {
+      ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+      const response = await GET()
+      expect(response.status).toBe(401)
+    })
+  })
+
+  describe('POST /api/accounts', () => {
+    it('should create account successfully', async () => {
+      const newAccount = {
+        id: 'acct-new',
+        name: '新账号',
+        handle: 'newacc',
+        platform: { name: 'Twitter' },
+      }
+      mockFindUnique.mockResolvedValue({ id: 'platform-twitter' })
+      mockCreate.mockResolvedValue(newAccount)
+
+      const request = new NextRequest('http://localhost/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ name: '新账号', handle: '@newacc' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.name).toBe('新账号')
+      expect(mockCreate).toHaveBeenCalled()
+    })
+
+    it('should return 400 when name is missing', async () => {
+      const request = new NextRequest('http://localhost/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ handle: '@testacc' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('名称和handle不能为空')
+    })
+
+    it('should return 400 when handle is missing', async () => {
+      const request = new NextRequest('http://localhost/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ name: '测试账号' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('名称和handle不能为空')
+    })
+  })
+
+  describe('PATCH /api/accounts/:id', () => {
+    it('should update account successfully', async () => {
+      mockFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        name: '旧名称',
+        handle: 'oldacc',
+        userId: 'user-123',
+      })
+      mockUpdate.mockResolvedValue({
+        id: 'acct-1',
+        name: '新名称',
+        handle: 'oldacc',
+        platform: { name: 'Twitter' },
+      })
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '新名称' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.name).toBe('新名称')
+    })
+
+    it('should return 404 when account not found', async () => {
+      mockFindFirst.mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-999', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '新名称' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-999' }) })
+      expect(response.status).toBe(404)
+    })
+
+    it('should strip @ from handle', async () => {
+      mockFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        userId: 'user-123',
+      })
+      mockUpdate.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'newacc',
+        platform: { name: 'Twitter' },
+      })
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ handle: '@newacc' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ handle: 'newacc' }),
+        })
+      )
+    })
+  })
+
+  describe('DELETE /api/accounts/:id', () => {
+    it('should delete account successfully', async () => {
+      mockFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        userId: 'user-123',
+      })
+      mockDelete.mockResolvedValue({ id: 'acct-1' })
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.success).toBe(true)
+      expect(mockDelete).toHaveBeenCalledWith({ where: { id: 'acct-1' } })
+    })
+
+    it('should return 404 when account not found', async () => {
+      mockFindFirst.mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-999', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(request, { params: Promise.resolve({ id: 'acct-999' }) })
+      expect(response.status).toBe(404)
+    })
+  })
+})
