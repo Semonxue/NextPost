@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { v4 as uuidv4 } from "uuid";
 
 export async function GET(request: NextRequest) {
   try {
@@ -77,6 +78,14 @@ export async function POST(request: NextRequest) {
     // 前端正确定义时区，显示时直接使用该时区
     const scheduledTimeFinal = scheduledTime ? new Date(scheduledTime) : null;
     
+    // 确定最终状态
+    const finalStatus = status || (scheduledTime ? "scheduled" : "draft");
+    
+    // 为 scheduled 状态的帖子生成 publishToken
+    const publishToken = finalStatus === "scheduled" 
+      ? `tok_${uuidv4().replace(/-/g, "")}` 
+      : null;
+    
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
@@ -85,7 +94,8 @@ export async function POST(request: NextRequest) {
         mediaUrls: JSON.stringify(mediaUrls || []),
         scheduledTime: scheduledTimeFinal,
         timezone: timezone || "Asia/Shanghai",
-        status: status || (scheduledTime ? "scheduled" : "draft"),
+        status: finalStatus,
+        publishToken,
       },
       include: { account: { include: { platform: true } } },
     });

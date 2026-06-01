@@ -227,6 +227,549 @@ nextpost/
 | DELETE | /api/posts/:id | 删除帖子 |
 | GET | /api/posts/stats | 获取统计 |
 
+### MCP API Key 管理
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | /api/settings/external-keys | 获取 Key 列表 |
+| POST | /api/settings/external-keys | 创建新 Key |
+| GET | /api/settings/external-keys/reveal?id=xxx | 查看完整 Key |
+| DELETE | /api/settings/external-keys/:id | 删除 Key |
+
+## 🤖 MCP 外部集成
+
+### 概述
+
+NextPost 提供外部 MCP Server，允许第三方应用（如 Claude Desktop）通过 MCP 协议访问帖子数据、发布结果回传等功能。
+
+### 架构
+
+```
+┌─────────────────┐     MCP 协议      ┌─────────────────┐
+│  Claude Desktop │ ◄───────────────► │  NextPost MCP   │
+│   或其他 MCP    │                   │   Server        │
+│    客户端      │                   │  (外部服务)     │
+└─────────────────┘                   └────────┬────────┘
+                                                │
+                                          API Key 认证
+                                                │
+                                        ┌────────▼────────┐
+                                        │   NextPost       │
+                                        │   数据库         │
+                                        └─────────────────┘
+```
+
+### 功能
+
+- **list_accounts** - 获取当前用户的社交账号列表（脱敏）
+- **get_pending_posts** - 获取待发布的帖子列表
+- **get_post_detail** - 获取帖子详情（含完整内容）
+- **report_publish_result** - 第三方报告发布结果
+
+### 启动 MCP Server
+
+NextPost 提供两种 MCP 端点方式，**推荐使用集成端点**：
+
+#### 方式一：集成端点（推荐）
+
+只需要运行 `pnpm dev`，NextPost 会自动在端口 3000 提供 MCP 端点：
+
+```
+http://localhost:3000/api/mcp
+```
+
+**优势**：
+- ✅ 一次启动兼顾 Web + MCP 两个服务
+- ✅ 更简单的部署和运维
+- ✅ 无需额外配置端口转发
+
+**配置示例：**
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+#### 方式二：独立 MCP Server（可选）
+
+启动独立的 MCP Server（端口 3100）：
+
+```bash
+# 1. 在设置页面创建 API Key
+#    访问 /settings → 外部 API Key → 创建 Key
+
+# 2. 启动 MCP Server
+pnpm mcp:external
+
+# 3. MCP 端点: http://localhost:3100
+```
+
+#### API Key 获取
+
+访问 `/settings` → 外部 API Key → 创建 Key
+
+### MCP 工具详细说明
+
+#### list_accounts
+```json
+{
+  "name": "list_accounts",
+  "description": "获取用户已添加的社交账号列表",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}
+```
+
+#### get_pending_posts
+```json
+{
+  "name": "get_pending_posts", 
+  "description": "获取待发布的帖子列表",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "limit": { "type": "number", "description": "返回数量限制" }
+    }
+  }
+}
+```
+
+#### get_post_detail
+```json
+{
+  "name": "get_post_detail",
+  "description": "获取帖子详情",
+  "inputSchema": {
+    "type": "object", 
+    "properties": {
+      "postId": { "type": "string", "description": "帖子 ID" }
+    },
+    "required": ["postId"]
+  }
+}
+```
+
+#### report_publish_result
+```json
+{
+  "name": "report_publish_result",
+  "description": "报告第三方发布结果",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "postId": { "type": "string" },
+      "publishToken": { "type": "string" },
+      "status": { "type": "string", "enum": ["success", "failed", "partial"] },
+      "externalPostId": { "type": "string" },
+      "externalPostUrl": { "type": "string", "description": "外部帖子链接（发布成功时提供，可点击打开）" },
+      "errorCode": { "type": "string" },
+      "errorMessage": { "type": "string" },
+      "publishedAt": { "type": "string" }
+    },
+    "required": ["postId", "publishToken", "status"]
+  }
+}
+```
+
+### 发布结果回传示例
+
+第三方平台发布成功后调用：
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "report_publish_result",
+    "arguments": {
+      "postId": "clx123abc",
+      "publishToken": "tok_abc123",
+      "status": "success",
+      "externalPostId": "twitter_12345",
+      "publishedAt": "2026-06-01T10:00:00Z"
+    }
+  }
+}
+```
+
+### 错误码
+
+**可重试错误 (RETRYABLE_ERRORS)**
+- `rate_limit` - 限流
+- `network_error` - 网络错误
+- `timeout` - 超时
+- `service_unavailable` - 服务不可用
+
+**不可重试错误 (NON_RETRYABLE_ERRORS)**
+- `content_violation` - 内容违规
+- `auth_expired` - 认证过期
+- `duplicate_content` - 重复内容
+- `account_suspended` - 账号被封
+
+### MCP 客户端配置指南
+
+NextPost MCP Server 支持标准的 MCP 协议，以下是各客户端的配置方法。
+
+#### 配置要点
+
+| 配置项 | 说明 |
+|--------|------|
+| `url` | MCP Server 端点地址 |
+| `Authorization` | Bearer Token 认证，值为你的 API Key |
+| `Content-Type` | 必须为 `application/json` |
+
+**API Key 获取：** 访问 `/settings` → 外部 API Key → 创建 Key
+
+#### Claude Desktop
+
+编辑 `~/.claude/claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}
+```
+
+#### Cherry Studio
+
+1. 打开设置 → MCP 服务器
+2. 点击「添加 MCP 服务」
+3. 填写配置：
+
+```json
+{
+  "name": "NextPost",
+  "url": "http://localhost:3000/api/mcp",
+  "headers": {
+    "Authorization": "Bearer npk_你的APIKey",
+    "Content-Type": "application/json"
+  }
+}
+```
+
+#### VS Code / Cursor (Cline / Continue)
+
+编辑 `.vscode/mcp.json` 或项目配置：
+
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+#### OpenCode
+
+编辑 `opencode.json` 或通过配置界面添加：
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "nextpost": {
+        "url": "http://localhost:3000/api/mcp",
+        "auth": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+#### Zed Editor
+
+编辑 `~/.config/zed/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+#### 其他通用客户端
+
+标准 MCP 配置格式：
+
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+或使用 SSE 传输模式：
+
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "transportType": "sse",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+#### 常见问题
+
+**Q: 连接失败？**
+- 确保 NextPost 服务已启动：`pnpm dev`
+- 检查端口 3000 是否被占用
+- 确认 API Key 格式正确（以 `npk_` 开头）
+
+**Q: 认证失败？**
+- API Key 必须通过 `Authorization: Bearer` 头传递
+- Key 过期或被删除后需要重新创建
+
+**Q: 跨域问题？**
+- 如果客户端和 Server 不在同一域名，可能需要配置 CORS
+- 开发环境可使用 `http://localhost:3000`
+
+### 💬 AI 对话示例
+
+通过 MCP 集成，你可以让 AI 助手帮你管理社交媒体内容。以下是一些对话示例：
+
+#### 场景 1：查看今日发布计划
+
+**用户：** 今天有哪些帖子需要发布？
+
+**AI：** 让我帮你查看一下今天的发布计划。
+
+[调用 `get_pending_posts` 工具]
+
+根据查询结果，今天有 **2 个帖子**需要发布：
+
+1. **@twitter_marketing** - 9:00 AM
+   内容：「618 大促倒计时！错过等一年，点击领取专属优惠」
+   媒体：图片 × 1
+
+2. **@wechat_official** - 2:00 PM  
+   内容：「新品上市 | 夏日必备清凉好物来袭」
+   媒体：视频 × 1
+
+需要我帮你检查这些帖子的发布时间吗？
+
+---
+
+#### 场景 2：创建新帖子
+
+**用户：** 帮我创建一条小红书帖子，内容是关于夏季防晒产品的推广，明天上午10点发布
+
+**AI：** 好的，我来帮你创建这条帖子。
+
+请问：
+1. 你想关联哪个小红书账号？
+2. 需要附带产品图片吗？
+
+**用户：** 关联 @beauty_brand，使用产品图1.jpg
+
+**AI：** 明白了，让我创建这条帖子。
+
+[调用 `list_accounts` 工具确认账号存在]
+
+已创建帖子：
+- 📌 **小红书** - @beauty_brand
+- 📅 明天 10:00 AM
+- 📝 内容：「夏日防晒指南 | 5 款实测好物推荐 ☀️
+   
+点击查看详情...
+   
+#夏季 #防晒 #美妆
+
+」
+- 🖼️ 附带 1 张图片
+
+帖子状态：**已计划**  
+Publish Token：`tok_a1b2c3d4...`
+
+如果第三方平台发布成功，会自动更新状态为「已发布」。
+
+---
+
+#### 场景 3：检查发布状态
+
+**用户：** 昨天发的那条推文状态怎么样？
+
+**AI：** 让我查询一下发布状态。
+
+[调用 `get_post_detail` 查看帖子详情]
+
+📊 **发布状态报告**
+
+帖子 ID：`clx123abc`  
+状态：`published` ✅  
+实际发布时间：2026-05-31 14:23:07  
+外部帖子 ID：`twitter_987654321`
+
+帖子内容：「新品发布倒计时！🎉」
+- 发布成功 ✅
+
+如果状态是 `failed`，会显示错误原因，你可以决定是否重试。
+
+---
+
+#### 场景 4：处理发布失败
+
+**用户：** 有一条帖子发布失败了，帮我看看是什么原因
+
+**AI：** 让我查看一下帖子详情。
+
+[调用 `get_post_detail`]
+
+📋 **帖子信息**
+
+ID：`clx789xyz`  
+内容：「限时优惠活动开始了！」
+状态：`failed` ❌  
+错误码：`rate_limit`  
+错误信息：`API rate limit exceeded, please retry after 1 hour`
+
+**解决方案：**
+
+这是可重试的错误（限流），你可以：
+1. 等待 1 小时后自动重试
+2. 或者修改发布时间，避开高峰时段
+
+需要我帮你调整发布时间吗？
+
+---
+
+#### 场景 5：批量操作
+
+**用户：** 帮我看看这周发布了哪些内容
+
+**AI：** 让我查询一下本周的发布记录。
+
+[调用 `get_pending_posts` 获取本周所有帖子]
+
+📊 **本周发布报告（5/26 - 6/1）**
+
+| 平台 | 账号 | 发布时间 | 状态 |
+|------|------|----------|------|
+| Twitter | @marketing | 5/26 10:00 | ✅ 已发布 |
+| 小红书 | @beauty | 5/27 14:00 | ✅ 已发布 |
+| 微信 | @official | 5/28 09:00 | ✅ 已发布 |
+| Twitter | @marketing | 5/29 15:00 | ✅ 已发布 |
+| 小红书 | @beauty | 5/30 11:00 | ❌ 失败 |
+| 微信 | @official | 6/1 10:00 | ⏳ 待发布 |
+
+**统计：**
+- 总计：6 条帖子
+- 已发布：4 条
+- 失败：1 条
+- 待发布：1 条
+
+---
+
+### publishToken 详解
+
+**什么是 publishToken？**
+
+`publishToken` 是一个安全令牌，格式为 `tok_xxxxxxxx`，用于验证发布结果回传的合法性。
+
+**工作流程：**
+
+```
+1. AI 通过 get_pending_posts 获取帖子
+   → 返回 publishToken (tok_xxx)
+
+2. 第三方平台发布成功后
+   → 调用 report_publish_result(postId, publishToken, status)
+
+3. 系统验证 token 匹配后
+   → 更新帖子状态为 "published"
+   → 记录 externalPostId、publishedAt 等信息
+```
+
+**为什么需要 token？**
+
+- **安全验证**：确保只有拿到 token 的请求才能更新帖子状态
+- **防止伪造**：第三方无法冒充其他帖子更新状态
+- **幂等性**：同一个 token 只能更新对应的帖子
+
+**使用示例：**
+
+```json
+// 1. AI 获取帖子（含 token）
+{
+  "id": "clx123abc",
+  "content": "Hello World",
+  "publishToken": "tok_01d725b11ed74fbde350766ee364041b",
+  "scheduledTime": "2026-06-01T10:00:00Z"
+}
+
+// 2. 发布成功后回传
+{
+  "method": "tools/call",
+  "params": {
+    "name": "report_publish_result",
+    "arguments": {
+      "postId": "clx123abc",
+      "publishToken": "tok_01d725b11ed74fbde350766ee364041b",
+      "status": "success",
+      "externalPostId": "twitter_123456",
+      "publishedAt": "2026-06-01T10:02:30Z"
+    }
+  }
+}
+
+// 3. 如果发布失败
+{
+  "arguments": {
+    "postId": "clx123abc",
+    "publishToken": "tok_01d725b11ed74fbde350766ee364041b",
+    "status": "failed",
+    "errorCode": "rate_limit",
+    "errorMessage": "API rate limit exceeded"
+  }
+}
+```
+
+### 对话技巧
+
+1. **明确指定平台** - 如「小红书」「Twitter」可加快查询
+2. **提供时间范围** - 如「这周」「今天」「本月」
+3. **指定账号** - 如「用 @beauty_brand 账号发」
+4. **询问状态** - 「发布成功了吗？」会帮你检查状态
+
 ## 🧪 测试
 
 项目使用 Vitest 进行单元测试，Playwright 进行 E2E 测试。

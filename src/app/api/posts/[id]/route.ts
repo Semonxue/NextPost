@@ -42,7 +42,7 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const { accountId, content, mediaUrls, scheduledTime, timezone, status } = await request.json();
+    const { accountId, content, mediaUrls, scheduledTime, timezone, status, externalPostUrl } = await request.json();
 
     // 验证帖子归属
     const existingPost = await prisma.post.findFirst({
@@ -77,7 +77,8 @@ export async function PATCH(
         mediaUrls: mediaUrls !== undefined ? JSON.stringify(mediaUrls) : existingPost.mediaUrls,
         scheduledTime: scheduledTimeFinal,
         timezone: timezone || existingPost.timezone,
-        status: status || existingPost.status,
+        status: status !== undefined ? status : existingPost.status,
+        externalPostUrl: externalPostUrl !== undefined ? externalPostUrl : existingPost.externalPostUrl,
       },
       include: { account: { include: { platform: true } } },
     });

@@ -5,6 +5,9 @@
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | v0.2 | 2026-06-01 | 初始版本，包含外部 MCP Server 设计 |
+| **v0.2.1** | **2026-06-01** | **Phase 1 MVP 实现完成** |
+| **v0.2.2** | **2026-06-01** | **添加 externalPostUrl 必填说明，修复发布回传问题** |
+| **v0.2.3** | **2026-06-01** | **mediaUrls 返回完整 HTTP URL，CLI 可直接下载；集成端点替代独立服务** |
 
 ## 概述
 
@@ -178,7 +181,7 @@
 // 工具定义
 {
   name: "report_publish_result",
-  description: "外部 AI 发布完成后报告结果",
+  description: "报告发布结果。必须提供正确的 publishToken 才能更新帖子状态。成功时 status=\"success\"，失败时 status=\"failed\" 并提供错误码。【关键】成功时必须回传 externalPostUrl（可点击的完整链接，格式如 https://x.com/user/status/123），不能只传 externalPostId，否则 NextPost 界面无法显示跳转按钮。",
   inputSchema: {
     type: "object",
     properties: {
@@ -201,7 +204,11 @@
       },
       externalPostId: { 
         type: "string", 
-        description: "外部平台返回的帖子 ID" 
+        description: "外部平台帖子 ID（如 Twitter tweet ID），可选" 
+      },
+      externalPostUrl: { 
+        type: "string", 
+        description: "【必须】外部帖子完整 URL，用于在浏览器打开，如 https://x.com/user/status/123。必须提供此字段才能在 NextPost 界面显示跳转按钮" 
       },
       errorCode: { 
         type: "string", 
@@ -216,7 +223,7 @@
         description: "是否可重试" 
       }
     },
-    required: ["postId", "publishToken", "status"]
+    required: ["postId", "publishToken", "status", "externalPostUrl"]
   }
 }
 
@@ -235,6 +242,8 @@
   "retryable": true
 }
 ```
+
+> ⚠️ **重要**：成功发布时必须回传 `externalPostUrl`（完整 URL），不能只传 `externalPostId`。否则 NextPost 界面无法显示"查看已发布内容"的跳转按钮。
 
 ### 2.3 发布流程
 
@@ -257,14 +266,16 @@
       │       postId, publishToken,           │
       │       status: "success",              │
       │       publishedAt: "...",             │
-      │       externalPostId: "123456"        │
+      │       externalPostUrl: "https://...", │  ⚠️ 必须提供完整 URL
+      │       externalPostId: "123456"        │  可选
       │     )                                  │
       │  ──────────────────────────────────► │
       │                                      │
       │  ◄────────────────────────────────── │
       │     { received: true, status: "updated" }
       │                                      │
-      │  4. 用户在 NextPost 看到发布成功       │
+      │  4. 用户在 NextPost 看到发布成功      │
+      │     并可点击跳转按钮查看              │
 ```
 
 ---
@@ -610,4 +621,160 @@ const NON_RETRYABLE_ERRORS = [
 
 ---
 
+## 十一、实现说明
+
+### 11.1 已实现文件
+
+| 文件 | 说明 |
+|------|------|
+| `src/mcp/external/types.ts` | 类型定义（错误码、脱敏数据结构） |
+| `src/mcp/external/auth.ts` | API Key 认证（验证、生成、删除、列表） |
+| `src/mcp/external/tools.ts` | MCP 工具实现（4个工具 + 执行器） |
+| `src/mcp/external/server.ts` | MCP Server 主入口（基于 @modelcontextprotocol/sdk） |
+| `src/app/api/settings/external-keys/route.ts` | API Key 管理接口 |
+| `tests/mcp/external.test.ts` | 单元测试（14个测试用例） |
+| `tests/e2e/mcp.spec.ts` | E2E 测试 |
+
+### 11.2 启动方式
+
+```bash
+# 安装依赖后运行
+pnpm install
+
+# 启动 MCP Server（需要先设置 MCP_API_KEY 环境变量）
+MCP_API_KEY=npk_your_key_here pnpm mcp:external
+```
+
+### 11.3 测试覆盖
+
+```bash
+# 运行所有测试
+pnpm test
+
+# 运行 MCP 相关测试
+pnpm test -- tests/mcp/external.test.ts
+
+# 运行 E2E 测试
+pnpm test:e2e -- tests/e2e/mcp.spec.ts
+```
+
+### 11.4 数据库更新
+
+如果数据库中没有 `ExternalApiKey` 表，需要运行：
+
+```bash
+pnpm prisma db push
+```
+
+### 11.5 集成端点与独立服务
+
+NextPost 提供两种 MCP 端点方式，推荐使用集成端点：
+
+#### 方式一：集成端点（推荐）
+
+只需要运行 `pnpm dev`，NextPost 会自动在端口 3000 提供 MCP 端点：
+
+```
+http://localhost:3000/api/mcp
+```
+
+**配置示例**：
+```json
+{
+  "mcpServers": {
+    "nextpost": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer npk_你的APIKey"
+      }
+    }
+  }
+}
+```
+
+**优势**：
+- ✅ 一次启动兼顾 Web + MCP 两个服务
+- ✅ 更简单的部署和运维
+- ✅ 无需额外配置端口转发
+
+#### 方式二：独立 MCP Server
+
+启动独立的 MCP Server（端口 3100）：
+
+```bash
+# 设置环境变量并启动
+MCP_API_KEY=npk_xxx npx tsx src/mcp/external/server.ts
+```
+
+### 11.6 mediaUrls 完整 URL 说明
+
+`get_pending_posts` 和 `get_post_detail` 返回的 `mediaUrls` 现在是**完整的 HTTP URL**，CLI 可以直接下载：
+
+**返回示例**：
+```json
+{
+  "mediaUrls": [
+    "http://localhost:3000/uploads/2026-06-01/video.mp4",
+    "http://localhost:3000/uploads/2026-06-01/image.jpg"
+  ]
+}
+```
+
+**URL 拼接规则**：
+- 相对路径（如 `/uploads/xxx.mp4`）自动拼接基础 URL
+- 完整 URL（以 `http://` 或 `https://` 开头）保持不变
+- 基础 URL 默认从 `NEXT_PUBLIC_BASE_URL` 环境变量获取，未设置时默认为 `http://localhost:3000`
+
+### 11.7 客户端缓存说明
+
+⚠️ **MCP 客户端会缓存工具定义**
+
+如果修改了工具的 schema（如添加/修改字段），客户端可能使用旧的缓存定义。解决方案：
+
+1. **重启 MCP Server**（杀掉旧进程后启动新进程）
+2. **断开并重新连接 MCP 连接**
+3. **清除客户端缓存**（部分客户端支持）
+
+验证工具定义是否生效：
+```bash
+curl -s http://localhost:3000/api/mcp -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  jq '.result.tools[] | select(.name == "get_pending_posts") | .description'
+```
+
+### 11.8 externalPostUrl 字段说明
+
+`report_publish_result` 工具中 `externalPostUrl` 是**必填字段**：
+
+| 场景 | externalPostUrl | externalPostId |
+|------|-----------------|----------------|
+| 成功发布 | ✅ 必须提供完整 URL | 可选 |
+| 发布失败 | ❌ 不需要 | ❌ 不需要 |
+| 部分成功 | ✅ 必须提供完整 URL | 可选 |
+
+**正确示例**：
+```json
+{
+  "postId": "post_xxx",
+  "publishToken": "tok_xxx",
+  "status": "success",
+  "externalPostUrl": "https://x.com/user/status/123456789",
+  "publishedAt": "2026-06-01T10:00:00Z"
+}
+```
+
+**错误示例**（AI 常见错误）：
+```json
+{
+  "postId": "post_xxx",
+  "publishToken": "tok_xxx",
+  "status": "success",
+  "externalPostId": "123456789"
+  // ❌ 缺少 externalPostUrl，NextPost 界面无法显示跳转按钮
+}
+```
+
+---
+
 *文档生成时间：2026-06-01*
+*最后更新：2026-06-01 - v0.2.3 mediaUrls 返回完整 URL，集成端点替代独立服务*

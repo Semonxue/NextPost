@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect, useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, Image, Video } from "lucide-react";
+import { ArrowLeft, Calendar, Image, Video, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useUIStore } from "@/stores/uiStore";
 
@@ -22,6 +22,7 @@ interface Post {
   timezone: string;
   status: string;
   mediaUrls: string | null;
+  externalPostUrl: string | null;
 }
 
 export default function EditPostPage() {
@@ -36,6 +37,8 @@ export default function EditPostPage() {
     content: "",
     scheduledTime: "",
     timezone: "Asia/Shanghai",
+    status: "draft",
+    externalPostUrl: "",
   });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -72,6 +75,8 @@ export default function EditPostPage() {
           content: postData.content,
           scheduledTime: postData.scheduledTime ? new Date(postData.scheduledTime).toISOString().slice(0, 16) : "",
           timezone: postData.timezone,
+          status: postData.status,
+          externalPostUrl: postData.externalPostUrl || "",
         });
         if (postData.mediaUrls) {
           const urls = JSON.parse(postData.mediaUrls);
@@ -227,22 +232,31 @@ export default function EditPostPage() {
         
         const uploadData = await uploadRes.json();
         mediaUrls = [uploadData.url];
-      } else if (mediaPreview && mediaPreview !== originalMediaUrl) {
-        // 使用 base64 缩略图（编辑后未上传新文件）
-        mediaUrls = [mediaPreview];
-      } else if (originalMediaUrl) {
-        // 保留原文件
+      } else if (originalMediaUrl && mediaPreview !== null) {
+        // 保留原文件（mediaPreview 存在且不为 null 表示保留原文件）
         mediaUrls = [originalMediaUrl];
+      } else if (!mediaPreview && !originalMediaUrl) {
+        // 删除了媒体文件
+        mediaUrls = [];
+      }
+      
+      // 根据状态决定 scheduledTime：只有 scheduled 状态才保留计划时间，其他状态保留原值
+      let scheduledTimeValue = post?.scheduledTime || null;
+      if (formData.status === "scheduled" && formData.scheduledTime) {
+        scheduledTimeValue = formData.scheduledTime;
       }
       
       const res = await fetch(`/api/posts/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
+          accountId: formData.accountId,
+          content: formData.content,
           mediaUrls,
-          scheduledTime: formData.scheduledTime || null,
-          status: formData.scheduledTime ? "scheduled" : "draft",
+          scheduledTime: scheduledTimeValue,
+          timezone: formData.timezone,
+          status: formData.status,
+          externalPostUrl: formData.externalPostUrl || null,
         }),
       });
 
@@ -260,6 +274,10 @@ export default function EditPostPage() {
     }
   };
 
+  const handleStatusChange = (newStatus: string) => {
+    setFormData({ ...formData, status: newStatus });
+  };
+
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -267,6 +285,12 @@ export default function EditPostPage() {
       </div>
     );
   }
+
+  const statusOptions = [
+    { value: "draft", label: "草稿", color: "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" },
+    { value: "scheduled", label: "已计划", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" },
+    { value: "published", label: "已发布", color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" },
+  ];
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -278,6 +302,33 @@ export default function EditPostPage() {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 space-y-6">
+        {/* 状态切换 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            帖子状态
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {statusOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleStatusChange(opt.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  formData.status === opt.value
+                    ? `${opt.color} ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800`
+                    : "bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600"
+                }`}
+              >
+                {formData.status === opt.value && <RefreshCw size={14} className="inline mr-1" />}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            切换状态：草稿（未发布）→ 已计划（定时发布）→ 已发布（已对外发布）
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             选择账号
@@ -365,6 +416,26 @@ export default function EditPostPage() {
           )}
         </div>
 
+        {/* 外部链接 - 已发布帖子专用 */}
+        {formData.status === "published" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <ExternalLink size={14} className="inline mr-1" />
+              发布链接
+            </label>
+            <input
+              type="url"
+              value={formData.externalPostUrl}
+              onChange={(e) => setFormData({ ...formData, externalPostUrl: e.target.value })}
+              placeholder="https://x.com/user/status/123..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              输入发布后的外部链接，方便快速查看已发布的内容
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -379,6 +450,11 @@ export default function EditPostPage() {
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+            {formData.status === "scheduled" && (
+              <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                设置发布时间后，帖子将按计划发布
+              </p>
+            )}
           </div>
 
           <div>

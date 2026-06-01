@@ -75,6 +75,7 @@ model Post {
   publishTokenExp  DateTime?                 // 令牌过期时间
   publishedAt      DateTime?                  // 实际发布时间
   externalPostId   String?                    // 外部平台帖子 ID
+  externalPostUrl  String?                    // 外部帖子链接（可点击打开）
   publishError     String?                    // 发布错误信息
   publishAttempts  Int      @default(0)       // 发布尝试次数
   

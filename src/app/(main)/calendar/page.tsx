@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Filter, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Filter, X, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useUIStore } from "@/stores/uiStore";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +14,7 @@ interface Post {
   scheduledTime: string | null;
   status: string;
   mediaUrls: string | null;
+  externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
 }
 
@@ -42,6 +43,7 @@ export default function CalendarPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [showAccountFilter, setShowAccountFilter] = useState(false);
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -54,8 +56,9 @@ export default function CalendarPage() {
 
   const fetchData = async () => {
     try {
+      const statusParam = statusFilter === "all" ? "" : `?status=${statusFilter}`;
       const [postsRes, accountsRes] = await Promise.all([
-        fetch("/api/posts?status=scheduled"),
+        fetch(`/api/posts${statusParam}`),
         fetch("/api/accounts")
       ]);
       
@@ -86,8 +89,10 @@ export default function CalendarPage() {
 
   const fetchPosts = async () => {
     try {
-      const params = new URLSearchParams({ status: "scheduled" });
-      
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
       if (selectedAccounts.length > 0) {
         selectedAccounts.forEach(id => params.append("accountIds", id));
       }
@@ -95,7 +100,10 @@ export default function CalendarPage() {
         selectedPlatforms.forEach(id => params.append("platformIds", id));
       }
       
-      const res = await fetch(`/api/posts?${params.toString()}`);
+      const queryString = params.toString();
+      const url = queryString ? `/api/posts?${queryString}` : "/api/posts";
+      
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setPosts(data.posts || []);
@@ -109,7 +117,7 @@ export default function CalendarPage() {
     if (status === "authenticated") {
       fetchPosts();
     }
-  }, [selectedAccounts, selectedPlatforms, status]);
+  }, [selectedAccounts, selectedPlatforms, statusFilter, status]);
 
   const toggleAccountFilter = (accountId: string) => {
     setSelectedAccounts(prev => 
@@ -132,7 +140,7 @@ export default function CalendarPage() {
     setSelectedPlatforms([]);
   };
 
-  const hasActiveFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0;
+  const hasActiveFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0 || statusFilter !== "all";
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -144,12 +152,10 @@ export default function CalendarPage() {
     
     const days: (number | null)[] = [];
     
-    // Add empty cells for days before the first day of the month
     for (let i = 0; i < startingDay; i++) {
       days.push(null);
     }
     
-    // Add days of the month
     for (let i = 1; i <= daysInMonth; i++) {
       days.push(i);
     }
@@ -201,6 +207,18 @@ export default function CalendarPage() {
 
   const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
 
+  const statusColors: Record<string, string> = {
+    draft: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400",
+    scheduled: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
+    published: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
+  };
+
+  const statusLabels: Record<string, string> = {
+    draft: "草稿",
+    scheduled: "已计划",
+    published: "已发布",
+  };
+
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -220,15 +238,27 @@ export default function CalendarPage() {
     return `${year}-${month}-${day}`;
   };
 
+  const statusFilters = [
+    { value: "all", label: "全部" },
+    { value: "draft", label: "草稿" },
+    { value: "scheduled", label: "已计划" },
+    { value: "published", label: "已发布" },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
+        <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">日历视图</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">按日历查看你的发布计划</p>
+          <Link href="/posts/new">
+            <Button size="sm">
+              <Plus size={16} className="mr-1" />
+              新建
+            </Button>
+          </Link>
         </div>
         
-        {/* 筛选按钮区域 */}
+        {/* 筛选按钮区域 - 右侧 */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* 账号筛选 */}
           <div className="relative">
@@ -336,14 +366,34 @@ export default function CalendarPage() {
           {/* 清除筛选 */}
           {hasActiveFilters && (
             <button
-              onClick={clearAllFilters}
+              onClick={() => {
+                setStatusFilter("all");
+                clearAllFilters();
+              }}
               className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
             >
               <X size={16} />
-              清除筛选
+              清除
             </button>
           )}
         </div>
+      </div>
+
+      {/* 状态筛选 - 独立一行 */}
+      <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 w-fit">
+        {statusFilters.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setStatusFilter(f.value)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              statusFilter === f.value
+                ? "bg-blue-600 text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -419,29 +469,29 @@ export default function CalendarPage() {
                       </span>
                       {dayPosts.length > 0 && (
                         <div className="mt-1 space-y-1">
-                      {dayPosts.slice(0, 2).map((post) => {
-                        const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
-                        return (
-                          <div
-                            key={post.id}
-                            className="text-xs px-1 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded truncate flex items-center gap-1"
-                          >
-                            {mediaArr.length > 0 && (
-                              <img src={mediaArr[0]} alt="" className="w-4 h-4 rounded object-cover" />
-                            )}
-                            {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                        );
-                      })}
-                      {dayPosts.length > 2 && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          +{dayPosts.length - 2} 更多
+                          {dayPosts.slice(0, 2).map((post) => {
+                            const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+                            return (
+                              <div
+                                key={post.id}
+                                className={`text-xs px-1 py-0.5 rounded truncate flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
+                              >
+                                {mediaArr.length > 0 && (
+                                  <img src={mediaArr[0]} alt="" className="w-4 h-4 rounded object-cover" />
+                                )}
+                                {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            );
+                          })}
+                          {dayPosts.length > 2 && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              +{dayPosts.length - 2} 更多
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
                       )}
                     </>
                   )}
@@ -461,9 +511,7 @@ export default function CalendarPage() {
             </h3>
             
             {selectedDate && (
-              <Link
-                href={`/posts/new?date=${formatSelectedDate()}`}
-              >
+              <Link href={`/posts/new?date=${formatSelectedDate()}`}>
                 <Button size="sm">
                   <Plus size={16} className="mr-1" />
                   添加
@@ -477,7 +525,7 @@ export default function CalendarPage() {
               {selectedDatePosts.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500 dark:text-gray-400 text-sm mb-3">当天没有发布计划</p>
-                    <Link href={`/posts/new?date=${formatSelectedDate()}`}>
+                  <Link href={`/posts/new?date=${formatSelectedDate()}`}>
                     <Button variant="ghost" size="sm">
                       <Plus size={16} className="mr-1" />
                       创建计划
@@ -486,21 +534,43 @@ export default function CalendarPage() {
                 </div>
               ) : (
                 selectedDatePosts.map((post) => (
-                  <Link
+                  <div
                     key={post.id}
-                    href={`/posts/${post.id}/edit`}
                     className="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        @{post.account?.handle}
-                      </span>
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          @{post.account?.handle}
+                        </span>
+                        <span className={`px-1.5 py-0.5 text-xs rounded-full ${statusColors[post.status] || statusColors.draft}`}>
+                          {statusLabels[post.status] || "未知"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {post.externalPostUrl && (
+                          <a
+                            href={post.externalPostUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                            title="查看已发布内容"
+                          >
+                            <ExternalLink size={14} className="text-blue-500" />
+                          </a>
+                        )}
+                        <Link
+                          href={`/posts/${post.id}/edit`}
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                        >
+                          <span className="text-xs text-blue-600 dark:text-blue-400">
+                            {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </Link>
+                      </div>
                     </div>
                     <div className="flex items-start gap-2">
                       {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
@@ -514,7 +584,7 @@ export default function CalendarPage() {
                         {post.content || "（无文字内容）"}
                       </p>
                     </div>
-                  </Link>
+                  </div>
                 ))
               )}
             </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Edit2, Trash2, Calendar, Filter, X } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, Filter, X, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useUIStore } from "@/stores/uiStore";
 
@@ -14,6 +14,8 @@ interface Post {
   scheduledTime: string | null;
   status: string;
   mediaUrls: string | null;
+  publishToken: string | null;
+  externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
 }
 
@@ -172,150 +174,149 @@ export default function PostsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
+        <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">帖子列表</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">管理你的所有发布计划</p>
+          <Link href="/posts/new">
+            <Button size="sm">
+              <Plus size={16} className="mr-1" />
+              新建
+            </Button>
+          </Link>
         </div>
-        <Link href="/posts/new">
-          <Button>
-            <Plus size={20} className="mr-2" />
-            新建帖子
-          </Button>
-        </Link>
-      </div>
-
-      {/* 筛选区域 */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* 状态筛选 */}
-        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
-          {statusFilters.map((f) => (
+        
+        {/* 筛选区域 - 右侧 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 账号筛选 */}
+          <div className="relative">
             <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                statusFilter === f.value
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={() => {
+                setShowAccountFilter(!showAccountFilter);
+                setShowPlatformFilter(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                selectedAccounts.length > 0
+                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
+                  : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
               }`}
             >
-              {f.label}
+              <Filter size={16} />
+              <span>账号</span>
+              {selectedAccounts.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                  {selectedAccounts.length}
+                </span>
+              )}
             </button>
-          ))}
-        </div>
-
-        {/* 账号筛选 */}
-        <div className="relative">
-          <button
-            onClick={() => {
-              setShowAccountFilter(!showAccountFilter);
-              setShowPlatformFilter(false);
-            }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-              selectedAccounts.length > 0
-                ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
-                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
-            }`}
-          >
-            <Filter size={16} />
-            <span>账号</span>
-            {selectedAccounts.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-                {selectedAccounts.length}
-              </span>
-            )}
-          </button>
-          
-          {showAccountFilter && (
-            <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
-              <div className="p-2 max-h-64 overflow-y-auto">
-                {accounts.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无账号</p>
-                ) : (
-                  accounts.map(account => (
-                    <label
-                      key={account.id}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedAccounts.includes(account.id)}
-                        onChange={() => toggleAccountFilter(account.id)}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
-                        {account.name}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        @{account.handle}
-                      </span>
-                    </label>
-                  ))
-                )}
+            
+            {showAccountFilter && (
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                <div className="p-2 max-h-64 overflow-y-auto">
+                  {accounts.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无账号</p>
+                  ) : (
+                    accounts.map(account => (
+                      <label
+                        key={account.id}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAccounts.includes(account.id)}
+                          onChange={() => toggleAccountFilter(account.id)}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          {account.name}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          @{account.handle}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* 平台筛选 */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowPlatformFilter(!showPlatformFilter);
+                setShowAccountFilter(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                selectedPlatforms.length > 0
+                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
+                  : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+              }`}
+            >
+              <Filter size={16} />
+              <span>平台</span>
+              {selectedPlatforms.length > 0 && (
+                <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                  {selectedPlatforms.length}
+                </span>
+              )}
+            </button>
+            
+            {showPlatformFilter && (
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+                <div className="p-2">
+                  {platforms.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无平台</p>
+                  ) : (
+                    platforms.map(platform => (
+                      <label
+                        key={platform.id}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedPlatforms.includes(platform.id)}
+                          onChange={() => togglePlatformFilter(platform.id)}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          {platform.name}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 清除筛选 */}
+          {hasFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+            >
+              <X size={16} />
+              清除
+            </button>
           )}
         </div>
+      </div>
 
-        {/* 平台筛选 */}
-        <div className="relative">
+      {/* 状态筛选 - 独立一行 */}
+      <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 w-fit">
+        {statusFilters.map((f) => (
           <button
-            onClick={() => {
-              setShowPlatformFilter(!showPlatformFilter);
-              setShowAccountFilter(false);
-            }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-              selectedPlatforms.length > 0
-                ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
-                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+            key={f.value}
+            onClick={() => setStatusFilter(f.value)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              statusFilter === f.value
+                ? "bg-blue-600 text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
             }`}
           >
-            <Filter size={16} />
-            <span>平台</span>
-            {selectedPlatforms.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-                {selectedPlatforms.length}
-              </span>
-            )}
+            {f.label}
           </button>
-          
-          {showPlatformFilter && (
-            <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
-              <div className="p-2">
-                {platforms.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无平台</p>
-                ) : (
-                  platforms.map(platform => (
-                    <label
-                      key={platform.id}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedPlatforms.includes(platform.id)}
-                        onChange={() => togglePlatformFilter(platform.id)}
-                        className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
-                        {platform.name}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 清除筛选 */}
-        {hasFilters && (
-          <button
-            onClick={clearAllFilters}
-            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-          >
-            <X size={16} />
-            清除筛选
-          </button>
-        )}
+        ))}
       </div>
 
       {/* 帖子列表 */}
@@ -341,6 +342,7 @@ export default function PostsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">账号</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">发布时间</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">状态</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Token</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                 </tr>
               </thead>
@@ -391,8 +393,28 @@ export default function PostsPage() {
                         {post.status === "published" ? "已发布" : post.status === "scheduled" ? "已计划" : "草稿"}
                       </span>
                     </td>
+                    <td className="px-6 py-4">
+                      {post.publishToken ? (
+                        <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono">
+                          {post.publishToken.slice(0, 12)}...
+                        </code>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {post.externalPostUrl && (
+                          <a
+                            href={post.externalPostUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="查看已发布内容"
+                          >
+                            <ExternalLink size={16} className="text-blue-500" />
+                          </a>
+                        )}
                         <Link
                           href={`/posts/${post.id}/edit`}
                           className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
