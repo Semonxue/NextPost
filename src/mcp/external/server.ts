@@ -11,7 +11,7 @@ import {
   ListToolsRequestSchema,
   Tool,
   CallToolRequest,
-  JsonRpcRequest
+  JSONRPCRequest
 } from '@modelcontextprotocol/sdk/types.js';
 import { TOOLS } from './tools.js';
 import { executeTool } from './tools.js';

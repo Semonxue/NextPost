@@ -1,26 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Image, Video, Calendar } from "lucide-react";
+import { ArrowLeft, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { MediaUploader } from "@/components/MediaUploader";
+import { ContentEditor } from "@/components/ContentEditor";
 import { useUIStore } from "@/stores/uiStore";
+import { PlatformConfig, DEFAULT_PLATFORM_CONFIG } from "@/lib/platform";
+
+// 禁用静态生成
+export const dynamic = "force-dynamic";
 
 interface Account {
   id: string;
   name: string;
   handle: string;
+  platform?: {
+    id: string;
+    name: string;
+  };
 }
 
-export default function NewPostPage() {
+function NewPostContent() {
   const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addToast } = useUIStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [platformConfig, setPlatformConfig] = useState<PlatformConfig | null>(null);
   const [formData, setFormData] = useState({
     accountId: "",
     content: "",
@@ -28,10 +38,15 @@ export default function NewPostPage() {
     timezone: "Asia/Shanghai",
   });
   const [saving, setSaving] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
+
+  // 默认平台配置
+  const defaultConfig: PlatformConfig = {
+    platformId: "",
+    platformName: "Twitter",
+    ...DEFAULT_PLATFORM_CONFIG.Twitter,
+  };
 
   // 设置默认发布时间为24小时后，或使用URL参数中的日期
   useEffect(() => {
@@ -69,6 +84,7 @@ export default function NewPostPage() {
     }
   }, [status]);
 
+  // 获取账号列表
   const fetchAccounts = async () => {
     try {
       const res = await fetch("/api/accounts");
@@ -77,12 +93,47 @@ export default function NewPostPage() {
         setAccounts(data);
         if (data.length > 0) {
           setFormData((prev) => ({ ...prev, accountId: data[0].id }));
+          fetchPlatformConfig(data[0].id);
         }
       }
     } catch (error) {
       console.error("获取账号失败:", error);
     }
   };
+
+  // 获取平台配置
+  const fetchPlatformConfig = async (accountId: string) => {
+    try {
+      const res = await fetch(`/api/accounts/${accountId}/config`);
+      if (res.ok) {
+        const config = await res.json();
+        setPlatformConfig(config);
+      } else {
+        // 使用默认配置
+        const account = accounts.find((a) => a.id === accountId);
+        const platformName = account?.platform?.name || "Twitter";
+        setPlatformConfig({
+          platformId: account?.platform?.id || "",
+          platformName,
+          ...DEFAULT_PLATFORM_CONFIG[platformName as keyof typeof DEFAULT_PLATFORM_CONFIG] || DEFAULT_PLATFORM_CONFIG.Twitter,
+        });
+      }
+    } catch (error) {
+      console.error("获取平台配置失败:", error);
+    }
+  };
+
+  // 账号变更时获取新的平台配置
+  const handleAccountChange = (accountId: string) => {
+    setFormData((prev) => ({ ...prev, accountId }));
+    fetchPlatformConfig(accountId);
+  };
+
+  // 媒体变更处理
+  const handleMediaChange = useCallback((urls: string[], files: File[]) => {
+    setExistingMediaUrls(urls);
+    setMediaFiles(files);
+  }, []);
 
   const handleSubmit = async (asDraft: boolean) => {
     if (!formData.accountId) {
@@ -95,14 +146,25 @@ export default function NewPostPage() {
       return;
     }
 
+    // 检查文字长度
+    if (platformConfig) {
+      const { calculateContentLength } = await import("@/lib/platform");
+      const contentLength = calculateContentLength(formData.content);
+      if (contentLength > platformConfig.maxContentLength) {
+        addToast({ type: "error", message: `内容超出限制，请控制在 ${platformConfig.maxContentLength} 字符以内` });
+        return;
+      }
+    }
+
     setSaving(true);
 
     try {
       // 如果有新文件，先上传
-      let mediaUrls: string[] = [];
-      if (mediaFile) {
+      let mediaUrls: string[] = [...existingMediaUrls];
+      
+      for (const file of mediaFiles) {
         const uploadFormData = new FormData();
-        uploadFormData.append("file", mediaFile);
+        uploadFormData.append("file", file);
         
         const uploadRes = await fetch("/api/media/upload", {
           method: "POST",
@@ -117,10 +179,7 @@ export default function NewPostPage() {
         }
         
         const uploadData = await uploadRes.json();
-        mediaUrls = [uploadData.url];
-      } else if (mediaPreview && mediaPreview.startsWith("/uploads/")) {
-        // 如果是已上传的文件，使用已有URL
-        mediaUrls = [mediaPreview];
+        mediaUrls.push(uploadData.url);
       }
       
       const res = await fetch("/api/posts", {
@@ -146,110 +205,6 @@ export default function NewPostPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  // 生成缩略图（用于预览）
-  const generateThumbnail = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new window.Image();
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            const maxSize = 200;
-            let width = img.width;
-            let height = img.height;
-            
-            if (width > height) {
-              if (width > maxSize) {
-                height = (height * maxSize) / width;
-                width = maxSize;
-              }
-            } else {
-              if (height > maxSize) {
-                width = (width * maxSize) / height;
-                height = maxSize;
-              }
-            }
-            
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx?.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", 0.7));
-          };
-          img.src = e.target?.result as string;
-        };
-        reader.readAsDataURL(file);
-      } else if (file.type.startsWith("video/")) {
-        const video = document.createElement("video");
-        video.preload = "metadata";
-        video.muted = true;
-        video.playsInline = true;
-        
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          video.src = e.target?.result as string;
-        };
-        
-        video.onloadeddata = () => {
-          video.currentTime = 0.1;
-        };
-        
-        video.onseeked = () => {
-          const canvas = document.createElement("canvas");
-          const maxSize = 200;
-          let width = video.videoWidth;
-          let height = video.videoHeight;
-          
-          if (width > height) {
-            if (width > maxSize) {
-              height = (height * maxSize) / width;
-              width = maxSize;
-            }
-          } else {
-            if (height > maxSize) {
-              width = (width * maxSize) / height;
-              height = maxSize;
-            }
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(video, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.7));
-        };
-        
-        reader.readAsDataURL(file);
-      } else {
-        resolve("");
-      }
-    });
-  };
-
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const file = files[0];
-    
-    // 检查文件大小（10MB）
-    if (file.size > 10 * 1024 * 1024) {
-      addToast({ type: "error", message: "文件大小不能超过 10MB" });
-      return;
-    }
-    
-    // 检查文件类型
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
-      addToast({ type: "error", message: "请上传图片或视频文件" });
-      return;
-    }
-    
-    setMediaFile(file);
-    
-    // 生成缩略图用于预览
-    const thumbnail = await generateThumbnail(file);
-    setMediaPreview(thumbnail);
   };
 
   if (status === "loading") {
@@ -290,7 +245,7 @@ export default function NewPostPage() {
           </label>
           <select
             value={formData.accountId}
-            onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+            onChange={(e) => handleAccountChange(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             {accounts.map((account) => (
@@ -305,11 +260,11 @@ export default function NewPostPage() {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             内容
           </label>
-          <textarea
+          <ContentEditor
+            platformConfig={platformConfig || defaultConfig}
             value={formData.content}
-            onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+            onChange={(content) => setFormData((prev) => ({ ...prev, content }))}
             placeholder="输入你的帖子内容..."
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             rows={6}
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -321,58 +276,10 @@ export default function NewPostPage() {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             媒体（可选）
           </label>
-          <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
-              isDragging
-                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                : "border-gray-300 dark:border-gray-600 hover:border-blue-500"
-            }`}
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDragging(false);
-              handleFileUpload(e.dataTransfer.files);
-            }}
-            onClick={() => document.getElementById('media-upload')?.click()}
-          >
-            <input
-              id="media-upload"
-              type="file"
-              accept="image/*,video/*"
-              className="hidden"
-              onChange={(e) => handleFileUpload(e.target.files)}
-            />
-            {mediaPreview ? (
-              <div className="relative">
-                <img src={mediaPreview} alt="Preview" className="max-h-40 mx-auto rounded-lg" />
-                <button
-                  onClick={(e) => { e.stopPropagation(); setMediaPreview(null); setMediaFile(null); }}
-                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex gap-4">
-                  <Image size={32} className="text-gray-400" />
-                  <Video size={32} className="text-gray-400" />
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  点击上传或拖拽图片/视频到这里
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500">
-                  支持 JPG, PNG, GIF, MP4（最大 10MB）
-                </p>
-              </div>
-            )}
-          </div>
-          {mediaFile && (
-            <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
-              已选择: {mediaFile.name} (提交时会自动上传)
-            </p>
-          )}
+          <MediaUploader
+            platformConfig={platformConfig || defaultConfig}
+            onChange={handleMediaChange}
+          />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -427,5 +334,18 @@ export default function NewPostPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 主页面组件，用 Suspense 包裹
+export default function NewPostPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    }>
+      <NewPostContent />
+    </Suspense>
   );
 }

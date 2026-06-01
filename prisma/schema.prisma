@@ -33,6 +33,20 @@ model Platform {
   createdAt DateTime @default(now())
   
   accounts Account[]
+  config   PlatformConfig?
+}
+
+model PlatformConfig {
+  id                String   @id @default(cuid())
+  platformId        String   @unique
+  maxContentLength  Int      @default(280)     // 最大文字长度
+  maxImages         Int      @default(4)       // 最多图片数
+  maxVideos         Int      @default(1)        // 最多视频数
+  allowMixedMedia   Boolean  @default(true)     // 是否允许图片+视频混合
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  platform Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
 }
 
 model Account {

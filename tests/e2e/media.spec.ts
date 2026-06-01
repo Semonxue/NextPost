@@ -80,10 +80,18 @@ test.describe('媒体上传模块', () => {
       const fileInput = page.locator('input[type="file"]')
       await fileInput.setInputFiles(testImagePath)
 
+      // 等待图片出现
       await expect(page.locator('img')).toBeVisible({ timeout: 5000 })
 
-      await page.locator('button').filter({ hasText: '✕' }).click()
+      // 悬停到图片上以显示删除按钮，然后点击
+      const imageContainer = page.locator('.relative.group').first()
+      await imageContainer.hover()
+      
+      // 点击删除按钮（带有 X 图标的按钮）
+      const deleteButton = page.locator('button.rounded-full').filter({ has: page.locator('svg') }).first()
+      await deleteButton.click()
 
+      // 验证图片已被移除
       await expect(page.locator('img')).not.toBeVisible()
 
       unlinkSync(testImagePath)
