@@ -20,8 +20,9 @@
 | 6 | 帖子编辑 | `/posts/:id/edit` | 编辑已有帖子 | P0 |
 | 7 | 日历视图 | `/calendar` | 按日历展示发布计划 | P0 |
 | 8 | 列表视图 | `/posts` | 表格形式管理所有帖子 | P0 |
-| 9 | AI 对话 | `/chat` | AI 助手界面 | P1 |
-| 10 | 设置页 | `/settings` | 用户设置和 AI 配置 | P1 |
+| 9 | AI tools | `/ai-tools` | MCP 配置 + 工具列表（v0.3）| P1 |
+| 10 | 设置页 | `/settings` | 用户设置和 API Key 管理 | P1 |
+| 11 | AI 对话（Phase 2）| `/chat` | NextPost 内部 AI 助手（规划中）| P2 |
 
 ### 导航结构
 
@@ -31,7 +32,8 @@
 ├── 日历视图 (Calendar)
 ├── 帖子列表 (Posts)
 ├── 账号管理 (Accounts)
-├── AI 对话 (Chat)
+├── 回收站 (Trash)        ← v0.3 新增
+├── AI tools                ← v0.3 新增（MCP 配置 + 工具列表）
 └── 设置 (Settings)
 ```
 
@@ -267,12 +269,91 @@ AI 调用工具修改
 └────────┴──────────────────────────────────────────────┘
 ```
 
-### 6. AI 对话页
+### 5b. AI tools 页（v0.3 新增）— 替代原 `/chat` 占位
 
-**设计要点：**
-- 对话窗口为主
-- 左侧对话列表（历史记录）
-- 右侧实时对话
+> **设计目的**：让用户**真实看到**外部 AI 工具能调到的所有 MCP 工具，并提供各客户端的配置示例。**关键：工具列表不是硬编码，而是 Server Component 在请求时从 `src/mcp/external/tools.ts` 的 `TOOLS` 常量加载**——这跟 `/api/mcp` 接口的 source of truth 是同一份。
+
+**路由**：`/ai-tools`（Server Component，强制 `dynamic = 'force-dynamic'`）
+
+**布局（自上而下）**：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🔧 AI tools                                                  │
+│  副标题：NextPost 通过 MCP 对外暴露 N 个工具，让外部 AI ...   │
+│  标签：[MCP v0.3] [工具数：7] [读取：4] [写入：3]              │
+├─────────────────────────────────────────────────────────────┤
+│ 1. MCP 配置                                                   │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ MCP 端点：POST http://localhost:3000/api/mcp           │  │
+│  │                                                        │  │
+│  │ 你的 API Key (N)                                       │  │
+│  │  ┌──────────────────────────────────────────┬────┐    │  │
+│  │ │ Test Key  [read_write]  npk_abc...xyz... │Reveal│  │  │
+│  │ └──────────────────────────────────────────┴────┘    │  │
+│  │  点 Reveal 调 /api/settings/external-keys/reveal     │  │
+│  │  返回完整 key，可复制                                   │  │
+│  │                                                        │  │
+│  │ 客户端配置示例（4 个折叠面板）                          │  │
+│  │  ▶ Claude Desktop                                      │  │
+│  │  ▶ Cursor / Cline / Continue                          │  │
+│  │  ▶ Cherry Studio                                       │  │
+│  │  ▶ VS Code (.vscode/mcp.json)                         │  │
+│  │    每个面板含可复制的 JSON 配置                         │  │
+│  │                                                        │  │
+│  │ 权限范围表（read / write / read_write）                 │  │
+│  └────────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────┤
+│ 2. MCP 工具（7 个，实时从 src/mcp/external/tools.ts 加载）   │
+│  读取工具（4）                                               │
+│  ┌─ list_accounts [read] ───────────────────────────┐       │
+│  │ 获取账号列表（脱敏）                              │       │
+│  │ inputSchema: { ... }                              │       │
+│  └──────────────────────────────────────────────────┘       │
+│  ┌─ get_pending_posts [read] ───────────────────────┐       │
+│  ...                                                         │
+│  写入工具（3，需 write / read_write scope）                  │
+│  ┌─ upload_media_from_url [write] ──────────────────┐       │
+│  ┌─ create_post [write] ─────────────────────────────┐       │
+│  ┌─ update_post [write] ─────────────────────────────┐       │
+├─────────────────────────────────────────────────────────────┤
+│ 3. 写工具安全约束                                             │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ ⚠ 不提供 delete：外部 MCP 没有任何删除工具               │  │
+│  │ ⚠ update_post 字段白名单：只接受 scheduledTime/timezone │  │
+│  │ ⚠ update_post 状态锁：仅 draft/scheduled 可改            │  │
+│  │ ⚠ upload_media_from_url 限制：http/https、≤10MB、6 mime │  │
+│  └────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**数据来源（关键 — 全部真实，非硬编码）**：
+
+| 数据 | 来源 | 客户端可见 |
+|------|------|----------|
+| 工具列表 + inputSchema | `import { TOOLS } from "@/mcp/external/tools"` | ✅ |
+| 工具 scope 标签 | `import { TOOL_SCOPE } from "@/mcp/external/tools"` | ✅ |
+| 用户的 API Keys | `prisma.externalApiKey.findMany({where:{userId}})` | ❌（仅 preview） |
+| 完整 API Key | `/api/settings/external-keys/reveal`（reactive 调用） | ❌（仅 reveal 时） |
+
+> **安全性**：完整 key **永远不进服务端 HTML**。服务端 select 时拿全 key，渲染时只把前 12 位 preview 写进 HTML。Reveal 按钮在客户端调 `/api/settings/external-keys/reveal` 单独拿完整 key。
+
+**交互（client components）**：
+- `RevealKeyButton`（`src/app/(main)/ai-tools/RevealKeyButton.tsx`）：点击 → 调 reveal API → 显示 input + 复制 + 隐藏
+- `CopyButton`（`src/app/(main)/ai-tools/CopyButton.tsx`）：通用文本复制到剪贴板（带 fallback for non-secure contexts）
+
+**E2E 覆盖**（`tests/e2e/ai-tools.spec.ts`，9 用例，全过）：
+- 页面渲染 + 标题
+- 7 个工具卡片可见
+- 写工具带 `write` 标签
+- 工具卡片展开显示 inputSchema
+- API Key 列表 + Reveal 按钮
+- 空状态（无 key）
+- 安全约束 section
+- 4 个客户端配置示例
+- 未登录重定向
+
+### 6. AI 对话页（Phase 2 规划）
 - 底部输入框
 - AI 消息显示工具调用状态
 

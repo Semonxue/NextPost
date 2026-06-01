@@ -36,7 +36,7 @@ import { hasScope } from './auth';
 const prisma = new PrismaClient();
 
 // 单个工具需要的最低 scope
-const TOOL_SCOPE: Record<string, ToolRequiredScope> = {
+export const TOOL_SCOPE: Record<string, ToolRequiredScope> = {
   list_accounts: 'read',
   get_pending_posts: 'read',
   get_post_detail: 'read',

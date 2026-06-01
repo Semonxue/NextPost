@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { LayoutDashboard, Calendar, FileText, Users, Bot, Settings, Menu, X, LogOut, Trash2 } from "lucide-react";
+import { LayoutDashboard, Calendar, FileText, Users, Wrench, Settings, Menu, X, LogOut, Trash2 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 
 const navItems = [
@@ -12,7 +12,7 @@ const navItems = [
   { href: "/posts", label: "帖子列表", icon: FileText },
   { href: "/accounts", label: "账号管理", icon: Users },
   { href: "/trash", label: "回收站", icon: Trash2 },
-  { href: "/chat", label: "AI 对话", icon: Bot },
+  { href: "/ai-tools", label: "AI tools", icon: Wrench },
   { href: "/settings", label: "设置", icon: Settings },
 ];
 

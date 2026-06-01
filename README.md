@@ -239,6 +239,17 @@ nextpost/
 | GET | /api/settings/external-keys/reveal?id=xxx | 查看完整 Key |
 | DELETE | /api/settings/external-keys/:id | 删除 Key |
 
+### 🛠 AI tools 页面
+
+`/ai-tools` 是一个 Server Component（v0.3 新增），提供：
+
+- **MCP 配置**：端点 + 客户端配置示例（Claude Desktop / Cursor / Cherry Studio / VS Code）+ Scope 权限表
+- **MCP 工具列表**：7 个工具（4 读 + 3 写）**实时从 `src/mcp/external/tools.ts` 加载**，展开后能看到 inputSchema
+- **API Key 管理入口**：列出当前用户所有 Key，点 Reveal 调 `/api/settings/external-keys/reveal` 拿完整值
+- **写工具安全约束**：字段白名单 / 状态锁 / 不提供 delete 等说明
+
+> **关键**：工具列表**不是硬编码**。`/ai-tools` 页面直接 import `TOOLS` 和 `TOOL_SCOPE` 常量（跟 `/api/mcp` 同一份 source of truth），加新工具时只需改一处。
+
 ## 🤖 MCP 外部集成
 
 ### 概述

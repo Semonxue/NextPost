@@ -62,7 +62,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
   let testUser: { id: string; username: string };
   let testPlatform: { id: string };
   let testAccount: { id: string; name: string };
-  let testPost: { id: string; publishToken: string };
+  let testPost: { id: string; publishToken: string | null };
   let readKey: string;
   let writeKey: string;
   let rwKey: string;
