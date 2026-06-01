@@ -165,10 +165,14 @@ export default function AccountsPage() {
                   </button>
                   <button
                     onClick={() => handleDelete(account.id)}
+                    data-testid="delete-account-button"
+                    aria-label="删除账号"
                     className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                   >
                     <Trash2 size={16} className="text-red-500" />
                   </button>
+REPLACE
+
                 </div>
               </div>
               {account.description && (

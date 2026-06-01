@@ -429,13 +429,17 @@ describe('Posts API', () => {
   })
 
   describe('DELETE /api/posts/:id', () => {
-    it('should delete post successfully', async () => {
+    it('should soft-delete post (not hard delete) successfully', async () => {
       mockPostFindFirst.mockResolvedValue({
         id: 'post-1',
         accountId: 'acct-1',
         account: { userId: 'user-123' },
+        mediaUrls: '[]',
       })
-      mockPostDelete.mockResolvedValue({ id: 'post-1' })
+      mockPostUpdate.mockResolvedValue({
+        id: 'post-1',
+        deletedAt: new Date(),
+      })
 
       const request = new NextRequest('http://localhost/api/posts/post-1', {
         method: 'DELETE',
@@ -446,8 +450,14 @@ describe('Posts API', () => {
 
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
-      expect(mockPostDelete).toHaveBeenCalled()
+      // 软删除走 update 而非 delete
+      expect(mockPostUpdate).toHaveBeenCalledWith({
+        where: { id: 'post-1' },
+        data: expect.objectContaining({ deletedBy: 'user', deletedAt: expect.any(Date) }),
+      })
+      expect(mockPostDelete).not.toHaveBeenCalled()
     })
+
 
     it('should return 404 when post not found', async () => {
       mockPostFindFirst.mockResolvedValue(null)

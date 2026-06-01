@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { deleteFile } from "@/lib/storage";
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +15,7 @@ export async function GET(
     const { id } = await params;
 
     const post = await prisma.post.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, userId: session.user.id, deletedAt: null },
       include: { account: { include: { platform: true } } },
     });
 
@@ -44,9 +43,9 @@ export async function PATCH(
     const { id } = await params;
     const { accountId, content, mediaUrls, scheduledTime, timezone, status, externalPostUrl } = await request.json();
 
-    // 验证帖子归属
+    // 验证帖子归属（且未被软删除）
     const existingPost = await prisma.post.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, userId: session.user.id, deletedAt: null },
     });
 
     if (!existingPost) {
@@ -56,7 +55,7 @@ export async function PATCH(
     // 如果更换账号，验证新账号归属
     if (accountId && accountId !== existingPost.accountId) {
       const account = await prisma.account.findFirst({
-        where: { id: accountId, userId: session.user.id },
+        where: { id: accountId, userId: session.user.id, deletedAt: null },
       });
       if (!account) {
         return NextResponse.json({ error: "账号不存在" }, { status: 404 });
@@ -90,6 +89,14 @@ export async function PATCH(
   }
 }
 
+/**
+ * DELETE /api/posts/:id
+ *
+ * 软删除帖子（v0.3）：设置 deletedAt 和 deletedBy，不立即删除媒体文件
+ * - 帖子从列表/详情 API 中不再返回
+ * - 帖子可以在 /api/trash 中找到并恢复
+ * - 永久删除需要 DELETE /api/trash/posts/:id
+ */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -104,33 +111,25 @@ export async function DELETE(
 
     // 验证帖子归属
     const existingPost = await prisma.post.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, userId: session.user.id, deletedAt: null },
     });
 
     if (!existingPost) {
       return NextResponse.json({ error: "帖子不存在" }, { status: 404 });
     }
 
-    // 删除关联的媒体文件
-    if (existingPost.mediaUrls) {
-      try {
-        const mediaUrls = JSON.parse(existingPost.mediaUrls) as string[];
-        for (const url of mediaUrls) {
-          if (url && !url.startsWith('data:')) {
-            await deleteFile(url);
-          }
-        }
-      } catch (error) {
-        console.error("删除媒体文件失败:", error);
-        // 不影响主流程，继续删除帖子
-      }
-    }
+    // 软删除：只设置 deletedAt 和 deletedBy
+    await prisma.post.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedBy: "user",
+      },
+    });
 
-    await prisma.post.delete({ where: { id } });
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: "已移入回收站" });
   } catch (error) {
-    console.error("删除帖子失败:", error);
+    console.error("软删除帖子失败:", error);
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });
   }
 }

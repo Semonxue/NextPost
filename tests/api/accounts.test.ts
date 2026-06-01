@@ -60,11 +60,12 @@ describe('Accounts API', () => {
       expect(response.status).toBe(200)
       expect(data).toHaveLength(2)
       expect(mockFindMany).toHaveBeenCalledWith({
-        where: { userId: 'user-123' },
+        where: { userId: 'user-123', deletedAt: null },
         include: { platform: true },
         orderBy: { createdAt: 'desc' },
       })
     })
+
 
     it('should return 401 when not authenticated', async () => {
       ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
@@ -196,12 +197,15 @@ describe('Accounts API', () => {
   })
 
   describe('DELETE /api/accounts/:id', () => {
-    it('should delete account successfully', async () => {
+    it('should soft-delete account (not hard delete) successfully', async () => {
       mockFindFirst.mockResolvedValue({
         id: 'acct-1',
         userId: 'user-123',
       })
-      mockDelete.mockResolvedValue({ id: 'acct-1' })
+      mockUpdate.mockResolvedValue({
+        id: 'acct-1',
+        deletedAt: new Date(),
+      })
 
       const request = new NextRequest('http://localhost/api/accounts/acct-1', {
         method: 'DELETE',
@@ -212,7 +216,12 @@ describe('Accounts API', () => {
 
       expect(response.status).toBe(200)
       expect(data.success).toBe(true)
-      expect(mockDelete).toHaveBeenCalledWith({ where: { id: 'acct-1' } })
+      // 软删除走 update 而非 delete
+      expect(mockUpdate).toHaveBeenCalledWith({
+        where: { id: 'acct-1' },
+        data: expect.objectContaining({ deletedBy: 'user', deletedAt: expect.any(Date) }),
+      })
+      expect(mockDelete).not.toHaveBeenCalled()
     })
 
     it('should return 404 when account not found', async () => {
@@ -226,6 +235,7 @@ describe('Accounts API', () => {
       expect(response.status).toBe(404)
     })
   })
+
 })
   describe('GET /api/accounts - Error cases', () => {
     it('should return 500 on server error', async () => {

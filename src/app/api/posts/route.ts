@@ -17,14 +17,18 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    const where: Record<string, unknown> = { userId: session.user.id };
+    // 过滤已软删除的帖子（v0.3）
+    const where: Record<string, unknown> = {
+      userId: session.user.id,
+      deletedAt: null,
+    };
     if (status) where.status = status;
-    
+
     // 多账号筛选
     if (accountIds.length > 0) {
       where.accountId = { in: accountIds };
     }
-    
+
     // 多平台筛选（通过账号关联）
     if (platformIds.length > 0) {
       where.account = { platformId: { in: platformIds } };
@@ -77,15 +81,15 @@ export async function POST(request: NextRequest) {
     // datetime-local 返回的是本地时间，直接存储
     // 前端正确定义时区，显示时直接使用该时区
     const scheduledTimeFinal = scheduledTime ? new Date(scheduledTime) : null;
-    
+
     // 确定最终状态
     const finalStatus = status || (scheduledTime ? "scheduled" : "draft");
-    
+
     // 为 scheduled 状态的帖子生成 publishToken
-    const publishToken = finalStatus === "scheduled" 
-      ? `tok_${uuidv4().replace(/-/g, "")}` 
+    const publishToken = finalStatus === "scheduled"
+      ? `tok_${uuidv4().replace(/-/g, "")}`
       : null;
-    
+
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
