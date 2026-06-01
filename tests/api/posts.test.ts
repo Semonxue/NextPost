@@ -403,3 +403,100 @@ describe('Posts API', () => {
     })
   })
 })
+  describe('GET /api/posts - Error cases', () => {
+    it('should return 500 on server error', async () => {
+      mockPostFindMany.mockRejectedValue(new Error('Database error'))
+
+      const response = await GET(new NextRequest('http://localhost/api/posts'))
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('POST /api/posts - Error cases', () => {
+    it('should return 500 on server error', async () => {
+      mockAccountFindFirst.mockResolvedValue({ id: 'acct-1', userId: 'user-123' })
+      mockPostCreate.mockRejectedValue(new Error('Database error'))
+
+      const request = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId: 'acct-1',
+          content: '测试内容',
+          scheduledTime: '2024-12-01T10:00:00Z',
+        }),
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('GET /api/posts/:id - Error cases', () => {
+    it('should return 500 on server error', async () => {
+      mockPostFindFirst.mockRejectedValue(new Error('Database error'))
+
+      const response = await GET_BY_ID(
+        new NextRequest('http://localhost/api/posts/post-1'),
+        { params: Promise.resolve({ id: 'post-1' }) }
+      )
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('PATCH /api/posts/:id - Error cases', () => {
+    it('should return 404 when changing to another user account', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '内容',
+        status: 'draft',
+        accountId: 'acct-1',
+        account: { userId: 'user-123' },
+      })
+      mockAccountFindFirst.mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ accountId: 'acct-other' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(404)
+    })
+
+    it('should return 500 on server error during update', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '旧内容',
+        status: 'draft',
+        accountId: 'acct-1',
+        account: { userId: 'user-123' },
+      })
+      mockPostUpdate.mockRejectedValue(new Error('Database error'))
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ content: '新内容' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('DELETE /api/posts/:id - Error cases', () => {
+    it('should return 500 on server error during delete', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        accountId: 'acct-1',
+        account: { userId: 'user-123' },
+      })
+      mockPostDelete.mockRejectedValue(new Error('Database error'))
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(500)
+    })
+  })

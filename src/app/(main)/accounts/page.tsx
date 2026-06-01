@@ -52,6 +52,13 @@ export default function AccountsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 客户端验证
+    if (!formData.name.trim() || !formData.handle.trim()) {
+      addToast({ type: "error", message: "名称和handle不能为空" });
+      return;
+    }
+    
     setSaving(true);
 
     try {
@@ -182,14 +189,12 @@ export default function AccountsPage() {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="例如：我的小号"
-            required
           />
           <Input
             label="Twitter Handle"
             value={formData.handle}
             onChange={(e) => setFormData({ ...formData, handle: e.target.value })}
             placeholder="例如：username"
-            required
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">描述（可选）</label>

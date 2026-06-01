@@ -227,3 +227,122 @@ describe('Accounts API', () => {
     })
   })
 })
+  describe('GET /api/accounts - Error cases', () => {
+    it('should return 500 on server error', async () => {
+      mockFindMany.mockRejectedValue(new Error('Database error'))
+
+      const response = await GET()
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('POST /api/accounts - Error cases', () => {
+    it('should return 400 when name is missing', async () => {
+      mockFindUnique.mockResolvedValue({ id: 'platform-1', name: 'Twitter' })
+
+      const req = new NextRequest('http://localhost/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ handle: '@test' }),
+      })
+      req.headers.set('content-type', 'application/json')
+
+      const response = await POST(req)
+      expect(response.status).toBe(400)
+    })
+
+    it('should return 400 when platform not found', async () => {
+      mockFindUnique.mockResolvedValue(null)
+
+      const req = new NextRequest('http://localhost/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ name: '测试', handle: 'test' }),
+      })
+      req.headers.set('content-type', 'application/json')
+
+      const response = await POST(req)
+      const data = await response.json()
+      expect(response.status).toBe(400)
+      expect(data.error).toBe('平台不存在')
+    })
+
+    it('should return 500 on server error during create', async () => {
+      mockFindUnique.mockResolvedValue({ id: 'platform-1', name: 'Twitter' })
+      mockCreate.mockRejectedValue(new Error('Database error'))
+
+      const req = new NextRequest('http://localhost/api/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ name: '测试', handle: 'test' }),
+      })
+      req.headers.set('content-type', 'application/json')
+
+      const response = await POST(req)
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('PATCH /api/accounts/:id - Error cases', () => {
+    it('should return 404 when account not found', async () => {
+      mockFindFirst.mockResolvedValue(null)
+
+      const req = new NextRequest('http://localhost/api/accounts/acct-999', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '更新' }),
+      })
+      req.headers.set('content-type', 'application/json')
+
+      const response = await PATCH(req, { params: Promise.resolve({ id: 'acct-999' }) })
+      expect(response.status).toBe(404)
+    })
+
+    it('should return 404 when updating account of another user', async () => {
+      mockFindFirst.mockResolvedValue(null)
+
+      const req = new NextRequest('http://localhost/api/accounts/acct-other', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '更新' }),
+      })
+      req.headers.set('content-type', 'application/json')
+
+      const response = await PATCH(req, { params: Promise.resolve({ id: 'acct-other' }) })
+      expect(response.status).toBe(404)
+    })
+
+    it('should return 500 on server error during update', async () => {
+      mockFindFirst.mockResolvedValueOnce({ id: 'acct-1', userId: 'user-123' })
+      mockUpdate.mockRejectedValue(new Error('Database error'))
+
+      const req = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '更新' }),
+      })
+      req.headers.set('content-type', 'application/json')
+
+      const response = await PATCH(req, { params: Promise.resolve({ id: 'acct-1' }) })
+      expect(response.status).toBe(500)
+    })
+  })
+
+  describe('DELETE /api/accounts/:id - Error cases', () => {
+    it('should return 404 when deleting non-existent account', async () => {
+      mockFindFirst.mockResolvedValue(null)
+
+      const req = new NextRequest('http://localhost/api/accounts/acct-999', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(req, { params: Promise.resolve({ id: 'acct-999' }) })
+      expect(response.status).toBe(404)
+    })
+
+    it('should return 500 on server error during delete', async () => {
+      mockFindFirst.mockResolvedValueOnce({ id: 'acct-1', userId: 'user-123' })
+      mockDelete.mockRejectedValue(new Error('Database error'))
+
+      const req = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(req, { params: Promise.resolve({ id: 'acct-1' }) })
+      expect(response.status).toBe(500)
+    })
+  })

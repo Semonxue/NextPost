@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -32,20 +33,22 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/register", {
+      // 注册
+      const registerRes = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, email }),
       });
 
-      const data = await res.json();
+      const registerData = await registerRes.json();
 
-      if (!res.ok) {
-        setError(data.error || "注册失败");
+      if (!registerRes.ok) {
+        setError(registerData.error || "注册失败");
         return;
       }
 
-      router.push("/login");
+      // 注册成功后跳转到登录页
+      router.push("/login?registered=true");
     } catch {
       setError("注册失败");
     } finally {
