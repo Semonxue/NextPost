@@ -195,4 +195,36 @@ describe('External API Keys CRUD', () => {
       expect(apiKey.permissions).toContain('manage_posts');
     });
   });
+
+  // ====== v0.4 新增：scope 系统端到端 ======
+
+  describe('scope 持久化（DB 层）', () => {
+    it('read_write scope 应能存进 DB 并取回一致', async () => {
+      const keyValue = `npk_${uuidv4().replace(/-/g, '')}`;
+      const apiKey = await prisma.externalApiKey.create({
+        data: {
+          userId: testUser.id,
+          name: 'Read-Write Key',
+          key: keyValue,
+          permissions: 'read_write',
+        }
+      });
+      const fetched = await prisma.externalApiKey.findUnique({ where: { id: apiKey.id } });
+      expect(fetched?.permissions).toBe('read_write');
+    });
+
+    it('write scope 应能存进 DB', async () => {
+      const keyValue = `npk_${uuidv4().replace(/-/g, '')}`;
+      const apiKey = await prisma.externalApiKey.create({
+        data: {
+          userId: testUser.id,
+          name: 'Write Only Key',
+          key: keyValue,
+          permissions: 'write',
+        }
+      });
+      const fetched = await prisma.externalApiKey.findUnique({ where: { id: apiKey.id } });
+      expect(fetched?.permissions).toBe('write');
+    });
+  });
 });

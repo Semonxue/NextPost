@@ -124,17 +124,25 @@ export async function validateApiKey(apiKey: string): Promise<{
 
 /**
  * 生成新的 API Key
+ *
+ * @param scope 权限范围（默认 'read'）。合法值：'read' | 'write' | 'read_write'。
+ *              其它值 / 缺失都安全降级为 'read'。
  */
 export async function generateApiKey(
   userId: string,
   name: string,
-  expiresAt?: Date
+  expiresAt?: Date,
+  scope?: Scope | string
 ): Promise<{
   success: boolean;
   key?: string;
+  scope?: Scope;
   error?: string;
 }> {
   try {
+    // 解析并归一化 scope
+    const finalScope: Scope = parseScope(scope);
+
     // 生成随机密钥
     const randomBytes = crypto.getRandomValues(new Uint8Array(32));
     const keyValue = Array.from(randomBytes)
@@ -149,13 +157,14 @@ export async function generateApiKey(
         name,
         key: fullKey,
         expiresAt,
-        permissions: 'read_report'
+        permissions: finalScope,
       }
     });
 
     return {
       success: true,
-      key: fullKey
+      key: fullKey,
+      scope: finalScope,
     };
   } catch (error) {
     console.error('Error generating API Key:', error);

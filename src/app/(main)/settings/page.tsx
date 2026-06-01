@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [externalKeys, setExternalKeys] = useState<ExternalApiKey[]>([]);
   const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyScope, setNewKeyScope] = useState<"read" | "write" | "read_write">("read_write");
   const [creating, setCreating] = useState(false);
   const [showNewKey, setShowNewKey] = useState<string | null>(null);
 
@@ -78,14 +79,14 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings/external-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName }),
+        body: JSON.stringify({ name: newKeyName, scope: newKeyScope }),
       });
       
       if (res.ok) {
         const data = await res.json();
         setShowNewKey(data.key);
         setNewKeyName("");
-        addToast({ type: "success", message: "API Key 已创建，请妥善保存" });
+        addToast({ type: "success", message: `API Key 已创建（${data.scope ?? newKeyScope}）` });
         fetchSettings();
       } else {
         addToast({ type: "error", message: "创建失败" });
@@ -94,6 +95,25 @@ export default function SettingsPage() {
       addToast({ type: "error", message: "创建失败" });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleUpdateScope = async (id: string, newScope: "read" | "write" | "read_write") => {
+    try {
+      const res = await fetch(`/api/settings/external-keys/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: newScope }),
+      });
+      if (res.ok) {
+        addToast({ type: "success", message: `已更新为 ${newScope}` });
+        fetchSettings();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        addToast({ type: "error", message: err.error || "更新失败" });
+      }
+    } catch {
+      addToast({ type: "error", message: "更新失败" });
     }
   };
 
@@ -174,6 +194,13 @@ export default function SettingsPage() {
     openai: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
     anthropic: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
     ollama: ["llama2", "codellama", "mistral"],
+  };
+
+  // scope 颜色映射
+  const scopeBadge: Record<string, string> = {
+    read: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
+    write: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+    read_write: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   };
 
   return (
@@ -277,25 +304,45 @@ export default function SettingsPage() {
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3 mb-4">
           <Key size={20} className="text-gray-500" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">外部 API Key</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">外部 API Key（MCP）</h2>
         </div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          创建 API Key 用于外部 MCP Server 调用。Key 创建后只能查看一次，请妥善保存。
+          创建 API Key 用于外部 MCP 客户端（Claude Desktop / Cursor / Cherry Studio 等）调用 NextPost。
+          Key 创建后只能查看一次，请妥善保存。
         </p>
         
-        {/* 创建新 Key */}
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={newKeyName}
-            onChange={(e) => setNewKeyName(e.target.value)}
-            placeholder="输入 Key 名称"
-            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <Button onClick={handleCreateKey} loading={creating}>
-            <Plus size={16} className="mr-1" />
-            创建
-          </Button>
+        {/* 创建新 Key —— 含 scope 选择器 */}
+        <div className="mb-4 space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              placeholder="输入 Key 名称（如 Claude Desktop）"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <Button onClick={handleCreateKey} loading={creating}>
+              <Plus size={16} className="mr-1" />
+              创建
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-600 dark:text-gray-400 shrink-0">权限：</label>
+            <select
+              value={newKeyScope}
+              onChange={(e) => setNewKeyScope(e.target.value as "read" | "write" | "read_write")}
+              data-testid="new-key-scope-select"
+              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="read">read — 只读（监控/面板）</option>
+              <option value="write">write — 仅写（罕见）</option>
+              <option value="read_write">read_write — 通用 AI Agent（推荐）</option>
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            💡 想用 AI 创建/更新帖子？选 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">read_write</code>。
+            详见 <a href="/ai-tools" className="text-blue-600 hover:underline">/ai-tools 页面</a>。
+          </p>
         </div>
         
         {/* 新 Key 提示 */}
@@ -321,38 +368,73 @@ export default function SettingsPage() {
           </div>
         )}
         
-        {/* Key 列表 */}
+        {/* Key 列表 —— 每行带 scope 选择器可改 */}
         {externalKeys.length > 0 ? (
-          <div className="space-y-2">
-            {externalKeys.map((key) => (
-              <div
-                key={key.id}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-              >
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{key.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {key.keyPreview} | 创建于 {new Date(key.createdAt).toLocaleDateString("zh-CN")}
-                  </p>
+          <div className="space-y-2" data-testid="external-keys-list">
+            {externalKeys.map((key) => {
+              // 后端可能返回 "read_report" 旧值，前端做归一化显示
+              const currentScope = (
+                key.permissions === "read_write" ? "read_write" :
+                key.permissions === "write" ? "write" :
+                "read"
+              ) as "read" | "write" | "read_write";
+              return (
+                <div
+                  key={key.id}
+                  className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                  data-testid="external-key-row"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{key.name}</p>
+                      <span
+                        className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${scopeBadge[currentScope]}`}
+                      >
+                        {currentScope}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {key.keyPreview} | 创建于 {new Date(key.createdAt).toLocaleDateString("zh-CN")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <select
+                      value={currentScope}
+                      data-testid="key-scope-select"
+                      onChange={(e) => {
+                        const newScope = e.target.value as "read" | "write" | "read_write";
+                        if (newScope !== currentScope) {
+                          if (confirm(`确定要把 "${key.name}" 的权限从 ${currentScope} 改为 ${newScope} 吗？`)) {
+                            handleUpdateScope(key.id, newScope);
+                          } else {
+                            e.target.value = currentScope; // 还原 select
+                          }
+                        }
+                      }}
+                      className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="read">read</option>
+                      <option value="write">write</option>
+                      <option value="read_write">read_write</option>
+                    </select>
+                    <button
+                      onClick={() => handleRevealKey(key.id, key.name)}
+                      className="p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg"
+                      title="查看完整 Key"
+                    >
+                      <Key size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteKey(key.id)}
+                      className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
+                      title="删除"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleRevealKey(key.id, key.name)}
-                    className="p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg"
-                    title="查看完整 Key"
-                  >
-                    <Key size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteKey(key.id)}
-                    className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
-                    title="删除"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">

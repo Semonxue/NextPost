@@ -126,6 +126,50 @@ describe('MCP Auth - 补充测试', () => {
       const result = await generateApiKey('u1', 'Test')
       expect(result.success).toBe(false)
     })
+
+    it('默认 scope 应为 read（安全默认）', async () => {
+      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
+      const { generateApiKey } = await import('@/mcp/external/auth')
+      const result = await generateApiKey('u1', 'Default')
+      expect(result.success).toBe(true)
+      expect(result.scope).toBe('read')
+      // 写入 DB 时 permissions 应是 read
+      expect(externalApiKeyMock.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ permissions: 'read' }) })
+      )
+    })
+
+    it('应接受 scope=read_write 并透传', async () => {
+      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
+      const { generateApiKey } = await import('@/mcp/external/auth')
+      const result = await generateApiKey('u1', 'RW', undefined, 'read_write')
+      expect(result.success).toBe(true)
+      expect(result.scope).toBe('read_write')
+      expect(externalApiKeyMock.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ permissions: 'read_write' }) })
+      )
+    })
+
+    it('应接受 scope=write 并透传', async () => {
+      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
+      const { generateApiKey } = await import('@/mcp/external/auth')
+      const result = await generateApiKey('u1', 'W', undefined, 'write')
+      expect(result.scope).toBe('write')
+    })
+
+    it('非法 scope 应降级为 read（不抛错）', async () => {
+      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
+      const { generateApiKey } = await import('@/mcp/external/auth')
+      const result = await generateApiKey('u1', 'Bad', undefined, 'totally-bogus')
+      expect(result.scope).toBe('read')
+    })
+
+    it('read_report 历史 scope 应被接受并归一为 read', async () => {
+      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
+      const { generateApiKey } = await import('@/mcp/external/auth')
+      const result = await generateApiKey('u1', 'Legacy', undefined, 'read_report')
+      expect(result.scope).toBe('read')
+    })
   })
 
   describe('deleteApiKey', () => {

@@ -34,29 +34,43 @@ export async function GET(request: NextRequest) {
 // POST 创建新的 Key
 export async function POST(request: NextRequest) {
   const session = await auth();
-  
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  
+
   try {
     const body = await request.json();
-    const { name, expiresAt } = body;
-    
+    const { name, expiresAt, scope } = body;
+
     if (!name || typeof name !== 'string') {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
-    
+
+    // 校验 scope（不合法值由 generateApiKey 内部降级为 read，这里只在传了且非 string 时报错）
+    if (scope !== undefined && typeof scope !== 'string') {
+      return NextResponse.json(
+        { error: 'scope must be a string' },
+        { status: 400 }
+      );
+    }
+
     const expiresAtDate = expiresAt ? new Date(expiresAt) : undefined;
-    const result = await generateApiKey(session.user.id, name, expiresAtDate);
-    
+    const result = await generateApiKey(
+      session.user.id,
+      name,
+      expiresAtDate,
+      typeof scope === 'string' ? scope : undefined
+    );
+
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
-    
+
     return NextResponse.json({
       key: result.key,
       name,
+      scope: result.scope, // 返回实际写入的 scope（前端可显示）
       message: 'API Key created successfully. Please save it securely - it will not be shown again.'
     });
   } catch (error) {
