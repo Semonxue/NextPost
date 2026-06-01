@@ -7,7 +7,7 @@
 | v0.1 | 2026-05-31 | MVP 基础版本测试用例 |
 | **v0.2** | 2026-06-01 | **MCP 集成测试用例**：API Key、发布回传、MCP 工具、软删除 |
 | **v0.3** | 2026-06-01 | **软删除 + 回收站测试用例**：软删除/恢复/永久删除/回收站页面/stats/settings/平台配置/认证补充 |
-REPLACE
+| **v0.4** | **2026-06-02** | **外部 MCP 写能力测试用例**：`upload_media_from_url` / `create_post` / `update_post` / Scope 权限强制 / 字段白名单 / 状态锁 |
 
 
 ---
@@ -1231,6 +1231,186 @@ npm install -D prisma
 
 ---
 
+### 5.7a 外部 MCP 写工具（v0.4 新增）
+
+> **设计说明**：v0.4 起，外部 MCP 具备写能力（受 scope 控制）。共 3 个写工具，每个都需要 `write` 或 `read_write` scope。`update_post` 还受字段白名单 + 状态锁双重保护。
+
+#### TC-MCP-W-001：upload_media_from_url - 成功拉取 PNG
+
+| 用例ID | TC-MCP-W-001 |
+|--------|------------|
+| **工具** | upload_media_from_url |
+| **认证** | API Key（scope: write 或 read_write） |
+| **请求参数** | `{ "url": "https://cdn.example.com/x.png" }` |
+| **预期响应** | `{ "url": "/api/uploads/2026-06-02/uuid.png", "mimeType": "image/png", "size": 12345, "filename": "..." }` |
+| **验证点** | 文件成功落盘，URL 可直接用于 create_post |
+
+#### TC-MCP-W-002：upload_media_from_url - 缺 url 参数
+
+| 用例ID | TC-MCP-W-002 |
+|--------|------------|
+| **请求参数** | `{ }`（缺 url） |
+| **预期响应** | `{ "error": "url is required", "errorCode": "INVALID_ARGUMENT" }` |
+
+#### TC-MCP-W-003：upload_media_from_url - 非 http/https 协议
+
+| 用例ID | TC-MCP-W-003 |
+|--------|------------|
+| **请求参数** | `{ "url": "file:///etc/passwd" }` |
+| **预期响应** | `{ "errorCode": "INVALID_URL" }` |
+| **验证点** | 不允许 `file://` / `ftp://` 等协议 |
+
+#### TC-MCP-W-004：upload_media_from_url - 文件超 10MB
+
+| 用例ID | TC-MCP-W-004 |
+|--------|------------|
+| **请求参数** | 模拟返回 content-length 99999999 的 URL |
+| **预期响应** | `{ "errorCode": "FILE_TOO_LARGE" }` |
+
+#### TC-MCP-W-005：upload_media_from_url - 不支持的 mime
+
+| 用例ID | TC-MCP-W-005 |
+|--------|------------|
+| **请求参数** | 模拟返回 content-type `application/pdf` |
+| **预期响应** | `{ "errorCode": "UNSUPPORTED_MIME" }` |
+
+#### TC-MCP-W-006：upload_media_from_url - HTTP 5xx 标记可重试
+
+| 用例ID | TC-MCP-W-006 |
+|--------|------------|
+| **请求参数** | 模拟返回 HTTP 500 |
+| **预期响应** | `{ "errorCode": "FETCH_FAILED", "retryable": true }` |
+| **验证点** | 5xx 自动标记 retryable=true，4xx 不会 |
+
+#### TC-MCP-W-007：create_post - 成功创建
+
+| 用例ID | TC-MCP-W-007 |
+|--------|------------|
+| **工具** | create_post |
+| **请求参数** | `{ "accountId": "acct_owned", "content": "Hello", "scheduledTime": "<未来时间>", "mediaUrls": ["/api/uploads/abc.png"] }` |
+| **预期响应** | `{ "success": true, "post": { "id": "p_new", "publishToken": "tok_xxx", "status": "scheduled", ... } }` |
+| **验证点** | publishToken 格式 `tok_` 开头；返回 post 包含完整字段 |
+
+#### TC-MCP-W-008：create_post - 账号不属于当前用户
+
+| 用例ID | TC-MCP-W-008 |
+|--------|------------|
+| **请求参数** | `{ "accountId": "other_user_account", ... }` |
+| **预期响应** | `{ "errorCode": "ACCOUNT_NOT_FOUND" }` |
+| **验证点** | 不能借别人的账号发帖 |
+
+#### TC-MCP-W-009：create_post - content + mediaUrls 都空
+
+| 用例ID | TC-MCP-W-009 |
+|--------|------------|
+| **请求参数** | `{ "accountId": "acct", "scheduledTime": "..." }`（无 content 无 mediaUrls） |
+| **预期响应** | `{ "errorCode": "EMPTY_CONTENT" }` |
+
+#### TC-MCP-W-010：create_post - scheduledTime 是过去时间
+
+| 用例ID | TC-MCP-W-010 |
+|--------|------------|
+| **请求参数** | `{ "scheduledTime": "2020-01-01T00:00:00Z", ... }` |
+| **预期响应** | `{ "errorCode": "SCHEDULED_TIME_IN_PAST" }` |
+
+#### TC-MCP-W-011：create_post - scheduledTime 格式非法
+
+| 用例ID | TC-MCP-W-011 |
+|--------|------------|
+| **请求参数** | `{ "scheduledTime": "not-a-date", ... }` |
+| **预期响应** | `{ "errorCode": "INVALID_SCHEDULED_TIME" }` |
+
+#### TC-MCP-W-012：update_post - 成功改 scheduledTime
+
+| 用例ID | TC-MCP-W-012 |
+|--------|------------|
+| **工具** | update_post |
+| **预置数据** | 1 个 status='scheduled' 的帖子属于当前用户 |
+| **请求参数** | `{ "postId": "p1", "scheduledTime": "<新未来时间>" }` |
+| **预期响应** | `{ "success": true, "post": { "scheduledTime": "...", "content": "<未变>", "publishToken": "<原 token>" } }` |
+| **验证点** | scheduledTime 更新；content/media/account/status 全部不变；publishToken 不重新生成 |
+
+#### TC-MCP-W-013：update_post - published 状态不可改
+
+| 用例ID | TC-MCP-W-013 |
+|--------|------------|
+| **预置数据** | 1 个 status='published' 的帖子 |
+| **请求参数** | `{ "postId": "p_published", "scheduledTime": "..." }` |
+| **预期响应** | `{ "errorCode": "INVALID_STATUS" }` |
+| **验证点** | publishing/published/failed 状态全部锁定 |
+
+#### TC-MCP-W-014：update_post - failed 状态也不可改
+
+| 用例ID | TC-MCP-W-014 |
+|--------|------------|
+| **预置数据** | 1 个 status='failed' 的帖子 |
+| **预期响应** | `{ "errorCode": "INVALID_STATUS" }` |
+
+#### TC-MCP-W-015：update_post - 字段白名单（content 被忽略）
+
+| 用例ID | TC-MCP-W-015 |
+|--------|------------|
+| **预置数据** | 1 个帖子，content='Original' |
+| **请求参数** | `{ "postId": "p1", "scheduledTime": "...", "content": "HACKED", "mediaUrls": ["/evil.jpg"], "accountId": "other", "status": "published" }` |
+| **预期响应** | `{ "success": true, "post": { "content": "Original", "mediaUrls": [...原...], "accountId": "<原>" } }` |
+| **验证点** | 字段白名单：content/mediaUrls/accountId/status 全部被静默忽略，不写库 |
+
+#### TC-MCP-W-016：update_post - 帖子不属于当前用户
+
+| 用例ID | TC-MCP-W-016 |
+|--------|------------|
+| **请求参数** | `{ "postId": "其他用户的帖子", "scheduledTime": "..." }` |
+| **预期响应** | `{ "errorCode": "POST_NOT_FOUND" }` |
+
+---
+
+### 5.7b Scope 权限强制（v0.4 新增）
+
+#### TC-MCP-S-001：read scope 调 create_post 被拒
+
+| 用例ID | TC-MCP-S-001 |
+|--------|------------|
+| **预置数据** | API Key permissions='read' |
+| **工具** | create_post |
+| **预期响应** | `{ "error": "Tool 'create_post' requires 'write' or 'read_write' scope, but key has 'read'", "errorCode": "INSUFFICIENT_SCOPE" }` |
+| **验证点** | read 调写工具立即拒绝，不查 DB，不返回部分数据 |
+
+#### TC-MCP-S-002：write scope 调 list_accounts 被拒
+
+| 用例ID | TC-MCP-S-002 |
+|--------|------------|
+| **预置数据** | API Key permissions='write' |
+| **工具** | list_accounts |
+| **预期响应** | `{ "errorCode": "INSUFFICIENT_SCOPE" }` |
+| **验证点** | write scope 严格不含 read，三档完全隔离 |
+
+#### TC-MCP-S-003：read_write scope 任意工具都通过
+
+| 用例ID | TC-MCP-S-003 |
+|--------|------------|
+| **预置数据** | API Key permissions='read_write' |
+| **步骤** | 分别调用 list_accounts、get_post_detail、create_post、update_post |
+| **预期** | 全部不返回 INSUFFICIENT_SCOPE |
+
+#### TC-MCP-S-004：read_report 历史值自动映射为 read
+
+| 用例ID | TC-MCP-S-004 |
+|--------|------------|
+| **预置数据** | API Key permissions='read_report'（v0.2 历史值） |
+| **步骤** | 调 list_accounts（read 工具） |
+| **预期** | 正常通过（向后兼容） |
+| **步骤** | 调 create_post（write 工具） |
+| **预期** | INSUFFICIENT_SCOPE |
+
+#### TC-MCP-S-005：缺失 permissions 默认为 read
+
+| 用例ID | TC-MCP-S-005 |
+|--------|------------|
+| **预置数据** | API Key permissions=null |
+| **预期** | scope 解析为 'read'，行为同 TC-MCP-S-004 |
+
+---
+
 ### 5.8 软删除 + 回收站（v0.3 新增）
 
 > **设计说明**：v0.3 起，用户在 UI 上点击「删除」走软删除（设置 `deletedAt`），而不是物理删除。`/api/trash` 端点用于列出已删除项、恢复或永久删除。本节中的 v0.2 预留的「MCP 内部软删除」仍作为 Phase 2 任务。
@@ -1375,7 +1555,6 @@ npm install -D prisma
 | **前置条件** | 当前用户无任何已删除项 |
 | **测试步骤** | 访问 `/trash` |
 | **预期结果** | 显示空状态插图 + 引导文案「回收站是空的」 |
-REPLACE
 ]<]minimax[>[</invoke>
 ]<]minimax[>[</tool_call>
 
@@ -1414,6 +1593,12 @@ REPLACE
 | TC-MCP-SEC-005 | 外部 MCP 获取帖子 - 完整内容 | 返回 content、mediaUrls、publishToken |
 | TC-MCP-SEC-006 | publishToken 伪造攻击 | 返回 400 INVALID_TOKEN |
 | TC-MCP-SEC-007 | 回传时修改他人帖子 | 返回 404 POST_NOT_FOUND |
+| TC-MCP-SEC-008 | read scope 调 create_post | 返回 INSUFFICIENT_SCOPE，不查 DB |
+| TC-MCP-SEC-009 | write scope 调 list_accounts | 返回 INSUFFICIENT_SCOPE（三档严格隔离） |
+| TC-MCP-SEC-010 | update_post 携带 content/mediaUrls 字段 | 字段被静默忽略，不写库 |
+| TC-MCP-SEC-011 | update_post 修改已 published 帖子 | 返回 INVALID_STATUS |
+| TC-MCP-SEC-012 | upload_media_from_url 走 file:// 协议 | 返回 INVALID_URL，不读盘 |
+| TC-MCP-SEC-013 | upload_media_from_url 上传 50MB 文件 | 返回 FILE_TOO_LARGE |
 
 ---
 
@@ -1503,6 +1688,26 @@ VALUES ('post-test-001', 'user-test-001', 'acct-test-001', '测试内容', '2026
 | E2E | End to End，端到端测试 |
 | FCP | First Contentful Paint，首次内容绘制 |
 | P0/P1/P2 | 优先级定义，P0 最高 |
+
+---
+
+### 10.3 v0.4 测试覆盖快照
+
+| 模块 | 单元测试 | 覆盖率（stmts） | 备注 |
+|------|---------|-----------------|------|
+| `mcp/external/auth.ts` | 17 用例 | 100% | parseScope / hasScope / validateApiKey / generateApiKey / deleteApiKey / listApiKeys |
+| `mcp/external/tools.ts` | 41 用例 | 93.33% | 4 读 + 3 写 + scope 强制 + URL/媒体校验 + 错误分支 |
+| `mcp/external/server.ts` | 集成 E2E | — | 端到端流程 |
+| **全量** | **262 用例** | **89.4%** stmts / **84%** branches | 0 失败，tsc 干净 |
+
+**新增加的安全断言**（相对 v0.3）：
+
+- 写工具不允许 read scope 调（3 个工具 × 2 个错 scope = 6 断言）
+- 写工具不允许 write scope 调读工具（2 断言）
+- 字段白名单静默忽略（3 断言：content / mediaUrls / accountId / status 各一）
+- 状态锁拒绝 publishing/published/failed（3 断言）
+- 媒体 URL 协议白名单 + mime 白名单 + 大小限制（5 断言）
+- 过去时间拒绝（2 断言：create + update）
 
 ---
 
