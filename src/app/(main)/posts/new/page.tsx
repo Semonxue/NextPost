@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { redirect, useRouter } from "next/navigation";
+import { redirect, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Image, Video, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,7 @@ interface Account {
 export default function NewPostPage() {
   const { status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addToast } = useUIStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [formData, setFormData] = useState({
@@ -32,17 +33,32 @@ export default function NewPostPage() {
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // 设置默认发布时间为24小时后
+  // 设置默认发布时间为24小时后，或使用URL参数中的日期
   useEffect(() => {
-    const tomorrow = new Date();
-    tomorrow.setHours(tomorrow.getHours() + 24);
-    const year = tomorrow.getFullYear();
-    const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
-    const day = String(tomorrow.getDate()).padStart(2, '0');
-    const hours = String(tomorrow.getHours()).padStart(2, '0');
-    const minutes = String(tomorrow.getMinutes()).padStart(2, '0');
-    setFormData(prev => ({ ...prev, scheduledTime: `${year}-${month}-${day}T${hours}:${minutes}` }));
-  }, []);
+    const dateParam = searchParams.get("date");
+    
+    if (dateParam) {
+      // 如果URL有date参数，使用该日期（默认时间为当天9:00）
+      const date = new Date(dateParam);
+      date.setHours(9, 0, 0, 0);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      setFormData(prev => ({ ...prev, scheduledTime: `${year}-${month}-${day}T${hours}:${minutes}` }));
+    } else {
+      // 默认设置为24小时后
+      const tomorrow = new Date();
+      tomorrow.setHours(tomorrow.getHours() + 24);
+      const year = tomorrow.getFullYear();
+      const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const day = String(tomorrow.getDate()).padStart(2, '0');
+      const hours = String(tomorrow.getHours()).padStart(2, '0');
+      const minutes = String(tomorrow.getMinutes()).padStart(2, '0');
+      setFormData(prev => ({ ...prev, scheduledTime: `${year}-${month}-${day}T${hours}:${minutes}` }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (status === "unauthenticated") {

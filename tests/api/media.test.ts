@@ -4,8 +4,8 @@ import { NextRequest } from 'next/server';
 // Mock the storage module
 vi.mock('@/lib/storage', () => ({
   uploadFile: vi.fn().mockResolvedValue({
-    url: '/uploads/2024-01-01/test-file.jpg',
-    path: '/uploads/2024-01-01/test-file.jpg',
+    url: '/api/uploads/2024-01-01/test-file.jpg',
+    path: '/api/uploads/2024-01-01/test-file.jpg',
     filename: 'test-file.jpg',
     mimeType: 'image/jpeg',
     size: 1024,
@@ -95,7 +95,7 @@ describe('Media API', () => {
       const response = await POST(request);
       expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data.url).toBe('/uploads/2024-01-01/test-file.jpg');
+      expect(data.url).toBe('/api/uploads/2024-01-01/test-file.jpg');
       expect(data.filename).toBe('test-file.jpg');
       expect(uploadFile).toHaveBeenCalled();
     });

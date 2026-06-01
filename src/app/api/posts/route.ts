@@ -11,13 +11,23 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const accountId = searchParams.get("accountId");
+    const accountIds = searchParams.getAll("accountIds");
+    const platformIds = searchParams.getAll("platformIds");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
     const where: Record<string, unknown> = { userId: session.user.id };
     if (status) where.status = status;
-    if (accountId) where.accountId = accountId;
+    
+    // 多账号筛选
+    if (accountIds.length > 0) {
+      where.accountId = { in: accountIds };
+    }
+    
+    // 多平台筛选（通过账号关联）
+    if (platformIds.length > 0) {
+      where.account = { platformId: { in: platformIds } };
+    }
 
     const [posts, total] = await Promise.all([
       prisma.post.findMany({

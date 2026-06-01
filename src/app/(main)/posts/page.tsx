@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Edit2, Trash2, Calendar, Filter } from "lucide-react";
+import { Plus, Edit2, Trash2, Calendar, Filter, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useUIStore } from "@/stores/uiStore";
 
@@ -14,28 +14,93 @@ interface Post {
   scheduledTime: string | null;
   status: string;
   mediaUrls: string | null;
-  account: { name: string; handle: string };
+  account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
+}
+
+interface Account {
+  id: string;
+  name: string;
+  handle: string;
+  platform: { id: string; name: string };
+}
+
+interface Platform {
+  id: string;
+  name: string;
 }
 
 export default function PostsPage() {
   const { status } = useSession();
   const { addToast } = useUIStore();
   const [posts, setPosts] = useState<Post[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [showAccountFilter, setShowAccountFilter] = useState(false);
+  const [showPlatformFilter, setShowPlatformFilter] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
     }
     if (status === "authenticated") {
-      fetchPosts();
+      fetchData();
     }
   }, [status]);
 
+  const fetchData = async () => {
+    try {
+      const [postsRes, accountsRes] = await Promise.all([
+        fetch("/api/posts"),
+        fetch("/api/accounts")
+      ]);
+      
+      if (postsRes.ok) {
+        const postsData = await postsRes.json();
+        setPosts(postsData.posts || []);
+      }
+      
+      if (accountsRes.ok) {
+        const accountsData = await accountsRes.json();
+        setAccounts(Array.isArray(accountsData) ? accountsData : accountsData.accounts || []);
+        
+        // 提取所有平台
+        const allPlatforms = new Map<string, Platform>();
+        accountsData.accounts?.forEach((account: Account) => {
+          if (account.platform && !allPlatforms.has(account.platform.id)) {
+            allPlatforms.set(account.platform.id, account.platform);
+          }
+        });
+        setPlatforms(Array.from(allPlatforms.values()));
+      }
+    } catch (error) {
+      console.error("获取数据失败:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchPosts = async () => {
     try {
-      const url = filter === "all" ? "/api/posts" : `/api/posts?status=${filter}`;
+      const params = new URLSearchParams();
+      
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
+      
+      if (selectedAccounts.length > 0) {
+        selectedAccounts.forEach(id => params.append("accountIds", id));
+      }
+      if (selectedPlatforms.length > 0) {
+        selectedPlatforms.forEach(id => params.append("platformIds", id));
+      }
+      
+      const queryString = params.toString();
+      const url = queryString ? `/api/posts?${queryString}` : "/api/posts";
+      
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -43,8 +108,6 @@ export default function PostsPage() {
       }
     } catch (error) {
       console.error("获取帖子失败:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -52,7 +115,30 @@ export default function PostsPage() {
     if (status === "authenticated") {
       fetchPosts();
     }
-  }, [filter, status]);
+  }, [statusFilter, selectedAccounts, selectedPlatforms, status]);
+
+  const toggleAccountFilter = (accountId: string) => {
+    setSelectedAccounts(prev => 
+      prev.includes(accountId)
+        ? prev.filter(id => id !== accountId)
+        : [...prev, accountId]
+    );
+  };
+
+  const togglePlatformFilter = (platformId: string) => {
+    setSelectedPlatforms(prev => 
+      prev.includes(platformId)
+        ? prev.filter(id => id !== platformId)
+        : [...prev, platformId]
+    );
+  };
+
+  const clearAllFilters = () => {
+    setSelectedAccounts([]);
+    setSelectedPlatforms([]);
+  };
+
+  const hasFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0;
 
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这个帖子吗？")) return;
@@ -98,22 +184,141 @@ export default function PostsPage() {
         </Link>
       </div>
 
-      <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 w-fit">
-        {statusFilters.map((f) => (
+      {/* 筛选区域 */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* 状态筛选 */}
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
+          {statusFilters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                statusFilter === f.value
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 账号筛选 */}
+        <div className="relative">
           <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              filter === f.value
-                ? "bg-blue-600 text-white"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+            onClick={() => {
+              setShowAccountFilter(!showAccountFilter);
+              setShowPlatformFilter(false);
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+              selectedAccounts.length > 0
+                ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
+                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
             }`}
           >
-            {f.label}
+            <Filter size={16} />
+            <span>账号</span>
+            {selectedAccounts.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                {selectedAccounts.length}
+              </span>
+            )}
           </button>
-        ))}
+          
+          {showAccountFilter && (
+            <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+              <div className="p-2 max-h-64 overflow-y-auto">
+                {accounts.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无账号</p>
+                ) : (
+                  accounts.map(account => (
+                    <label
+                      key={account.id}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedAccounts.includes(account.id)}
+                        onChange={() => toggleAccountFilter(account.id)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {account.name}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        @{account.handle}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 平台筛选 */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowPlatformFilter(!showPlatformFilter);
+              setShowAccountFilter(false);
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+              selectedPlatforms.length > 0
+                ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
+                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+            }`}
+          >
+            <Filter size={16} />
+            <span>平台</span>
+            {selectedPlatforms.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                {selectedPlatforms.length}
+              </span>
+            )}
+          </button>
+          
+          {showPlatformFilter && (
+            <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+              <div className="p-2">
+                {platforms.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无平台</p>
+                ) : (
+                  platforms.map(platform => (
+                    <label
+                      key={platform.id}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedPlatforms.includes(platform.id)}
+                        onChange={() => togglePlatformFilter(platform.id)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {platform.name}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 清除筛选 */}
+        {hasFilters && (
+          <button
+            onClick={clearAllFilters}
+            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <X size={16} />
+            清除筛选
+          </button>
+        )}
       </div>
 
+      {/* 帖子列表 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         {posts.length === 0 ? (
           <div className="p-8 text-center">
@@ -159,7 +364,14 @@ export default function PostsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">@{post.account?.handle || "未知"}</span>
+                      <div className="flex flex-col">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">@{post.account?.handle || "未知"}</span>
+                        {post.account?.platform && (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            {post.account.platform.name}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-600 dark:text-gray-400">

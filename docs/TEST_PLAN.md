@@ -1,5 +1,97 @@
 # NextPost 测试计划
 
+## 版本信息
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| v0.1 | 2026-05-31 | MVP 基础版本测试用例 |
+| **v0.2** | 2026-06-01 | **MCP 集成测试用例**：API Key、发布回传、MCP 工具、软删除 |
+
+---
+
+## ⚠️ 测试用例撰写注意事项
+
+> **经验教训：** 测试必须验证功能是否真正工作，而不仅仅是 UI 元素是否存在。初始测试通过不代表功能正常。
+
+### E2E 测试核心原则
+
+| 原则 | 说明 | ❌ 错误示例 | ✅ 正确示例 |
+|------|------|-----------|------------|
+| **1. 验证数据流** | 测试必须验证数据正确传递和显示 | 只检查按钮存在 | 验证筛选后列表项数量变化 |
+| **2. 验证状态变化** | 用户操作后应验证结果状态 | 只点击按钮 | 验证数据已保存/更新 |
+| **3. 包含前置数据** | 测试应准备必要的测试数据 | 不创建账号直接测试筛选 | 先创建多个账号再测试筛选 |
+| **4. 验证最终结果** | 不仅验证操作成功，还要验证结果 | 测试通过但列表为空 | 验证列表包含正确的数据 |
+
+### 常见错误案例
+
+#### 案例 1：筛选功能测试
+```typescript
+// ❌ 错误：只验证 UI 元素存在
+test('should show account filter button', async ({ page }) => {
+  await page.goto('/posts');
+  await expect(page.getByRole('button', { name: /账号/i })).toBeVisible();
+});
+// 问题：测试通过，但无法知道筛选是否工作
+
+// ✅ 正确：验证实际功能
+test('should filter posts by account', async ({ page }) => {
+  // 1. 创建测试数据
+  await createTestAccount({ name: 'Account A' });
+  await createTestAccount({ name: 'Account B' });
+  await createTestPost({ accountId: 'Account A' });
+  await createTestPost({ accountId: 'Account B' });
+  
+  // 2. 验证初始列表显示所有帖子
+  await page.goto('/posts');
+  await expect(page.locator('tbody tr')).toHaveCount(2);
+  
+  // 3. 执行筛选操作
+  await page.getByRole('button', { name: /账号/i }).click();
+  await page.getByText('Account A').click();
+  
+  // 4. 验证筛选结果 - 这是关键！
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByText('Account A')).toBeVisible();
+});
+```
+
+#### 案例 2：API 响应格式兼容性
+```typescript
+// API 可能返回不同格式
+// GET /api/accounts 可能返回 [] 或 { accounts: [] }
+
+// ❌ 错误：假设固定格式
+const accounts = data.accounts;
+
+// ✅ 正确：兼容处理
+const accounts = Array.isArray(data) ? data : data.accounts || [];
+```
+
+### 测试用例模板
+
+```
+#### TC-XXX：功能名称
+
+| 用例ID | TC-XXX |
+|--------|--------|
+| **前置条件** | 用户已登录，有账号 A 和账号 B |
+| **测试步骤** | 1. 创建账号 A 的帖子<br>2. 创建账号 B 的帖子<br>3. 访问列表页<br>4. 点击账号筛选<br>5. 选择账号 A |
+| **预期结果** | 1. 列表只显示账号 A 的帖子<br>2. 列表不显示账号 B 的帖子 |
+| **验证点** | 列表项数量 = 1，accountId = 账号 A 的 ID |
+```
+
+### 检查清单
+
+编写 E2E 测试时，确保：
+
+- [ ] **前置数据**：测试前是否创建了必要的测试数据？
+- [ ] **初始状态**：是否验证了数据的初始状态？
+- [ ] **操作步骤**：用户操作是否完整记录？
+- [ ] **结果验证**：是否验证了操作后的结果？
+- [ ] **数量验证**：筛选/列表是否验证了项数变化？
+
+---
+
 ## 文档信息
 
 | 项目 | NextPost - 社媒帖子发布计划工具 |
@@ -316,7 +408,17 @@ npm install -D prisma
 | **模块** | 内容创作 |
 | **前置条件** | 用户已登录，存在帖子 ID `post-001` |
 | **测试步骤** | 1. 访问帖子列表页<br>2. 点击「删除」按钮<br>3. 在确认弹窗中点击「确认」 |
-| **预期结果** | 1. 删除成功<br>2. 帖子不再出现在列表中<br>3. 显示成功 Toast<br>4. 数据库 `Post` 表该记录已删除 |
+| **预期结果** | 1. 删除成功<br>2. 帖子不再出现在列表中<br>3. 显示成功 Toast<br>4. 数据库 `Post` 表该记录已删除<br>5. **关联的媒体文件也一并从 uploads 目录删除** |
+
+#### TC-POST-007b：删除帖子 - 级联删除媒体文件
+
+| 用例ID | TC-POST-007b |
+|--------|-------------|
+| **标题** | 删除帖子 - 级联删除媒体文件 |
+| **模块** | 内容创作 |
+| **前置条件** | 用户已登录，帖子包含媒体文件 |
+| **测试步骤** | 1. 创建一个包含媒体文件的帖子<br>2. 验证媒体文件存在于 uploads 目录<br>3. 删除该帖子 |
+| **预期结果** | 1. 帖子删除成功<br>2. 关联的媒体文件从 uploads 目录物理删除<br>3. base64 缩略图不会被删除（它们存储在数据库或内存中） |
 
 #### TC-POST-008：时区选择
 
@@ -515,6 +617,56 @@ npm install -D prisma
 | **前置条件** | 用户已登录，当前月份无任何计划 |
 | **测试步骤** | 1. 访问 `/calendar` 页面 |
 | **预期结果** | 1. 日历正常显示<br>2. 所有日期格子无计划<br>3. 可能显示引导文案「暂无计划」 |
+
+#### TC-CAL-007：日历视图 - 按账号筛选
+
+| 用例ID | TC-CAL-007 |
+|--------|-------------|
+| **标题** | 日历视图 - 按账号筛选 |
+| **模块** | 日历视图 |
+| **前置条件** | 用户已登录，有多个账号的帖子计划 |
+| **测试步骤** | 1. 访问 `/calendar` 页面<br>2. 选择账号筛选下拉框<br>3. 选择「账号A」 |
+| **预期结果** | 1. 日历只显示「账号A」的计划<br>2. 其他账号计划已过滤<br>3. 筛选状态可多选 |
+
+#### TC-CAL-008：日历视图 - 按平台筛选
+
+| 用例ID | TC-CAL-008 |
+|--------|-------------|
+| **标题** | 日历视图 - 按平台筛选 |
+| **模块** | 日历视图 |
+| **前置条件** | 用户已登录，有多个平台的帖子计划 |
+| **测试步骤** | 1. 访问 `/calendar` 页面<br>2. 选择平台筛选下拉框<br>3. 选择「Twitter」 |
+| **预期结果** | 1. 日历只显示「Twitter」平台的计划<br>2. 其他平台计划已过滤<br>3. 筛选状态可多选 |
+
+#### TC-CAL-009：日历视图 - 多账号多平台筛选
+
+| 用例ID | TC-CAL-009 |
+|--------|-------------|
+| **标题** | 日历视图 - 多账号多平台筛选 |
+| **模块** | 日历视图 |
+| **前置条件** | 用户已登录，有多个账号和平台的帖子计划 |
+| **测试步骤** | 1. 访问 `/calendar` 页面<br>2. 选择账号「账号A」和「账号B」<br>3. 选择平台「Twitter」和「Instagram」 |
+| **预期结果** | 1. 日历只显示符合筛选条件的计划<br>2. 筛选标签显示当前选择<br>3. 可取消单个筛选条件 |
+
+#### TC-CAL-010：日历视图 - 点击日期快速添加
+
+| 用例ID | TC-CAL-010 |
+|--------|-------------|
+| **标题** | 日历视图 - 点击日期快速添加 |
+| **模块** | 日历视图 |
+| **前置条件** | 用户已登录，已选择账号和平台筛选 |
+| **测试步骤** | 1. 访问 `/calendar` 页面<br>2. 点击某个日期（如6月15日） |
+| **预期结果** | 1. 右侧面板显示该日期的计划列表<br>2. 面板顶部显示「添加」按钮<br>3. 点击「添加」按钮跳转到 `/posts/new?date=2026-06-15`<br>4. 新建页面默认时间为该日期 |
+
+#### TC-CAL-011：日历视图 - 点击日期添加（无计划时）
+
+| 用例ID | TC-CAL-011 |
+|--------|-------------|
+| **标题** | 日历视图 - 点击日期添加（无计划时） |
+| **模块** | 日历视图 |
+| **前置条件** | 用户已登录，某天没有任何计划 |
+| **测试步骤** | 1. 访问 `/calendar` 页面<br>2. 点击空白日期 |
+| **预期结果** | 1. 右侧面板显示「当天没有发布计划」<br>2. 显示「添加」按钮<br>3. 点击后跳转到新建页面 |
 
 ---
 
@@ -892,6 +1044,239 @@ npm install -D prisma
 
 ---
 
+### 5.5 外部 API Key 管理
+
+#### TC-API-KEY-001：创建外部 API Key
+
+| 用例ID | TC-API-KEY-001 |
+|--------|-----------------|
+| **方法** | POST |
+| **路径** | /api/settings/external-keys |
+| **认证** | 有效会话 |
+| **请求体** | `{ "name": "Claude Desktop" }` |
+| **预期状态码** | 201 |
+| **预期响应** | `{ "id": "xxx", "key": "npk_xxx", "name": "Claude Desktop" }` |
+| **验证点** | key 字段必须以 `npk_` 开头 |
+
+#### TC-API-KEY-002：创建 API Key - 未登录
+
+| 用例ID | TC-API-KEY-002 |
+|--------|-----------------|
+| **方法** | POST |
+| **路径** | /api/settings/external-keys |
+| **认证** | 无 |
+| **预期状态码** | 401 |
+
+#### TC-API-KEY-003：获取 API Key 列表
+
+| 用例ID | TC-API-KEY-003 |
+|--------|-----------------|
+| **方法** | GET |
+| **路径** | /api/settings/external-keys |
+| **认证** | 有效会话 |
+| **预期状态码** | 200 |
+| **预期响应** | `{ "keys": [{ "id": "xxx", "name": "...", "keyPreview": "npk_a1b2..." }] }` |
+| **验证点** | key 字段只显示预览，不显示完整值 |
+
+#### TC-API-KEY-004：删除 API Key
+
+| 用例ID | TC-API-KEY-004 |
+|--------|-----------------|
+| **方法** | DELETE |
+| **路径** | /api/settings/external-keys/:id |
+| **认证** | 有效会话 |
+| **预期状态码** | 200 |
+| **验证点** | 删除后该 Key 无法再访问 MCP |
+
+#### TC-API-KEY-005：删除他人的 API Key
+
+| 用例ID | TC-API-KEY-005 |
+|--------|-----------------|
+| **方法** | DELETE |
+| **路径** | /api/settings/external-keys/:id |
+| **认证** | 用户 A 的会话，但删除用户 B 的 Key |
+| **预期状态码** | 404 |
+
+---
+
+### 5.6 发布回传（MCP）
+
+#### TC-API-REPORT-001：报告发布成功
+
+| 用例ID | TC-API-REPORT-001 |
+|--------|-------------------|
+| **方法** | MCP 工具调用 |
+| **工具** | report_publish_result |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "xxx", "publishToken": "tok_xxx", "status": "success", "publishedAt": "2026-06-01T15:00:00Z", "externalPostId": "123456" }` |
+| **预期响应** | `{ "received": true, "postStatus": "published" }` |
+| **验证点** | 数据库 Post.status 更新为 published，publishedAt 记录发布时间 |
+
+#### TC-API-REPORT-002：报告发布失败（可重试）
+
+| 用例ID | TC-API-REPORT-002 |
+|--------|-------------------|
+| **方法** | MCP 工具调用 |
+| **工具** | report_publish_result |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "xxx", "publishToken": "tok_xxx", "status": "failed", "errorCode": "rate_limit", "errorMessage": "API 限流", "retryable": true }` |
+| **预期响应** | `{ "received": true, "postStatus": "failed", "retryable": true }` |
+| **验证点** | 数据库 Post.status 更新为 failed，publishError 记录错误信息 |
+
+#### TC-API-REPORT-003：报告发布失败（不可重试）
+
+| 用例ID | TC-API-REPORT-003 |
+|--------|-------------------|
+| **方法** | MCP 工具调用 |
+| **工具** | report_publish_result |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "xxx", "publishToken": "tok_xxx", "status": "failed", "errorCode": "content_violation", "errorMessage": "内容违规", "retryable": false }` |
+| **预期响应** | `{ "received": true, "postStatus": "failed", "retryable": false }` |
+
+#### TC-API-REPORT-004：回传 - 无效的 publishToken
+
+| 用例ID | TC-API-REPORT-004 |
+|--------|-------------------|
+| **方法** | MCP 工具调用 |
+| **工具** | report_publish_result |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "xxx", "publishToken": "invalid_token", "status": "success" }` |
+| **预期响应** | `{ "error": "Invalid publish token", "code": "INVALID_TOKEN" }` |
+| **预期状态码** | 400 |
+
+#### TC-API-REPORT-005：回传 - 非本人帖子
+
+| 用例ID | TC-API-REPORT-005 |
+|--------|-------------------|
+| **方法** | MCP 工具调用 |
+| **工具** | report_publish_result |
+| **认证** | 用户 A 的 API Key |
+| **请求参数** | `{ "postId": "xxx" (属于用户B), "publishToken": "tok_xxx", "status": "success" }` |
+| **预期响应** | `{ "error": "Post not found", "code": "NOT_FOUND" }` |
+| **预期状态码** | 404 |
+
+#### TC-API-REPORT-006：回传 - publishToken 已过期
+
+| 用例ID | TC-API-REPORT-006 |
+|--------|-------------------|
+| **方法** | MCP 工具调用 |
+| **工具** | report_publish_result |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "xxx", "publishToken": "tok_xxx", "status": "success" }` |
+| **前置条件** | publishToken 已过期（超过 24 小时） |
+| **预期响应** | `{ "error": "Publish token expired", "code": "TOKEN_EXPIRED" }` |
+
+---
+
+### 5.7 MCP 外部工具
+
+#### TC-MCP-001：list_accounts - 获取账号列表
+
+| 用例ID | TC-MCP-001 |
+|--------|------------|
+| **工具** | list_accounts |
+| **认证** | API Key |
+| **请求参数** | `{}` |
+| **预期响应** | `{ "accounts": [{ "id": "xxx", "platform": "twitter", "displayName": "我的推特" }] }` |
+| **验证点** | 不返回 handle、description 等敏感信息 |
+
+#### TC-MCP-002：list_accounts - 多用户隔离
+
+| 用例ID | TC-MCP-002 |
+|--------|------------|
+| **工具** | list_accounts |
+| **认证** | 用户 A 的 API Key |
+| **预期响应** | 只包含用户 A 的账号，不包含用户 B 的账号 |
+
+#### TC-MCP-003：get_pending_posts - 获取待发布帖子
+
+| 用例ID | TC-MCP-003 |
+|--------|------------|
+| **工具** | get_pending_posts |
+| **认证** | API Key |
+| **请求参数** | `{ "limit": 10 }` |
+| **预期响应** | `{ "posts": [{ "id": "xxx", "content": "...", "publishToken": "tok_xxx" }] }` |
+| **验证点** | 只返回 status=scheduled 的帖子 |
+
+#### TC-MCP-004：get_pending_posts - 按账号筛选
+
+| 用例ID | TC-MCP-004 |
+|--------|------------|
+| **工具** | get_pending_posts |
+| **认证** | API Key |
+| **请求参数** | `{ "accountId": "acc_xxx", "limit": 5 }` |
+| **预期响应** | 只返回指定账号的待发布帖子 |
+
+#### TC-MCP-005：get_post_detail - 获取帖子详情
+
+| 用例ID | TC-MCP-005 |
+|--------|------------|
+| **工具** | get_post_detail |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "xxx" }` |
+| **预期响应** | `{ "post": { "id": "xxx", "content": "...", "mediaUrls": [...], "publishToken": "tok_xxx" } }` |
+| **验证点** | 返回完整内容包含 mediaUrls 和 publishToken |
+
+#### TC-MCP-006：get_post_detail - 不存在的帖子
+
+| 用例ID | TC-MCP-006 |
+|--------|------------|
+| **工具** | get_post_detail |
+| **认证** | API Key |
+| **请求参数** | `{ "postId": "nonexistent" }` |
+| **预期响应** | `{ "error": "Post not found" }` |
+
+---
+
+### 5.8 软删除（MCP Phase 2）
+
+#### TC-SOFT-001：帖子软删除
+
+| 用例ID | TC-SOFT-001 |
+|--------|-------------|
+| **模块** | MCP 内部工具 |
+| **前置条件** | 用户已登录，存在帖子 ID `post-001` |
+| **测试步骤** | AI 调用 `delete_post` 工具删除帖子 |
+| **预期结果** | 1. 帖子不物理删除<br>2. deletedAt 字段被设置<br>3. deletedBy = "ai"<br>4. 在列表中不再显示 |
+
+#### TC-SOFT-002：帖子软删除 - 查看已删除帖子
+
+| 用例ID | TC-SOFT-002 |
+|--------|-------------|
+| **模块** | MCP 内部工具 |
+| **前置条件** | 存在已软删除的帖子 |
+| **测试步骤** | 调用 `list_posts_with_deleted` 工具 |
+| **预期结果** | 返回包含已删除帖子的列表 |
+
+#### TC-SOFT-003：恢复已删除帖子
+
+| 用例ID | TC-SOFT-003 |
+|--------|-------------|
+| **模块** | MCP 内部工具 |
+| **前置条件** | 存在已软删除的帖子 |
+| **测试步骤** | 调用 `restore_post` 工具 |
+| **预期结果** | 1. deletedAt 字段被清空<br>2. 帖子恢复正常显示 |
+
+#### TC-SOFT-004：永久删除帖子
+
+| 用例ID | TC-SOFT-004 |
+|--------|-------------|
+| **模块** | MCP 内部工具 |
+| **前置条件** | 存在已软删除的帖子 |
+| **测试步骤** | 调用 `hard_delete_post` 工具 |
+| **预期结果** | 1. 帖子从数据库物理删除<br>2. 关联媒体文件删除 |
+
+#### TC-SOFT-005：回收站列表
+
+| 用例ID | TC-SOFT-005 |
+|--------|-------------|
+| **模块** | 前端 |
+| **前置条件** | 存在已软删除的帖子和账号 |
+| **测试步骤** | 访问 `/trash` 或 `/settings/trash` |
+| **预期结果** | 1. 显示所有已删除项目<br>2. 显示删除时间、删除者<br>3. 可选择恢复或永久删除 |
+
+---
+
 ## 6. 性能与安全测试
 
 ### 6.1 性能测试
@@ -913,6 +1298,18 @@ npm install -D prisma
 | TC-SEC-003 | 越权访问 - 其他用户帖子 | 返回 404 |
 | TC-SEC-004 | CSRF - 表单提交 | Token 验证通过 |
 | TC-SEC-005 | 暴力破解登录 | 5 次失败后锁定 |
+
+### 6.3 MCP 安全测试
+
+| 用例ID | 测试场景 | 预期结果 |
+|--------|---------|----------|
+| TC-MCP-SEC-001 | 无效 API Key 访问 | 返回 401，连接被拒绝 |
+| TC-MCP-SEC-002 | 过期 API Key 访问 | 返回 401，提示 Key 已过期 |
+| TC-MCP-SEC-003 | 用户 A 的 Key 访问用户 B 的数据 | 数据隔离，只返回用户 A 的数据 |
+| TC-MCP-SEC-004 | 外部 MCP 获取账号 - 敏感信息泄露 | 不返回 handle、description |
+| TC-MCP-SEC-005 | 外部 MCP 获取帖子 - 完整内容 | 返回 content、mediaUrls、publishToken |
+| TC-MCP-SEC-006 | publishToken 伪造攻击 | 返回 400 INVALID_TOKEN |
+| TC-MCP-SEC-007 | 回传时修改他人帖子 | 返回 404 POST_NOT_FOUND |
 
 ---
 

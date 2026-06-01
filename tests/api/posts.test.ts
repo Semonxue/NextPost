@@ -95,13 +95,71 @@ describe('Posts API', () => {
       mockPostFindMany.mockResolvedValue(mockPosts)
       mockPostCount.mockResolvedValue(1)
 
-      const response = await GET(new NextRequest('http://localhost/api/posts?accountId=acct-1'))
+      const response = await GET(new NextRequest('http://localhost/api/posts?accountIds=acct-1'))
       const data = await response.json()
 
       expect(response.status).toBe(200)
       expect(mockPostFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ accountId: 'acct-1' }),
+          where: expect.objectContaining({ accountId: { in: ['acct-1'] } }),
+        })
+      )
+    })
+
+    it('should filter by multiple accountIds', async () => {
+      const mockPosts = [
+        { id: 'post-1', content: '内容1', status: 'draft', accountId: 'acct-1' },
+        { id: 'post-2', content: '内容2', status: 'draft', accountId: 'acct-2' },
+      ]
+      mockPostFindMany.mockResolvedValue(mockPosts)
+      mockPostCount.mockResolvedValue(2)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?accountIds=acct-1&accountIds=acct-2'))
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ accountId: { in: ['acct-1', 'acct-2'] } }),
+        })
+      )
+    })
+
+    it('should filter by multiple platformIds', async () => {
+      const mockPosts = [
+        { id: 'post-1', content: '内容1', status: 'scheduled', accountId: 'acct-1' },
+      ]
+      mockPostFindMany.mockResolvedValue(mockPosts)
+      mockPostCount.mockResolvedValue(1)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?platformIds=platform-1&platformIds=platform-2'))
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ account: { platformId: { in: ['platform-1', 'platform-2'] } } }),
+        })
+      )
+    })
+
+    it('should combine status and accountIds filters', async () => {
+      const mockPosts = [
+        { id: 'post-1', content: '内容1', status: 'scheduled', accountId: 'acct-1' },
+      ]
+      mockPostFindMany.mockResolvedValue(mockPosts)
+      mockPostCount.mockResolvedValue(1)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?status=scheduled&accountIds=acct-1'))
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: 'scheduled',
+            accountId: { in: ['acct-1'] },
+          }),
         })
       )
     })

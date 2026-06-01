@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { deleteFile } from "@/lib/storage";
 
 export async function GET(
   request: NextRequest,
@@ -107,6 +108,21 @@ export async function DELETE(
 
     if (!existingPost) {
       return NextResponse.json({ error: "帖子不存在" }, { status: 404 });
+    }
+
+    // 删除关联的媒体文件
+    if (existingPost.mediaUrls) {
+      try {
+        const mediaUrls = JSON.parse(existingPost.mediaUrls) as string[];
+        for (const url of mediaUrls) {
+          if (url && !url.startsWith('data:')) {
+            await deleteFile(url);
+          }
+        }
+      } catch (error) {
+        console.error("删除媒体文件失败:", error);
+        // 不影响主流程，继续删除帖子
+      }
     }
 
     await prisma.post.delete({ where: { id } });

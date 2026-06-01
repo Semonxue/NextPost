@@ -17,7 +17,7 @@ export class LocalStorageEngine implements StorageEngine {
   private baseDir: string;
   private baseUrl: string;
 
-  constructor(baseDir: string = './uploads', baseUrl: string = '/uploads') {
+  constructor(baseDir: string = './uploads', baseUrl: string = '/api/uploads') {
     this.baseDir = path.resolve(process.cwd(), baseDir);
     this.baseUrl = baseUrl;
   }

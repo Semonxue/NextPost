@@ -22,6 +22,8 @@ model User {
   posts Post[]
   media Media[]
   conversations Conversation[]
+  externalApiKeys ExternalApiKey[]
+  aiOperationLogs AiOperationLog[]
 }
 
 model Platform {
@@ -40,6 +42,12 @@ model Account {
   name String
   handle String
   description String?
+  
+  // 软删除字段 (MCP Phase 2)
+  deletedAt  DateTime?
+  deletedBy  String?    // "user" | "ai"
+  deleteNote String?
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -47,6 +55,9 @@ model Account {
   platform Platform @relation(fields: [platformId], references: [id])
   
   posts Post[]
+  
+  @@index([deletedAt])
+  @@index([userId])
 }
 
 model Post {
@@ -57,12 +68,31 @@ model Post {
   mediaUrls     String   @default("[]")
   scheduledTime DateTime?
   timezone String   @default("Asia/Shanghai")
-  status        String   @default("draft")
+  status        String   @default("draft")  // draft, scheduled, publishing, published, failed
+  
+  // MCP 发布相关字段
+  publishToken     String?                    // 外部发布验证令牌
+  publishTokenExp  DateTime?                 // 令牌过期时间
+  publishedAt      DateTime?                  // 实际发布时间
+  externalPostId   String?                    // 外部平台帖子 ID
+  publishError     String?                    // 发布错误信息
+  publishAttempts  Int      @default(0)       // 发布尝试次数
+  
+  // 软删除字段 (MCP Phase 2)
+  deletedAt  DateTime?
+  deletedBy  String?    // "user" | "ai"
+  deleteNote String?
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
   user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([scheduledTime])
+  @@index([deletedAt])
+  @@index([userId])
 }
 
 model Media {
@@ -100,4 +130,41 @@ model Message {
   createdAt      DateTime @default(now())
   
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// 外部 API Key (MCP 外部访问)
+model ExternalApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String                    // 密钥名称，如 "Claude Desktop"
+  key         String    @unique         // 密钥值（加密存储）
+  permissions String    @default("read_report")  // 权限范围
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?                 // 可选过期时间
+  createdAt   DateTime  @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([key])
+}
+
+// AI 操作审计日志 (MCP Phase 2)
+model AiOperationLog {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String?  // 关联的 AI 对话
+  operation      String   // 操作类型：create, update, delete
+  entityType     String   // 实体类型：account, post
+  entityId       String   // 实体 ID
+  beforeState    String?  // 操作前状态（JSON）
+  afterState     String?  // 操作后状态（JSON）
+  aiModel        String?  // 使用的 AI 模型
+  createdAt      DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
