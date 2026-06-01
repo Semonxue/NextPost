@@ -1,12 +1,52 @@
 /**
  * 外部 MCP Server 认证模块
- * 
+ *
  * API Key 验证和用户关联
  */
 
 import { PrismaClient } from '@prisma/client';
+import type { Scope } from './types';
 
 const prisma = new PrismaClient();
+
+/**
+ * 把数据库里 permissions 字段映射成内部 Scope
+ *
+ * 兼容历史值：
+ * - read_report / read → 'read'
+ * - write → 'write'
+ * - read_write → 'read_write'
+ * - 其它 / 缺失 → 'read'（安全默认）
+ */
+export function parseScope(permissions: string | null | undefined): Scope {
+  switch (permissions) {
+    case 'write':
+      return 'write';
+    case 'read_write':
+      return 'read_write';
+    case 'read':
+    case 'read_report':
+    case null:
+    case undefined:
+    default:
+      return 'read';
+  }
+}
+
+/**
+ * 判断当前 scope 是否覆盖需要的 scope
+ *
+ * 规则：
+ * - 需要 read  → scope ∈ {read, read_write}
+ * - 需要 write → scope ∈ {write, read_write}
+ */
+export function hasScope(scope: Scope, required: 'read' | 'write'): boolean {
+  if (required === 'read') {
+    return scope === 'read' || scope === 'read_write';
+  }
+  // required === 'write'
+  return scope === 'write' || scope === 'read_write';
+}
 
 /**
  * 验证 API Key 并返回关联用户
@@ -15,6 +55,7 @@ export async function validateApiKey(apiKey: string): Promise<{
   valid: boolean;
   userId?: string;
   keyId?: string;
+  scope?: Scope;
   error?: string;
   errorCode?: string;
 }> {
@@ -68,7 +109,8 @@ export async function validateApiKey(apiKey: string): Promise<{
     return {
       valid: true,
       userId: apiKeyRecord.userId,
-      keyId: apiKeyRecord.id
+      keyId: apiKeyRecord.id,
+      scope: parseScope(apiKeyRecord.permissions)
     };
   } catch (error) {
     console.error('Error validating API Key:', error);

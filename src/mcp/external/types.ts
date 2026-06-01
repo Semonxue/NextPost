@@ -48,6 +48,68 @@ export interface PublishResultResponse {
   retryable?: boolean;
 }
 
+// ===== MVP v0.3: 外部 MCP 写能力 =====
+
+// API Key 权限范围
+// - read: 只读 + 报告发布结果（默认）
+// - write: 创建/更新帖子、上传媒体
+// - read_write: 上述两者
+// 兼容历史值 read_report → read
+export type Scope = 'read' | 'write' | 'read_write';
+
+// 工具执行需要的最小 scope
+export type ToolRequiredScope = 'read' | 'write';
+
+// 媒体上传（URL 拉取）参数
+export interface UploadMediaFromUrlArgs {
+  url: string;
+  filename?: string;
+}
+
+// 媒体上传结果
+export interface UploadMediaResult {
+  url: string;
+  mimeType: string;
+  size: number;
+  filename: string;
+}
+
+// 创建帖子参数
+export interface CreatePostArgs {
+  accountId: string;
+  content: string;
+  mediaUrls?: string[];
+  scheduledTime: string; // ISO 8601
+  timezone?: string;     // 默认 Asia/Shanghai
+}
+
+// 更新帖子参数（仅允许修改白名单字段）
+export interface UpdatePostArgs {
+  postId: string;
+  scheduledTime?: string;
+  timezone?: string;
+}
+
+// 写操作结果（统一格式）
+export interface WriteResult {
+  success: boolean;
+  error?: string;
+  errorCode?: string;
+  retryable?: boolean;
+  // create_post 成功时附带 post
+  post?: {
+    id: string;
+    accountId: string;
+    accountDisplayName: string;
+    content: string;
+    mediaUrls: string[];
+    scheduledTime: string;
+    timezone: string;
+    status: string;
+    publishToken: string;
+  };
+}
+
 // 可重试错误码
 export const RETRYABLE_ERRORS = [
   'rate_limit',

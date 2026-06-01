@@ -14,7 +14,7 @@ test.describe('外部 MCP Server E2E', () => {
   let testUser: { id: string; username: string };
   let testPlatform: { id: string };
   let testAccount: { id: string };
-  let testPost: { id: string; publishToken: string };
+  let testPost: { id: string; publishToken: string | null };
   let apiKey: string;
 
   test.beforeAll(async () => {

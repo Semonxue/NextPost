@@ -26,7 +26,7 @@ function getApiKey(req: NextRequest): string | null {
 /**
  * 处理 MCP 请求
  */
-async function handleMcpRequest(body: any, userId: string) {
+async function handleMcpRequest(body: any, userId: string, scope: 'read' | 'write' | 'read_write') {
   const { method, id, params } = body;
 
   switch (method) {
@@ -59,7 +59,7 @@ async function handleMcpRequest(body: any, userId: string) {
 
     case 'tools/call':
       const { name, arguments: args } = params;
-      const result = await executeTool(name, args || {}, userId);
+      const result = await executeTool(name, args || {}, { userId, scope });
       return {
         jsonrpc: '2.0',
         id,
@@ -106,8 +106,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const response = await handleMcpRequest(body, validation.userId!);
-    
+    const response = await handleMcpRequest(body, validation.userId!, validation.scope || 'read');
+
     return NextResponse.json(response);
   } catch (error: any) {
     return NextResponse.json({

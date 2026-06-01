@@ -184,3 +184,89 @@ describe('MCP Auth - 补充测试', () => {
     })
   })
 })
+
+// ===== v0.3 Scope 解析与权限校验 =====
+describe('parseScope', () => {
+  it('read → read', async () => {
+    const { parseScope } = await import('@/mcp/external/auth')
+    expect(parseScope('read')).toBe('read')
+  })
+
+  it('read_report（历史值）→ read 兼容', async () => {
+    const { parseScope } = await import('@/mcp/external/auth')
+    expect(parseScope('read_report')).toBe('read')
+  })
+
+  it('write → write', async () => {
+    const { parseScope } = await import('@/mcp/external/auth')
+    expect(parseScope('write')).toBe('write')
+  })
+
+  it('read_write → read_write', async () => {
+    const { parseScope } = await import('@/mcp/external/auth')
+    expect(parseScope('read_write')).toBe('read_write')
+  })
+
+  it('null / undefined / 未知值 → read（安全默认）', async () => {
+    const { parseScope } = await import('@/mcp/external/auth')
+    expect(parseScope(null)).toBe('read')
+    expect(parseScope(undefined)).toBe('read')
+    expect(parseScope('')).toBe('read')
+    expect(parseScope('garbage')).toBe('read')
+  })
+})
+
+describe('hasScope', () => {
+  it('read 工具：read 满足，write 不满足，read_write 满足', async () => {
+    const { hasScope } = await import('@/mcp/external/auth')
+    expect(hasScope('read', 'read')).toBe(true)
+    expect(hasScope('write', 'read')).toBe(false)
+    expect(hasScope('read_write', 'read')).toBe(true)
+  })
+
+  it('write 工具：read 不满足，write 满足，read_write 满足', async () => {
+    const { hasScope } = await import('@/mcp/external/auth')
+    expect(hasScope('read', 'write')).toBe(false)
+    expect(hasScope('write', 'write')).toBe(true)
+    expect(hasScope('read_write', 'write')).toBe(true)
+  })
+})
+
+describe('validateApiKey 应返回 scope', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    externalApiKeyMock.findUnique = vi.fn()
+    externalApiKeyMock.update = vi.fn()
+  })
+
+  it('permissions=read_report 应映射为 scope=read', async () => {
+    externalApiKeyMock.findUnique.mockResolvedValue({
+      id: 'k1', userId: 'u1', key: 'npk_x', permissions: 'read_report', expiresAt: null,
+    })
+    externalApiKeyMock.update.mockResolvedValue({})
+    const { validateApiKey } = await import('@/mcp/external/auth')
+    const result = await validateApiKey('npk_x')
+    expect(result.valid).toBe(true)
+    expect(result.scope).toBe('read')
+  })
+
+  it('permissions=read_write 应映射为 scope=read_write', async () => {
+    externalApiKeyMock.findUnique.mockResolvedValue({
+      id: 'k1', userId: 'u1', key: 'npk_x', permissions: 'read_write', expiresAt: null,
+    })
+    externalApiKeyMock.update.mockResolvedValue({})
+    const { validateApiKey } = await import('@/mcp/external/auth')
+    const result = await validateApiKey('npk_x')
+    expect(result.scope).toBe('read_write')
+  })
+
+  it('permissions 缺失时应默认为 read', async () => {
+    externalApiKeyMock.findUnique.mockResolvedValue({
+      id: 'k1', userId: 'u1', key: 'npk_x', expiresAt: null,
+    })
+    externalApiKeyMock.update.mockResolvedValue({})
+    const { validateApiKey } = await import('@/mcp/external/auth')
+    const result = await validateApiKey('npk_x')
+    expect(result.scope).toBe('read')
+  })
+})

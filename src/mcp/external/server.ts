@@ -35,9 +35,10 @@ const server = new Server(
   }
 );
 
-// 存储当前用户 ID（通过认证获取）
+// 存储当前用户 ID 和 scope（通过认证获取）
 let currentUserId: string | null = null;
 let currentKeyId: string | null = null;
+let currentScope: 'read' | 'write' | 'read_write' = 'read';
 
 /**
  * 初始化服务器
@@ -58,7 +59,7 @@ async function initializeServer() {
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify({ 
+          text: JSON.stringify({
             error: 'Unauthorized',
             code: 'NOT_AUTHENTICATED'
           }, null, 2)
@@ -66,7 +67,7 @@ async function initializeServer() {
       };
     }
 
-    return executeTool(name, args || {}, currentUserId);
+    return executeTool(name, args || {}, { userId: currentUserId, scope: currentScope });
   });
 }
 
@@ -96,7 +97,8 @@ async function handleMcpRequest(body: any, req: any): Promise<any> {
         if (validation.valid) {
           currentUserId = validation.userId!;
           currentKeyId = validation.keyId!;
-          console.error(`[NextPost External MCP] Authenticated for user: ${currentUserId}`);
+          currentScope = validation.scope || 'read';
+          console.error(`[NextPost External MCP] Authenticated for user: ${currentUserId} (scope: ${currentScope})`);
         }
       }
     }
@@ -142,7 +144,7 @@ async function handleMcpRequest(body: any, req: any): Promise<any> {
         }
 
         const { name, arguments: args } = params;
-        const result = await executeTool(name, args || {}, currentUserId);
+        const result = await executeTool(name, args || {}, { userId: currentUserId, scope: currentScope });
         return {
           jsonrpc: '2.0',
           id,
@@ -241,8 +243,9 @@ async function startServer() {
 
     currentUserId = validation.userId!;
     currentKeyId = validation.keyId!;
+    currentScope = validation.scope || 'read';
 
-    console.error(`[NextPost External MCP] Authenticated for user: ${currentUserId}`);
+    console.error(`[NextPost External MCP] Authenticated for user: ${currentUserId} (scope: ${currentScope})`);
   } else {
     console.error('[NextPost External MCP] No MCP_API_KEY set, using per-request authentication');
   }
