@@ -1411,6 +1411,124 @@ npm install -D prisma
 
 ---
 
+### 5.7c HTTP 端点 E2E（v0.4 新增，Playwright request fixture）
+
+> **设计说明**：v0.4 起，所有 MCP 工具都通过 `/api/mcp` HTTP 端点对外。单元测试用 `vi.mock` 拦截 prisma，**无法覆盖 transport 层（Next.js Turbopack、路由 handler、JSON-RPC 解析）**。本节用 Playwright `request` fixture 真实 HTTP 调用，验证整条链路通畅。
+>
+> **历史教训**：v0.4 初版实现完成时，262 个单元测试全绿、tsc 干净，但生产 `/api/mcp` 返回 500——原因是 `server.ts` 有 3 处 `./tools.js` / `./auth.js` 相对 import，Next.js Turbopack 不容忍而 vitest/tsx 容忍。**本节就是兜底这种"测试都过但线上挂"的情况**。
+
+#### TC-MCP-HTTP-001：无 Authorization 头返回 401
+
+| 用例ID | TC-MCP-HTTP-001 |
+|--------|------------|
+| **真实 HTTP** | `POST /api/mcp` 头不带 Authorization |
+| **body** | `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` |
+| **预期** | HTTP 401，body 含 `{"jsonrpc":"2.0","error":{"code":-32602,"message":"API key required..."}}` |
+| **验证点** | 鉴权拦截在路由 handler，不进 prisma |
+
+#### TC-MCP-HTTP-002：非 npk_ 前缀返回 401
+
+| 用例ID | TC-MCP-HTTP-002 |
+|--------|------------|
+| **头** | `Authorization: Bearer bad-format-key` |
+| **预期** | HTTP 401，errorCode INVALID_KEY_FORMAT |
+
+#### TC-MCP-HTTP-003：不存在的 npk_ key 返回 401
+
+| 用例ID | TC-MCP-HTTP-003 |
+|--------|------------|
+| **头** | `Authorization: Bearer npk_000...0`（全 0） |
+| **预期** | HTTP 401，errorCode INVALID_KEY |
+
+#### TC-MCP-HTTP-004：initialize 返回 serverInfo
+
+| 用例ID | TC-MCP-HTTP-004 |
+|--------|------------|
+| **预期响应** | `{result:{serverInfo:{name:"nextpost-external",version:"0.1.0"},protocolVersion:"2024-11-05"}}` |
+
+#### TC-MCP-HTTP-005：tools/list 暴露全部 7 个工具
+
+| 用例ID | TC-MCP-HTTP-005 |
+|--------|------------|
+| **预期** | 7 个 name 都在 list 里：`list_accounts` / `get_pending_posts` / `get_post_detail` / `report_publish_result` / `upload_media_from_url` / `create_post` / `update_post` |
+
+#### TC-MCP-HTTP-006：list_accounts 脱敏
+
+| 用例ID | TC-MCP-HTTP-006 |
+|--------|------------|
+| **预期响应** | `accounts[].displayName` 有值，`accounts[].handle` / `accounts[].description` 不存在 |
+| **验证点** | 真实 HTTP 链路脱敏生效，不是只在单元 mock 里脱敏 |
+
+#### TC-MCP-HTTP-007：get_pending_posts 媒体 URL 转绝对
+
+| 用例ID | TC-MCP-HTTP-007 |
+|--------|------------|
+| **预置** | 1 个 scheduled 帖子，mediaUrls=`["/api/uploads/test.jpg"]` |
+| **预期** | 返回的 `posts[0].mediaUrls[0]` 以 `http://` 或 `https://` 开头 |
+| **验证点** | `toAbsoluteUrl` 在 HTTP 链路生效，客户端可直接下载 |
+
+#### TC-MCP-HTTP-008：get_post_detail 返回 publishToken
+
+| 用例ID | TC-MCP-HTTP-008 |
+|--------|------------|
+| **预期响应** | `post.publishToken` 字段值与 DB 一致 |
+
+#### TC-MCP-HTTP-009：数据隔离
+
+| 用例ID | TC-MCP-HTTP-009 |
+|--------|------------|
+| **预置** | 用户 A 调 get_post_detail(post_B_id) |
+| **预期** | `{"error":"Post not found"}` |
+
+#### TC-MCP-HTTP-010：read scope 调 create_post → INSUFFICIENT_SCOPE
+
+| 用例ID | TC-MCP-HTTP-010 |
+|--------|------------|
+| **预置** | read scope API Key |
+| **预期响应** | `{"errorCode":"INSUFFICIENT_SCOPE"}` |
+| **验证点** | 真实 HTTP 链路 scope 拦截，prisma 不被调 |
+
+#### TC-MCP-HTTP-011：write scope 调 list_accounts → INSUFFICIENT_SCOPE
+
+| 用例ID | TC-MCP-HTTP-011 |
+|--------|------------|
+| **预置** | write scope API Key |
+| **预期响应** | `{"errorCode":"INSUFFICIENT_SCOPE"}` |
+
+#### TC-MCP-HTTP-012：read_write scope create_post 成功 + DB 落库
+
+| 用例ID | TC-MCP-HTTP-012 |
+|--------|------------|
+| **调用** | create_post 正常参数 |
+| **预期** | `success=true`, `post.id` 有值, `post.publishToken` 以 `tok_` 开头 |
+| **二次验证** | `prisma.post.findUnique({id})` 查得到记录，userId/status/content 都正确 |
+| **验证点** | 不只接口返回成功，**真实写库** |
+
+#### TC-MCP-HTTP-013：create_post 拒绝他人账号
+
+| 用例ID | TC-MCP-HTTP-013 |
+|--------|------------|
+| **预置** | 另一个用户的 account.id |
+| **预期** | `{"errorCode":"ACCOUNT_NOT_FOUND"}` |
+
+#### TC-MCP-HTTP-014：create_post 拒绝过去时间
+
+| 用例ID | TC-MCP-HTTP-014 |
+|--------|------------|
+| **预期** | `{"errorCode":"SCHEDULED_TIME_IN_PAST"}` |
+
+#### TC-MCP-HTTP-015：update_post 字段白名单 + 状态锁（真实 DB 验证）
+
+| 用例ID | TC-MCP-HTTP-015 |
+|--------|------------|
+| **调用 1** | update_post 携带 content/mediaUrls/accountId/status + 合法 scheduledTime |
+| **预期响应** | `success=true` |
+| **二次验证** | `prisma.post.findUnique` 查 DB：content/mediaUrls/accountId/status **全部未被改**，scheduledTime 被改 |
+| **调用 2** | 把 post.status 改为 'published'，再调 update_post |
+| **预期** | `{"errorCode":"INVALID_STATUS"}` |
+
+---
+
 ### 5.8 软删除 + 回收站（v0.3 新增）
 
 > **设计说明**：v0.3 起，用户在 UI 上点击「删除」走软删除（设置 `deletedAt`），而不是物理删除。`/api/trash` 端点用于列出已删除项、恢复或永久删除。本节中的 v0.2 预留的「MCP 内部软删除」仍作为 Phase 2 任务。

@@ -176,6 +176,21 @@ describe('MCP Auth - 补充测试', () => {
       expect(result.keys).toHaveLength(0)
     })
 
+    it('lastUsedAt 为 null 时输出 null（不抛错）', async () => {
+      const date = new Date('2026-01-01')
+      externalApiKeyMock.findMany.mockResolvedValue([
+        {
+          id: 'k1', name: 'Test', key: 'npk_abcdefghijklmnop',
+          permissions: 'read_report', lastUsedAt: null, expiresAt: null,
+          createdAt: date,
+        },
+      ])
+      const { listApiKeys } = await import('@/mcp/external/auth')
+      const result = await listApiKeys('u1')
+      expect(result.success).toBe(true)
+      expect(result.keys![0].lastUsedAt).toBeNull()
+    })
+
     it('should handle errors', async () => {
       externalApiKeyMock.findMany.mockRejectedValue(new Error('DB error'))
       const { listApiKeys } = await import('@/mcp/external/auth')

@@ -13,9 +13,9 @@ import {
   CallToolRequest,
   JSONRPCRequest
 } from '@modelcontextprotocol/sdk/types.js';
-import { TOOLS } from './tools.js';
-import { executeTool } from './tools.js';
-import { validateApiKey } from './auth.js';
+import { TOOLS } from './tools';
+import { executeTool } from './tools';
+import { validateApiKey } from './auth';
 
 // 服务器配置
 const SERVER_NAME = 'nextpost-external';

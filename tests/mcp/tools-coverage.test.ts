@@ -1007,3 +1007,84 @@ describe('MCP Tools - 向后兼容 string 调用', () => {
     expect(data.errorCode).toBe('INSUFFICIENT_SCOPE')
   })
 })
+
+// ===== 补：mime 推断分支（gif/webp/mp4/webm）=====
+describe('MCP Tools - upload_media_from_url mime 推断', () => {
+  let fetchSpy: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    resetMocks()
+    fetchSpy = vi.fn()
+    globalThis.fetch = fetchSpy as unknown as typeof fetch
+  })
+
+  const mimeToExt: Array<[string, string]> = [
+    ['image/gif', '.gif'],
+    ['image/webp', '.webp'],
+    ['video/mp4', '.mp4'],
+    ['video/webm', '.webm'],
+  ]
+
+  it.each(mimeToExt)(
+    '%s 应推断扩展名为 %s',
+    async (mime, ext) => {
+      fetchSpy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', mime]]),
+        arrayBuffer: async () => Buffer.from('data'),
+      })
+      const { executeTool } = await import('@/mcp/external/tools')
+      const result = await executeTool(
+        'upload_media_from_url',
+        { url: `https://example.com/x${ext}` },
+        { userId: 'u1', scope: 'read_write' }
+      )
+      const data = JSON.parse(result.content[0].text)
+      expect(data.mimeType).toBe(mime)
+      expect(data.filename).toMatch(new RegExp(`\\${ext}$`))
+    }
+  )
+
+  it('显式传 filename 时不走 mime 推断', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true, status: 200,
+      headers: new Map([['content-type', 'image/png']]),
+      arrayBuffer: async () => Buffer.from('x'),
+    })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_url',
+      { url: 'https://example.com/x', filename: 'my-custom.gif' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.filename).toBe('my-custom.gif')
+  })
+})
+
+// ===== 补：update_post INVALID_SCHEDULED_TIME 分支（行 650）=====
+describe('MCP Tools - update_post 边界：scheduledTime 非日期字符串', () => {
+  beforeEach(() => {
+    resetMocks()
+  })
+
+  it('scheduledTime 是非日期字符串时返回 INVALID_SCHEDULED_TIME', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'u1', deletedAt: null, status: 'scheduled',
+      accountId: 'a1', content: 'x', mediaUrls: '[]',
+      scheduledTime: new Date(), timezone: 'Asia/Shanghai', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'update_post',
+      { postId: 'p1', scheduledTime: 'garbage-string-not-a-date' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_SCHEDULED_TIME')
+    // 不能进 update 路径
+    expect(postMock.update).not.toHaveBeenCalled()
+  })
+})

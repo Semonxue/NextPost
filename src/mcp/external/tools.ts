@@ -29,9 +29,9 @@ import type {
   ToolRequiredScope,
   WriteResult,
   UploadMediaResult,
-} from './types.js';
+} from './types';
 import { uploadFile } from '@/lib/storage';
-import { hasScope } from './auth.js';
+import { hasScope } from './auth';
 
 const prisma = new PrismaClient();
 
