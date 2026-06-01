@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
-import { Bot, Key, User, Plus, Trash2, Copy, ExternalLink } from "lucide-react";
+import { Bot, Key, User, Plus, Trash2, Copy, Eye, Pencil, Check, Filter } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useUIStore } from "@/stores/uiStore";
@@ -15,6 +15,43 @@ interface ExternalApiKey {
   keyPreview: string;
   createdAt: string;
 }
+
+// 归一化 permissions 字段到 3 值之一
+function normalizeScope(p: string): "read" | "write" | "read_write" {
+  if (p === "read_write") return "read_write";
+  if (p === "write") return "write";
+  return "read";
+}
+
+// UI 显示标签 + 颜色
+const SCOPE_META: Record<
+  "read" | "write" | "read_write",
+  { label: string; short: string; color: string; ring: string; bg: string }
+> = {
+  read: {
+    label: "只读",
+    short: "read",
+    color: "text-gray-700 dark:text-gray-300",
+    ring: "ring-gray-300 dark:ring-gray-600",
+    bg: "bg-gray-50 dark:bg-gray-800/50",
+  },
+  write: {
+    label: "仅写",
+    short: "write",
+    color: "text-orange-700 dark:text-orange-300",
+    ring: "ring-orange-300 dark:ring-orange-700",
+    bg: "bg-orange-50 dark:bg-orange-900/20",
+  },
+  read_write: {
+    label: "读写",
+    short: "read_write",
+    color: "text-blue-700 dark:text-blue-300",
+    ring: "ring-blue-500 dark:ring-blue-500",
+    bg: "bg-blue-50 dark:bg-blue-900/20",
+  },
+};
+
+type FilterMode = "all" | "read" | "read_write";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
@@ -28,9 +65,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [externalKeys, setExternalKeys] = useState<ExternalApiKey[]>([]);
   const [newKeyName, setNewKeyName] = useState("");
-  const [newKeyScope, setNewKeyScope] = useState<"read" | "write" | "read_write">("read_write");
+  // UI 上只暴露 2 类：只读 / 读写（write 罕见，从 UI 隐藏但后端保留）
+  const [newKeyScope, setNewKeyScope] = useState<"read" | "read_write">("read_write");
   const [creating, setCreating] = useState(false);
   const [showNewKey, setShowNewKey] = useState<string | null>(null);
+  // 列表过滤器
+  const [keyFilter, setKeyFilter] = useState<FilterMode>("all");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -47,7 +87,7 @@ export default function SettingsPage() {
         fetch("/api/settings"),
         fetch("/api/settings/external-keys")
       ]);
-      
+
       if (settingsRes.ok) {
         const data = await settingsRes.json();
         setAiConfig({
@@ -56,7 +96,7 @@ export default function SettingsPage() {
           model: data.aiModel || "gpt-4",
         });
       }
-      
+
       if (keysRes.ok) {
         const keysData = await keysRes.json();
         setExternalKeys(keysData.keys || []);
@@ -73,7 +113,7 @@ export default function SettingsPage() {
       addToast({ type: "error", message: "请输入 Key 名称" });
       return;
     }
-    
+
     setCreating(true);
     try {
       const res = await fetch("/api/settings/external-keys", {
@@ -81,12 +121,15 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newKeyName, scope: newKeyScope }),
       });
-      
+
       if (res.ok) {
         const data = await res.json();
         setShowNewKey(data.key);
         setNewKeyName("");
-        addToast({ type: "success", message: `API Key 已创建（${data.scope ?? newKeyScope}）` });
+        addToast({
+          type: "success",
+          message: `${SCOPE_META[newKeyScope].label} Key 已创建`,
+        });
         fetchSettings();
       } else {
         addToast({ type: "error", message: "创建失败" });
@@ -106,7 +149,10 @@ export default function SettingsPage() {
         body: JSON.stringify({ scope: newScope }),
       });
       if (res.ok) {
-        addToast({ type: "success", message: `已更新为 ${newScope}` });
+        addToast({
+          type: "success",
+          message: `已更新为 ${SCOPE_META[newScope].label}（${newScope}）`,
+        });
         fetchSettings();
       } else {
         const err = await res.json().catch(() => ({}));
@@ -119,7 +165,7 @@ export default function SettingsPage() {
 
   const handleDeleteKey = async (id: string) => {
     if (!confirm("确定要删除这个 API Key 吗？")) return;
-    
+
     try {
       const res = await fetch(`/api/settings/external-keys/${id}?id=${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -176,6 +222,21 @@ export default function SettingsPage() {
     await signOut({ callbackUrl: "/login" });
   };
 
+  // 分类 + 过滤
+  const partitionedKeys = useMemo(() => {
+    const readOnly = externalKeys.filter((k) => normalizeScope(k.permissions) === "read");
+    const readWrite = externalKeys.filter((k) => normalizeScope(k.permissions) === "read_write");
+    const writeOnly = externalKeys.filter((k) => normalizeScope(k.permissions) === "write");
+    return { readOnly, readWrite, writeOnly };
+  }, [externalKeys]);
+
+  const filteredKeys = useMemo(() => {
+    if (keyFilter === "read") return partitionedKeys.readOnly;
+    if (keyFilter === "read_write") return partitionedKeys.readWrite;
+    // "all" 显示 read + read_write；write-only 单独放在最后
+    return [...partitionedKeys.readOnly, ...partitionedKeys.readWrite, ...partitionedKeys.writeOnly];
+  }, [keyFilter, partitionedKeys]);
+
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -194,13 +255,6 @@ export default function SettingsPage() {
     openai: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
     anthropic: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
     ollama: ["llama2", "codellama", "mistral"],
-  };
-
-  // scope 颜色映射
-  const scopeBadge: Record<string, string> = {
-    read: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
-    write: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
-    read_write: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   };
 
   return (
@@ -267,7 +321,7 @@ export default function SettingsPage() {
                 value={aiConfig.apiKey}
                 onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
                 placeholder="输入你的 API Key"
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -310,9 +364,9 @@ export default function SettingsPage() {
           创建 API Key 用于外部 MCP 客户端（Claude Desktop / Cursor / Cherry Studio 等）调用 NextPost。
           Key 创建后只能查看一次，请妥善保存。
         </p>
-        
-        {/* 创建新 Key —— 含 scope 选择器 */}
-        <div className="mb-4 space-y-2">
+
+        {/* 创建新 Key —— 2 个大 radio card（只读 / 读写） */}
+        <div className="mb-5 space-y-3" data-testid="create-key-form">
           <div className="flex gap-2">
             <input
               type="text"
@@ -326,25 +380,39 @@ export default function SettingsPage() {
               创建
             </Button>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-600 dark:text-gray-400 shrink-0">权限：</label>
-            <select
-              value={newKeyScope}
-              onChange={(e) => setNewKeyScope(e.target.value as "read" | "write" | "read_write")}
-              data-testid="new-key-scope-select"
-              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="read">read — 只读（监控/面板）</option>
-              <option value="write">write — 仅写（罕见）</option>
-              <option value="read_write">read_write — 通用 AI Agent（推荐）</option>
-            </select>
+
+          {/* 类型选择：2 个大 radio card */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+              Key 类型
+            </label>
+            <div className="grid grid-cols-2 gap-2" data-testid="new-key-type-selector">
+              <TypeRadio
+                value="read"
+                label="只读"
+                desc="监控 / 只读面板用，可查看账号/帖子但不能改"
+                icon={Eye}
+                selected={newKeyScope === "read"}
+                onSelect={() => setNewKeyScope("read")}
+                testId="new-key-type-read"
+              />
+              <TypeRadio
+                value="read_write"
+                label="读写"
+                desc="通用 AI Agent 用，可创建/更新帖子（推荐）"
+                icon={Pencil}
+                selected={newKeyScope === "read_write"}
+                onSelect={() => setNewKeyScope("read_write")}
+                testId="new-key-type-read_write"
+              />
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              💡 <strong>读写</strong> 类型的 Key 才能让 AI 创建/更新帖子。详见{" "}
+              <a href="/ai-tools" className="text-blue-600 hover:underline">/ai-tools 页面</a>。
+            </p>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            💡 想用 AI 创建/更新帖子？选 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">read_write</code>。
-            详见 <a href="/ai-tools" className="text-blue-600 hover:underline">/ai-tools 页面</a>。
-          </p>
         </div>
-        
+
         {/* 新 Key 提示 */}
         {showNewKey && (
           <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -367,74 +435,133 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
-        
-        {/* Key 列表 —— 每行带 scope 选择器可改 */}
+
+        {/* Key 列表 —— 类型过滤 + 卡片化 */}
         {externalKeys.length > 0 ? (
-          <div className="space-y-2" data-testid="external-keys-list">
-            {externalKeys.map((key) => {
-              // 后端可能返回 "read_report" 旧值，前端做归一化显示
-              const currentScope = (
-                key.permissions === "read_write" ? "read_write" :
-                key.permissions === "write" ? "write" :
-                "read"
-              ) as "read" | "write" | "read_write";
-              return (
-                <div
-                  key={key.id}
-                  className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
-                  data-testid="external-key-row"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{key.name}</p>
-                      <span
-                        className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${scopeBadge[currentScope]}`}
-                      >
-                        {currentScope}
-                      </span>
+          <div data-testid="external-keys-list">
+            {/* 类型过滤分段控件 */}
+            <div className="flex items-center gap-1 mb-3 p-1 bg-gray-100 dark:bg-gray-900/50 rounded-lg" data-testid="key-filter-tabs">
+              <Filter size={14} className="text-gray-400 ml-2" />
+              <FilterTab
+                active={keyFilter === "all"}
+                onClick={() => setKeyFilter("all")}
+                label="全部"
+                count={externalKeys.length}
+                testId="filter-all"
+              />
+              <FilterTab
+                active={keyFilter === "read"}
+                onClick={() => setKeyFilter("read")}
+                label="只读"
+                count={partitionedKeys.readOnly.length}
+                testId="filter-read"
+              />
+              <FilterTab
+                active={keyFilter === "read_write"}
+                onClick={() => setKeyFilter("read_write")}
+                label="读写"
+                count={partitionedKeys.readWrite.length}
+                testId="filter-read_write"
+              />
+            </div>
+
+            {filteredKeys.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                该类型下暂无 Key
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {filteredKeys.map((key) => {
+                  const currentScope = normalizeScope(key.permissions);
+                  const meta = SCOPE_META[currentScope];
+                  return (
+                    <div
+                      key={key.id}
+                      className={`flex items-stretch gap-0 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 ${meta.bg}`}
+                      data-testid="external-key-row"
+                      data-scope={currentScope}
+                    >
+                      {/* 左侧类型色条 */}
+                      <div
+                        className={`w-1.5 shrink-0 ${
+                          currentScope === "read_write"
+                            ? "bg-blue-500"
+                            : currentScope === "write"
+                              ? "bg-orange-500"
+                              : "bg-gray-400"
+                        }`}
+                      />
+                      <div className="flex-1 min-w-0 flex items-center justify-between gap-2 p-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* 类型大标 */}
+                            <span
+                              data-testid="key-type-badge"
+                              className={`text-xs font-semibold px-2 py-0.5 rounded shrink-0 ${meta.color} bg-white/60 dark:bg-black/20 border border-current/20`}
+                            >
+                              {meta.label}
+                            </span>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {key.name}
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1">
+                            {key.keyPreview} · {new Date(key.createdAt).toLocaleDateString("zh-CN")}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <select
+                            value={currentScope}
+                            data-testid="key-scope-select"
+                            onChange={(e) => {
+                              const newScope = e.target.value as "read" | "write" | "read_write";
+                              if (newScope !== currentScope) {
+                                if (
+                                  confirm(
+                                    `确定要把 "${key.name}" 的权限从 ${SCOPE_META[currentScope].label} 改为 ${SCOPE_META[newScope].label} 吗？`
+                                  )
+                                ) {
+                                  handleUpdateScope(key.id, newScope);
+                                } else {
+                                  e.target.value = currentScope;
+                                }
+                              }
+                            }}
+                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            title="修改权限"
+                          >
+                            <option value="read">只读</option>
+                            <option value="write">仅写</option>
+                            <option value="read_write">读写</option>
+                          </select>
+                          <button
+                            onClick={() => handleRevealKey(key.id, key.name)}
+                            className="p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg"
+                            title="查看完整 Key"
+                          >
+                            <Key size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteKey(key.id)}
+                            className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
+                            title="删除"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {key.keyPreview} | 创建于 {new Date(key.createdAt).toLocaleDateString("zh-CN")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <select
-                      value={currentScope}
-                      data-testid="key-scope-select"
-                      onChange={(e) => {
-                        const newScope = e.target.value as "read" | "write" | "read_write";
-                        if (newScope !== currentScope) {
-                          if (confirm(`确定要把 "${key.name}" 的权限从 ${currentScope} 改为 ${newScope} 吗？`)) {
-                            handleUpdateScope(key.id, newScope);
-                          } else {
-                            e.target.value = currentScope; // 还原 select
-                          }
-                        }
-                      }}
-                      className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    >
-                      <option value="read">read</option>
-                      <option value="write">write</option>
-                      <option value="read_write">read_write</option>
-                    </select>
-                    <button
-                      onClick={() => handleRevealKey(key.id, key.name)}
-                      className="p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg"
-                      title="查看完整 Key"
-                    >
-                      <Key size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteKey(key.id)}
-                      className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg"
-                      title="删除"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 写-only key 提示（如果有） */}
+            {partitionedKeys.writeOnly.length > 0 && keyFilter === "all" && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                ⚠️ 有 {partitionedKeys.writeOnly.length} 个「仅写」Key（通过 API 创建），UI 不显示该类型但可正常管理
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
@@ -453,3 +580,90 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+// ===== 复用小组件 =====
+
+function TypeRadio({
+  label,
+  desc,
+  icon: Icon,
+  selected,
+  onSelect,
+  testId,
+}: {
+  value: "read" | "read_write";
+  label: string;
+  desc: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  selected: boolean;
+  onSelect: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      data-testid={testId}
+      className={`text-left p-3 rounded-lg border-2 transition-all ${
+        selected
+          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-1 ring-blue-500"
+          : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Icon
+          size={16}
+          className={selected ? "text-blue-600 dark:text-blue-400" : "text-gray-500"}
+        />
+        <span
+          className={`text-sm font-semibold ${
+            selected ? "text-blue-700 dark:text-blue-300" : "text-gray-900 dark:text-white"
+          }`}
+        >
+          {label}
+        </span>
+        {selected && <Check size={14} className="text-blue-600 dark:text-blue-400 ml-auto" />}
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+    </button>
+  );
+}
+
+function FilterTab({
+  active,
+  onClick,
+  label,
+  count,
+  testId,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+        active
+          ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+      }`}
+    >
+      {label}
+      <span
+        className={`text-xs px-1.5 py-0.5 rounded ${
+          active
+            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+            : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+

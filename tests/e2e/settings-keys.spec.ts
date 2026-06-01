@@ -43,26 +43,28 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     }
   });
 
-  test('TC-SETTINGS-001: 页面渲染 + scope 选择器默认 read_write', async ({ page }) => {
+  test('TC-SETTINGS-001: 页面渲染 + 2 个类型 card 默认选 读写', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: '外部 API Key（MCP）' })).toBeVisible();
-    // 默认是 read_write（让用户能直接用 AI 创建帖子）
-    const scopeSelect = page.getByTestId('new-key-scope-select');
-    await expect(scopeSelect).toBeVisible();
-    await expect(scopeSelect).toHaveValue('read_write');
+    // 类型选择器 2 个 card
+    await expect(page.getByTestId('new-key-type-read')).toBeVisible();
+    await expect(page.getByTestId('new-key-type-read_write')).toBeVisible();
+    // 默认选 读写
+    const readWriteCard = page.getByTestId('new-key-type-read_write');
+    await expect(readWriteCard).toHaveClass(/border-blue-500/);
   });
 
-  test('TC-SETTINGS-002: UI 创建 read_write key → DB 真实写入 read_write', async ({ page }) => {
+  test('TC-SETTINGS-002: UI 创建 读写 key → DB 真实写入 read_write', async ({ page }) => {
     await page.goto('/settings');
 
     // 填名称
     await page.getByPlaceholder(/输入 Key 名称/).fill('Claude Desktop Test');
 
-    // scope 选 read_write（默认就是，但显式设一下）
-    await page.getByTestId('new-key-scope-select').selectOption('read_write');
+    // 类型选 读写（默认就是，但显式点一下确认）
+    await page.getByTestId('new-key-type-read_write').click();
 
-    // 点创建
-    await page.getByRole('button', { name: '创建' }).click();
+    // 点创建按钮（用 exact 避开"读写"卡片描述里的"创建"字）
+    await page.getByRole('button', { name: '创建', exact: true }).click();
 
     // 完整 key 提示框出现
     await expect(page.getByText(/唯一一次显示完整 Key/)).toBeVisible({ timeout: 5000 });
@@ -75,11 +77,12 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     expect(dbKey?.permissions).toBe('read_write');
   });
 
-  test('TC-SETTINGS-003: UI 创建 read key → DB 写入 read', async ({ page }) => {
+  test('TC-SETTINGS-003: UI 创建 只读 key → DB 写入 read', async ({ page }) => {
     await page.goto('/settings');
     await page.getByPlaceholder(/输入 Key 名称/).fill('Read Only');
-    await page.getByTestId('new-key-scope-select').selectOption('read');
-    await page.getByRole('button', { name: '创建' }).click();
+    // 切到 只读 card
+    await page.getByTestId('new-key-type-read').click();
+    await page.getByRole('button', { name: '创建', exact: true }).click();
 
     // 等 DB 落库（轮询避免和 toast 竞争）
     await expect.poll(async () => {
@@ -88,7 +91,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     }, { timeout: 5000 }).toBe('read');
   });
 
-  test('TC-SETTINGS-004: 列表显示 scope 标签', async ({ page }) => {
+  test('TC-SETTINGS-004: 列表显示类型大标 + 左侧色条（读写是蓝色）', async ({ page }) => {
     // 直接造一个 read_write key
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
@@ -100,11 +103,83 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     await page.goto('/settings');
     // 列表里能看到 key 名称
     await expect(page.getByText('Display Test')).toBeVisible();
-    // 列表里能看到 read_write scope 标签
-    await expect(page.getByTestId('external-keys-list').getByText('read_write').first()).toBeVisible();
+    // 类型大标显示"读写"（不是英文 read_write）
+    const row = page.getByTestId('external-key-row').first();
+    await expect(row.getByTestId('key-type-badge')).toHaveText('读写');
+    // data-scope 属性 = read_write
+    await expect(row).toHaveAttribute('data-scope', 'read_write');
   });
 
-  test('TC-SETTINGS-005: 修改已有 key 的 scope（read → read_write）', async ({ page }) => {
+  test('TC-SETTINGS-004b: 只读 key 标为"只读" + 灰色色条', async ({ page }) => {
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    await prisma.externalApiKey.create({
+      data: { userId, name: 'Read Only Test', key: keyValue, permissions: 'read' },
+    });
+
+    await page.goto('/settings');
+    const row = page.getByTestId('external-key-row').first();
+    await expect(row.getByTestId('key-type-badge')).toHaveText('只读');
+    await expect(row).toHaveAttribute('data-scope', 'read');
+  });
+
+  test('TC-SETTINGS-005: 类型过滤器 — 点"只读"只剩只读 key', async ({ page }) => {
+    // 造 1 个 read + 1 个 read_write
+    const randomBytes = new Uint8Array(32);
+    const keyA = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    crypto.getRandomValues(randomBytes);
+    const keyB = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    await prisma.externalApiKey.createMany({
+      data: [
+        { userId, name: 'Only Read', key: keyA, permissions: 'read' },
+        { userId, name: 'Full Access', key: keyB, permissions: 'read_write' },
+      ],
+    });
+
+    await page.goto('/settings');
+
+    // 默认全部：看到 2 个
+    await expect(page.getByTestId('external-key-row')).toHaveCount(2);
+
+    // 点"只读"过滤
+    await page.getByTestId('filter-read').click();
+    await expect(page.getByTestId('external-key-row')).toHaveCount(1);
+    await expect(page.getByText('Only Read')).toBeVisible();
+    await expect(page.getByText('Full Access')).not.toBeVisible();
+
+    // 点"读写"过滤
+    await page.getByTestId('filter-read_write').click();
+    await expect(page.getByTestId('external-key-row')).toHaveCount(1);
+    await expect(page.getByText('Full Access')).toBeVisible();
+    await expect(page.getByText('Only Read')).not.toBeVisible();
+
+    // 切回全部
+    await page.getByTestId('filter-all').click();
+    await expect(page.getByTestId('external-key-row')).toHaveCount(2);
+  });
+
+  test('TC-SETTINGS-006: 过滤器计数显示正确（全部 3 / 只读 1 / 读写 2）', async ({ page }) => {
+    const mkKey = () => {
+      const bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      return 'npk_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    };
+    await prisma.externalApiKey.createMany({
+      data: [
+        { userId, name: 'R1', key: mkKey(), permissions: 'read' },
+        { userId, name: 'RW1', key: mkKey(), permissions: 'read_write' },
+        { userId, name: 'RW2', key: mkKey(), permissions: 'read_write' },
+      ],
+    });
+
+    await page.goto('/settings');
+    await expect(page.getByTestId('filter-all')).toContainText('3');
+    await expect(page.getByTestId('filter-read')).toContainText('1');
+    await expect(page.getByTestId('filter-read_write')).toContainText('2');
+  });
+
+  test('TC-SETTINGS-007: 修改已有 key 的 scope（read → read_write）', async ({ page }) => {
     // 先造一个 read key
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
