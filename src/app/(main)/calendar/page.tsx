@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Plus, Filter, X, ExternalLink } from "lucide
 import Link from "next/link";
 import { useUIStore } from "@/stores/uiStore";
 import { Button } from "@/components/ui/Button";
+import { MediaThumbnail } from "@/components/MediaThumbnail";
 
 interface Post {
   id: string;
@@ -477,7 +478,11 @@ export default function CalendarPage() {
                                 className={`text-xs px-1 py-0.5 rounded truncate flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
                               >
                                 {mediaArr.length > 0 && (
-                                  <img src={mediaArr[0]} alt="" className="w-4 h-4 rounded object-cover" />
+                                  <MediaThumbnail
+                                    urls={mediaArr}
+                                    size={16}
+                                    className="rounded"
+                                  />
                                 )}
                                 {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
                                   hour: "2-digit",
@@ -574,10 +579,10 @@ export default function CalendarPage() {
                     </div>
                     <div className="flex items-start gap-2">
                       {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
-                        <img 
-                          src={JSON.parse(post.mediaUrls)[0]} 
-                          alt="媒体预览" 
-                          className="w-10 h-10 object-cover rounded"
+                        <MediaThumbnail
+                          urls={JSON.parse(post.mediaUrls)}
+                          size={40}
+                          className="rounded"
                         />
                       )}
                       <p className="text-sm text-gray-900 dark:text-white line-clamp-2 flex-1">

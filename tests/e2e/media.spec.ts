@@ -97,4 +97,104 @@ test.describe('媒体上传模块', () => {
       unlinkSync(testImagePath)
     })
   })
+
+  test.describe('TC-MEDIA-006: 上传图片并创建帖子 - 验证媒体持久化', () => {
+    test('上传图片后创建帖子，列表页应显示媒体缩略图', async ({ page }) => {
+      const testImagePath = '/tmp/test-image-persist.png'
+      const buffer = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      )
+      writeFileSync(testImagePath, buffer)
+
+      // 1. 新建帖子并上传图片
+      await page.goto('/posts/new')
+      await page.waitForLoadState('networkidle')
+      await page.locator('textarea').fill('测试图片持久化上传')
+
+      const fileInput = page.locator('input[type="file"]')
+      await fileInput.setInputFiles(testImagePath)
+
+      // 等待上传预览出现（MediaUploader 中的 img）
+      await expect(page.locator('.relative.group img')).toBeVisible({ timeout: 5000 })
+
+      // 2. 保存草稿
+      await page.getByRole('button', { name: '保存草稿' }).click()
+      await expect(page.getByText('草稿已保存').first()).toBeVisible({ timeout: 10000 })
+
+      // 3. 验证跳转到列表页，并且列表中显示媒体缩略图
+      await expect(page).toHaveURL(/\/posts$/, { timeout: 10000 })
+      await page.waitForLoadState('networkidle')
+
+      // 帖子列表应包含该帖子
+      const postRow = page.locator('tbody tr').first()
+      await expect(postRow).toBeVisible({ timeout: 5000 })
+
+      // 列表中应有媒体预览（MediaPreview 渲染的 img，由缩略图生成）
+      const mediaImg = postRow.locator('img').first()
+      await expect(mediaImg).toBeVisible({ timeout: 5000 })
+
+      // 验证 img src 指向 /api/uploads/ 路径
+      const imgSrc = await mediaImg.getAttribute('src')
+      expect(imgSrc).toContain('/api/uploads/')
+
+      // 4. 打开编辑页验证媒体仍在
+      const editLink = postRow.locator('a[href*="/edit"]').first()
+      await editLink.click()
+      await page.waitForLoadState('networkidle')
+
+      // 编辑页的 MediaUploader 应显示已有媒体
+      const editorMedia = page.locator('.relative.group').first()
+      await expect(editorMedia).toBeVisible({ timeout: 5000 })
+
+      unlinkSync(testImagePath)
+    })
+  })
+
+  test.describe('TC-MEDIA-007: 上传多个图片并创建帖子', () => {
+    test('同时上传多个图片后创建帖子，列表应显示第一张图', async ({ page }) => {
+      // 创建两个不同的测试图片（使用 10x10 的 PNG 以确保 canvas 抽帧正常工作）
+      const testImagePath1 = '/tmp/test-multi-image-1.png'
+      const testImagePath2 = '/tmp/test-multi-image-2.png'
+      // 使用与 TC-MEDIA-001 相同的已验证有效 1x1 PNG
+      const buffer1 = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      )
+      const buffer2 = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      )
+      writeFileSync(testImagePath1, buffer1)
+      writeFileSync(testImagePath2, buffer2)
+
+      await page.goto('/posts/new')
+      await page.waitForLoadState('networkidle')
+      await page.locator('textarea').fill('测试多图上传')
+
+      // 同时上传两个文件
+      const fileInput = page.locator('input[type="file"]')
+      await fileInput.setInputFiles([testImagePath1, testImagePath2])
+
+      // 等待两个预览都出现
+      const mediaItems = page.locator('.relative.group')
+      await expect(mediaItems).toHaveCount(2, { timeout: 10000 })
+
+      // 保存草稿
+      await page.getByRole('button', { name: '保存草稿' }).click()
+      await expect(page.getByText('草稿已保存').first()).toBeVisible({ timeout: 10000 })
+
+      // 列表页应显示第一张图的缩略图
+      await expect(page).toHaveURL(/\/posts$/, { timeout: 10000 })
+      await page.waitForLoadState('networkidle')
+
+      const postRow = page.locator('tbody tr').first()
+      await expect(postRow).toBeVisible({ timeout: 5000 })
+      const mediaImg = postRow.locator('img').first()
+      await expect(mediaImg).toBeVisible({ timeout: 5000 })
+
+      unlinkSync(testImagePath1)
+      unlinkSync(testImagePath2)
+    })
+  })
 })

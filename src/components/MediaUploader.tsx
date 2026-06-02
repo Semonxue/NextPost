@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Video, X, Upload, AlertCircle } from "lucide-react";
 import { MediaItem, PlatformConfig, formatFileSize, isImageFile, isVideoFile } from "@/lib/platform";
 import { useUIStore } from "@/stores/uiStore";
@@ -115,14 +115,34 @@ export function MediaUploader({
     []
   );
 
+  // 用 ref 记录上一次的 mediaItems，避免 useEffect 初始化时重复通知
+  const prevMediaItemsRef = useRef<MediaItem[] | null>(null);
+
+  // 当 mediaItems 变化时，通过 useEffect 通知父组件（避免在 setState updater 中触发父组件更新）
+  useEffect(() => {
+    // 跳过首次渲染（初始化不需要通知父组件）
+    if (prevMediaItemsRef.current === null) {
+      prevMediaItemsRef.current = mediaItems;
+      return;
+    }
+    prevMediaItemsRef.current = mediaItems;
+    const urls = mediaItems.filter((m) => m.url).map((m) => m.url!);
+    const files = mediaItems.filter((m) => m.file).map((m) => m.file!);
+    onChange(urls, files);
+  }, [mediaItems, onChange]);
+
   // 处理文件选择
   const handleFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
 
       const fileArray = Array.from(files);
-      const currentImages = mediaItems.filter((m) => m.type === "image" && !m.file);
-      const currentVideos = mediaItems.filter((m) => m.type === "video" && !m.file);
+      // 使用本地累积列表跟踪新增项，避免 React 异步 state 导致闭包陈旧值
+      const newItems: MediaItem[] = [];
+      // 动态计数，在循环中累加
+      let imageCount = mediaItems.filter((m) => m.type === "image").length;
+      let videoCount = mediaItems.filter((m) => m.type === "video").length;
+      const hasExistingImages = mediaItems.some((m) => m.type === "image");
 
       for (const file of fileArray) {
         // 检查文件大小
@@ -139,19 +159,19 @@ export function MediaUploader({
 
         const type = isImageFile(file) ? "image" : "video";
 
-        // 检查数量限制
-        if (type === "image" && currentImages.length >= platformConfig.maxImages) {
+        // 检查数量限制（使用动态计数）
+        if (type === "image" && imageCount >= platformConfig.maxImages) {
           addToast({ type: "error", message: `最多只能上传 ${platformConfig.maxImages} 张图片` });
           continue;
         }
 
-        if (type === "video" && currentVideos.length >= platformConfig.maxVideos) {
+        if (type === "video" && videoCount >= platformConfig.maxVideos) {
           addToast({ type: "error", message: `最多只能上传 ${platformConfig.maxVideos} 个视频` });
           continue;
         }
 
         // 检查混合媒体限制
-        if (type === "video" && currentImages.length > 0 && !platformConfig.allowMixedMedia) {
+        if (type === "video" && (hasExistingImages || imageCount > 0) && !platformConfig.allowMixedMedia) {
           addToast({ type: "error", message: `该平台不支持图片和视频混合上传` });
           continue;
         }
@@ -167,35 +187,27 @@ export function MediaUploader({
           size: file.size,
         };
 
-        setMediaItems((prev) => [...prev, newItem]);
+        newItems.push(newItem);
+        // 更新动态计数
+        if (type === "image") imageCount++;
+        else videoCount++;
       }
 
-      // 通知父组件更新
-      notifyChange([...mediaItems]);
+      if (newItems.length === 0) return;
+
+      // 合并新项到 state（useEffect 会自动通知父组件）
+      setMediaItems((prev) => [...prev, ...newItems]);
     },
     [mediaItems, platformConfig, maxFileSize, generateThumbnail, addToast]
-  );
-
-  // 通知父组件
-  const notifyChange = useCallback(
-    (items: MediaItem[]) => {
-      const urls = items.filter((m) => m.url).map((m) => m.url!);
-      const files = items.filter((m) => m.file).map((m) => m.file!);
-      onChange(urls, files);
-    },
-    [onChange]
   );
 
   // 删除媒体项
   const handleRemove = useCallback(
     (id: string) => {
-      setMediaItems((prev) => {
-        const newItems = prev.filter((m) => m.id !== id);
-        notifyChange(newItems);
-        return newItems;
-      });
+      // 直接更新 state，useEffect 会自动通知父组件
+      setMediaItems((prev) => prev.filter((m) => m.id !== id));
     },
-    [notifyChange]
+    []
   );
 
   // 拖拽事件

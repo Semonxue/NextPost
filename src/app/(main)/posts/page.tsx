@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Edit2, Trash2, Calendar, Filter, X, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { MediaThumbnail } from "@/components/MediaThumbnail";
 import { useUIStore } from "@/stores/uiStore";
 
 interface Post {
@@ -352,13 +353,10 @@ export default function PostsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-start gap-3">
                         {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
-                          <div className="flex-shrink-0">
-                            <img 
-                              src={JSON.parse(post.mediaUrls)[0]} 
-                              alt="媒体预览" 
-                              className="w-12 h-12 object-cover rounded-lg"
-                            />
-                          </div>
+                          <MediaThumbnail
+                            urls={JSON.parse(post.mediaUrls)}
+                            size={48}
+                          />
                         )}
                         <p className="text-sm text-gray-900 dark:text-white line-clamp-2 max-w-md">
                           {post.content || "（无文字内容）"}
