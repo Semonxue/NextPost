@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const accountIds = searchParams.getAll("accountIds");
     const platformIds = searchParams.getAll("platformIds");
-    const limit = parseInt(searchParams.get("limit") || "50");
+    const limit = parseInt(searchParams.get("limit") || "500");
     const offset = parseInt(searchParams.get("offset") || "0");
 
     // 过滤已软删除的帖子（v0.3）

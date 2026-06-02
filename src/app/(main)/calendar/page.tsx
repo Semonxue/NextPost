@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Filter, X, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useUIStore } from "@/stores/uiStore";
 import { Button } from "@/components/ui/Button";
@@ -235,7 +235,7 @@ export default function CalendarPage() {
         </div>
         
         {/* 筛选按钮区域 - 右侧 */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
           {/* 账号筛选 */}
           <div className="relative">
             <button
@@ -243,23 +243,22 @@ export default function CalendarPage() {
                 setShowAccountFilter(!showAccountFilter);
                 setShowPlatformFilter(false);
               }}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
                 selectedAccounts.length > 0
-                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
-                  : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
             >
-              <Filter size={16} />
               <span>账号</span>
               {selectedAccounts.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                <span className="px-1 py-0.5 bg-white/20 text-white text-[10px] rounded-full">
                   {selectedAccounts.length}
                 </span>
               )}
             </button>
             
             {showAccountFilter && (
-              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+              <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
                 <div className="p-2 max-h-64 overflow-y-auto">
                   {accounts.length === 0 ? (
                     <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无账号</p>
@@ -295,23 +294,22 @@ export default function CalendarPage() {
                 setShowPlatformFilter(!showPlatformFilter);
                 setShowAccountFilter(false);
               }}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
                 selectedPlatforms.length > 0
-                  ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400"
-                  : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
             >
-              <Filter size={16} />
               <span>平台</span>
               {selectedPlatforms.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                <span className="px-1 py-0.5 bg-white/20 text-white text-[10px] rounded-full">
                   {selectedPlatforms.length}
                 </span>
               )}
             </button>
             
             {showPlatformFilter && (
-              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
+              <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-10">
                 <div className="p-2">
                   {platforms.length === 0 ? (
                     <p className="text-sm text-gray-500 dark:text-gray-400 p-2">暂无平台</p>
@@ -337,22 +335,21 @@ export default function CalendarPage() {
               </div>
             )}
           </div>
+          <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1"></div>
           {/* 状态筛选 */}
-          <div className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
-            {statusFilters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setStatusFilter(f.value)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  statusFilter === f.value
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          {statusFilters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setStatusFilter(f.value)}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                statusFilter === f.value
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
           {/* 清除筛选 */}
           {hasActiveFilters && (
             <button
@@ -360,10 +357,10 @@ export default function CalendarPage() {
                 setStatusFilter("all");
                 clearAllFilters();
               }}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               <X size={12} />
-              清除
+              <span>清除</span>
             </button>
           )}
         </div>
@@ -437,47 +434,47 @@ export default function CalendarPage() {
                       >
                         {day}
                       </span>
-                      {dayPosts.length > 0 && (
-                        <div className="space-y-0.5">
-                          {dayPosts.slice(0, 4).map((post) => {
-                            const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
-                            const thumbnailsArr = post.mediaThumbnails ? JSON.parse(post.mediaThumbnails) : [];
-                            return (
-                              <div
-                                key={post.id}
-                                className={`text-[10px] p-0.5 rounded flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
-                              >
-                                {mediaArr.length > 0 && (
-                                  <MediaThumbnail
-                                    urls={mediaArr}
-                                    thumbnails={thumbnailsArr}
-                                    size={28}
-                                    className="rounded flex-shrink-0"
-                                  />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-[10px] font-medium truncate">
-                                    {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </div>
-                                  {post.content && (
-                                    <div className="text-[9px] opacity-60 truncate dark:opacity-40">
-                                      {post.content}
-                                    </div>
-                                  )}
-                                </div>
+                  {dayPosts.length > 0 && (
+                    <div className="space-y-0.5 max-h-[140px] overflow-y-auto scrollbar-thin">
+                      {dayPosts.slice(0, 8).map((post) => {
+                        const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+                        const thumbnailsArr = post.mediaThumbnails ? JSON.parse(post.mediaThumbnails) : [];
+                        return (
+                          <div
+                            key={post.id}
+                            className={`text-[10px] p-0.5 rounded flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
+                          >
+                            {mediaArr.length > 0 && (
+                              <MediaThumbnail
+                                urls={mediaArr}
+                                thumbnails={thumbnailsArr}
+                                size={20}
+                                className="rounded flex-shrink-0"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[9px] font-medium truncate">
+                                {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
                               </div>
-                            );
-                          })}
-                          {dayPosts.length > 4 && (
-                            <div className="text-[9px] text-gray-400 dark:text-gray-500 text-center">
-                              +{dayPosts.length - 4}
+                              {post.content && (
+                                <div className="text-[8px] opacity-60 truncate dark:opacity-40">
+                                  {post.content}
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
+                        );
+                      })}
+                      {dayPosts.length > 8 && (
+                        <div className="text-[8px] text-blue-600 dark:text-blue-400 text-center font-medium">
+                          +{dayPosts.length - 8} 更多
                         </div>
                       )}
+                    </div>
+                  )}
                     </>
                   )}
                 </div>
@@ -495,7 +492,7 @@ export default function CalendarPage() {
             </h3>
             
             {selectedDate && (
-              <Link href={`/posts/new?date=${formatSelectedDate()}`}>
+              <Link href={`/posts/new?date=${formatSelectedDate()}&from=calendar`}>
                 <Button size="sm">
                   <Plus size={16} className="mr-1" />
                   添加
@@ -509,7 +506,7 @@ export default function CalendarPage() {
               {selectedDatePosts.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500 dark:text-gray-400 text-sm mb-3">当天没有发布计划</p>
-                  <Link href={`/posts/new?date=${formatSelectedDate()}`}>
+                  <Link href={`/posts/new?date=${formatSelectedDate()}&from=calendar`}>
                     <Button variant="ghost" size="sm">
                       <Plus size={16} className="mr-1" />
                       创建计划
@@ -520,7 +517,7 @@ export default function CalendarPage() {
                 selectedDatePosts.map((post) => (
                   <Link
                     key={post.id}
-                    href={`/posts/${post.id}/edit`}
+                    href={`/posts/${post.id}/edit?from=calendar`}
                     className="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-1">

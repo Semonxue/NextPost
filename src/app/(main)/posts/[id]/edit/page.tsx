@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSession } from "next-auth/react";
-import { redirect, useRouter, useParams } from "next/navigation";
+import { redirect, useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Calendar, Copy, ExternalLink, Key, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -34,7 +34,12 @@ export default function EditPostPage() {
   const { status } = useSession();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const { addToast } = useUIStore();
+  
+  // 根据来源决定返回路径
+  const fromCalendar = searchParams.get("from") === "calendar";
+  const backUrl = fromCalendar ? "/calendar" : "/posts";
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [post, setPost] = useState<Post | null>(null);
   const [platformConfig, setPlatformConfig] = useState<PlatformConfig | null>(null);
@@ -237,7 +242,7 @@ export default function EditPostPage() {
       });
       if (res.ok) {
         addToast({ type: "success", message: "帖子已更新" });
-        router.push("/posts");
+        router.push(backUrl);
       } else {
         const data = await res.json();
         addToast({ type: "error", message: data.error || "更新失败" });
@@ -266,7 +271,7 @@ export default function EditPostPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/posts" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+        <Link href={backUrl} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
           <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">编辑帖子</h1>
@@ -421,7 +426,7 @@ export default function EditPostPage() {
           </div>
         </div>
         <div className="flex gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Button variant="secondary" onClick={() => router.push("/posts")} className="flex-1">
+          <Button variant="secondary" onClick={() => router.push(backUrl)} className="flex-1">
             取消
           </Button>
           <Button onClick={handleSubmit} loading={saving} className="flex-1">

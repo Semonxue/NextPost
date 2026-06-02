@@ -37,6 +37,11 @@ function NewPostContent() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
   const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
+  
+  // 根据来源决定返回路径
+  const fromCalendar = searchParams.get("from") === "calendar";
+  const backUrl = fromCalendar ? "/calendar" : "/posts";
+  
   // 默认平台配置
   const defaultConfig: PlatformConfig = {
     platformId: "",
@@ -185,7 +190,7 @@ function NewPostContent() {
       });
       if (res.ok) {
         addToast({ type: "success", message: asDraft ? "草稿已保存" : "帖子已创建" });
-        router.push("/posts");
+        router.push(backUrl);
       } else {
         const data = await res.json();
         addToast({ type: "error", message: data.error || "创建失败" });
@@ -219,7 +224,7 @@ function NewPostContent() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/posts" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+        <Link href={backUrl} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
           <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">新建帖子</h1>
@@ -275,7 +280,7 @@ function NewPostContent() {
               <input
                 type="datetime-local"
                 value={formData.scheduledTime}
-                onChange={(e) => setFormData({ ...formData, scheduledTime: e.target.value })}
+                onChange={(e) => setFormData((prev) => ({ ...prev, scheduledTime: e.target.value }))}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -286,7 +291,7 @@ function NewPostContent() {
             </label>
             <select
               value={formData.timezone}
-              onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+              onChange={(e) => setFormData((prev) => ({ ...prev, timezone: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</option>
