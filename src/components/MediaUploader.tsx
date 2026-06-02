@@ -24,12 +24,12 @@ export function MediaUploader({
   const { addToast } = useUIStore();
   const [isDragging, setIsDragging] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(() => {
-    // 初始化已有媒体
+    // 初始化已有媒体 - 编辑界面显示原图，缩略图仅用于列表等轻量场景
     return initialUrls.map((url, index) => ({
       id: `initial-${index}`,
-      preview: initialThumbnails[index] || url, // 优先使用缩略图作为预览
+      preview: url, // 始终使用原图作为预览（编辑界面需要看到原图）
       url,
-      thumbnailUrl: initialThumbnails[index] || url, // 使用服务端生成的缩略图
+      thumbnailUrl: initialThumbnails[index] || "", // 服务端缩略图仅存储，不用于预览
       type: url.match(/\.(mp4|webm|ogg|mov)$/i) ? "video" : "image",
     }));
   });

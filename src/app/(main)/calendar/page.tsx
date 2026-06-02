@@ -444,14 +444,14 @@ export default function CalendarPage() {
                             key={post.id}
                             className={`text-[10px] p-0.5 rounded flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
                           >
-                            {mediaArr.length > 0 && (
-                              <MediaThumbnail
-                                urls={mediaArr}
-                                thumbnails={thumbnailsArr}
-                                size={20}
-                                className="rounded flex-shrink-0"
-                              />
-                            )}
+                        {mediaArr.length > 0 && (
+                          <MediaThumbnail
+                            urls={mediaArr}
+                            thumbnails={thumbnailsArr}
+                            size={20}
+                            className="rounded flex-shrink-0"
+                          />
+                        )}
                             <div className="flex-1 min-w-0">
                               <div className="text-[9px] font-medium truncate">
                                 {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
@@ -529,17 +529,22 @@ export default function CalendarPage() {
                           {statusLabels[post.status] || "未知"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2">
                         {post.externalPostUrl && (
-                          <a
-                            href={post.externalPostUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (post.externalPostUrl) {
+                                window.open(post.externalPostUrl, '_blank', 'noopener,noreferrer')
+                              }
+                            }}
                             className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
                             title="查看已发布内容"
                           >
                             <ExternalLink size={14} className="text-blue-500" />
-                          </a>
+                          </button>
                         )}
                         <span className="text-xs text-blue-600 dark:text-blue-400">
                           {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
@@ -553,6 +558,7 @@ export default function CalendarPage() {
                       {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
                         <MediaThumbnail
                           urls={JSON.parse(post.mediaUrls)}
+                          thumbnails={post.mediaThumbnails ? JSON.parse(post.mediaThumbnails) : undefined}
                           size={40}
                           className="rounded"
                         />

@@ -14,6 +14,7 @@ interface Post {
   scheduledTime: string | null;
   status: string;
   mediaUrls: string | null;
+  mediaThumbnails: string | null;
   publishToken: string | null;
   externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
@@ -343,6 +344,7 @@ export default function PostsPage() {
                         {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
                           <MediaThumbnail
                             urls={JSON.parse(post.mediaUrls)}
+                            thumbnails={post.mediaThumbnails ? JSON.parse(post.mediaThumbnails) : undefined}
                             size={48}
                           />
                         )}
