@@ -1444,7 +1444,7 @@ npm install -D prisma
 
 | 用例ID | TC-MCP-HTTP-004 |
 |--------|------------|
-| **预期响应** | `{result:{serverInfo:{name:"nextpost-external",version:"0.1.0"},protocolVersion:"2024-11-05"}}` |
+| **预期响应** | `{result:{serverInfo:{name:"nextpost-external",version:"0.4.2"},protocolVersion:"2024-11-05"}}` |
 
 #### TC-MCP-HTTP-005：tools/list 暴露全部 7 个工具
 

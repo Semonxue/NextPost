@@ -19,7 +19,7 @@ import { validateApiKey } from './auth';
 
 // 服务器配置
 const SERVER_NAME = 'nextpost-external';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = '0.4.2';
 const PORT = parseInt(process.env.MCP_PORT || '3100');
 
 // 创建服务器实例

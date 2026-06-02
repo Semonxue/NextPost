@@ -10,7 +10,7 @@ import { validateApiKey } from '@/mcp/external/auth';
 import { TOOLS, executeTool } from '@/mcp/external/tools';
 
 const SERVER_NAME = 'nextpost-external';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = '0.4.2';
 
 /**
  * 获取 Authorization header 中的 API Key
