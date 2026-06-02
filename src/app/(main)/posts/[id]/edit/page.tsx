@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { redirect, useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calendar, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, Calendar, Copy, ExternalLink, Key, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { MediaUploader } from "@/components/MediaUploader";
 import { ContentEditor } from "@/components/ContentEditor";
@@ -30,6 +30,7 @@ interface Post {
   status: string;
   mediaUrls: string | null;
   externalPostUrl: string | null;
+  publishToken: string | null;
 }
 
 export default function EditPostPage() {
@@ -322,6 +323,35 @@ export default function EditPostPage() {
             onChange={handleMediaChange}
           />
         </div>
+
+        {/* Publish Token - 只读显示 */}
+        {post?.publishToken && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <Key size={14} className="inline mr-1" />
+              Publish Token（MCP 发布验证用）
+            </label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded font-mono break-all text-gray-700 dark:text-gray-300">
+                {post.publishToken}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(post.publishToken!);
+                  addToast({ type: "success", message: "Token 已复制" });
+                }}
+                className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                title="复制 Token"
+              >
+                <Copy size={16} />
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              外部 MCP 客户端发布后回传结果时需要此 Token 进行验证
+            </p>
+          </div>
+        )}
 
         {/* 外部链接 - 已发布帖子专用 */}
         {formData.status === "published" && (

@@ -487,8 +487,8 @@ export default function SettingsPage() {
                               {key.name}
                             </p>
                           </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1">
-                            {key.keyPreview} · {new Date(key.createdAt).toLocaleDateString("zh-CN")}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {new Date(key.createdAt).toLocaleDateString("zh-CN")}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">

@@ -83,9 +83,11 @@ export interface CreatePostArgs {
   timezone?: string;     // 默认 Asia/Shanghai
 }
 
-// 更新帖子参数（仅允许修改白名单字段）
+// 更新帖子参数（v0.3.2 扩展：支持 content 和 mediaUrls）
 export interface UpdatePostArgs {
   postId: string;
+  content?: string;
+  mediaUrls?: string[];
   scheduledTime?: string;
   timezone?: string;
 }

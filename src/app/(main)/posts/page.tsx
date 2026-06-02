@@ -343,7 +343,6 @@ export default function PostsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">账号</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">发布时间</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">状态</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Token</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
                 </tr>
               </thead>
@@ -390,15 +389,6 @@ export default function PostsPage() {
                       }`}>
                         {post.status === "published" ? "已发布" : post.status === "scheduled" ? "已计划" : "草稿"}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {post.publishToken ? (
-                        <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono">
-                          {post.publishToken.slice(0, 12)}...
-                        </code>
-                      ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2">

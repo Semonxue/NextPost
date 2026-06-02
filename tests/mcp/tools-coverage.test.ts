@@ -36,6 +36,16 @@ vi.mock('@/lib/storage', () => ({
   deleteFile: vi.fn(async () => {}),
 }))
 
+// fs mock（供 upload_media_from_path 使用）
+const readFileSyncSpy = vi.fn()
+
+vi.mock('fs', () => ({
+  default: { readFileSync: readFileSyncSpy },
+  readFileSync: readFileSyncSpy,
+}))
+
+// path 模块不 mock，使用真实的 path 用于路径操作
+
 class FakePrismaClient {
   post = postMock
   account = accountMock
@@ -876,7 +886,102 @@ describe('MCP Tools - update_post (executeTool)', () => {
     }))
   })
 
-  it('白名单外的字段（content/mediaUrls/accountId/status）被静默忽略', async () => {
+  it('v0.3.2: 单独更新 content 字段', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'u1', deletedAt: null, status: 'scheduled',
+      accountId: 'a1', content: 'Original', mediaUrls: '["/old.jpg"]',
+      scheduledTime: new Date(), timezone: 'Asia/Shanghai', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    postMock.update.mockResolvedValue({
+      id: 'p1', userId: 'u1', accountId: 'a1', content: 'Updated content',
+      mediaUrls: '["/old.jpg"]', scheduledTime: new Date(),
+      timezone: 'Asia/Shanghai', status: 'scheduled', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'update_post',
+      { postId: 'p1', content: 'Updated content' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.success).toBe(true)
+    const updateArgs = postMock.update.mock.calls[0][0]
+    expect(updateArgs.data).toHaveProperty('content', 'Updated content')
+  })
+
+  it('v0.3.2: 单独更新 mediaUrls 字段', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'u1', deletedAt: null, status: 'draft',
+      accountId: 'a1', content: 'Some text', mediaUrls: '[]',
+      scheduledTime: new Date(), timezone: 'Asia/Shanghai', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    postMock.update.mockResolvedValue({
+      id: 'p1', userId: 'u1', accountId: 'a1', content: 'Some text',
+      mediaUrls: '["/new/photo.jpg", "/new/video.mp4"]', scheduledTime: new Date(),
+      timezone: 'Asia/Shanghai', status: 'draft', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'update_post',
+      { postId: 'p1', mediaUrls: ['/new/photo.jpg', '/new/video.mp4'] },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.success).toBe(true)
+    const updateArgs = postMock.update.mock.calls[0][0]
+    expect(updateArgs.data).toHaveProperty('mediaUrls')
+  })
+
+  it('v0.3.2: 同时更新 content 和 mediaUrls', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'u1', deletedAt: null, status: 'draft',
+      accountId: 'a1', content: 'Old', mediaUrls: '[]',
+      scheduledTime: new Date(), timezone: 'Asia/Shanghai', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    postMock.update.mockResolvedValue({
+      id: 'p1', userId: 'u1', accountId: 'a1', content: 'New content',
+      mediaUrls: '["/new/img.jpg"]', scheduledTime: new Date(),
+      timezone: 'Asia/Shanghai', status: 'draft', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'update_post',
+      { postId: 'p1', content: 'New content', mediaUrls: ['/new/img.jpg'] },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.success).toBe(true)
+    const updateArgs = postMock.update.mock.calls[0][0]
+    expect(updateArgs.data).toHaveProperty('content', 'New content')
+    expect(updateArgs.data).toHaveProperty('mediaUrls')
+  })
+
+  it('v0.3.2: content 和 mediaUrls 都为空字符串时返回 EMPTY_CONTENT', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'u1', deletedAt: null, status: 'draft',
+      accountId: 'a1', content: 'Old', mediaUrls: '[]',
+      scheduledTime: new Date(), timezone: 'Asia/Shanghai', publishToken: 'tok',
+      account: { name: 'X' },
+    })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'update_post',
+      { postId: 'p1', content: '', mediaUrls: [] },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.success).toBe(false)
+    expect(data.errorCode).toBe('EMPTY_CONTENT')
+    expect(postMock.update).not.toHaveBeenCalled()
+  })
+
+  it('白名单外的字段（accountId/status）被静默忽略', async () => {
     postMock.findFirst.mockResolvedValue({
       id: 'p1', userId: 'u1', deletedAt: null, status: 'scheduled',
       accountId: 'a1', content: 'Original', mediaUrls: '["/x.jpg"]',
@@ -896,18 +1001,13 @@ describe('MCP Tools - update_post (executeTool)', () => {
       {
         postId: 'p1',
         scheduledTime: '2026-12-01T10:00:00Z',
-        // 这些字段都会被忽略
-        content: 'HACKED',
-        mediaUrls: ['/evil.jpg'],
+        // accountId 和 status 应该被忽略
         accountId: 'different-account',
         status: 'published',
       } as never,
       { userId: 'u1', scope: 'read_write' }
     )
-    // update.data 不应包含白名单外字段
     const updateArgs = postMock.update.mock.calls[0][0]
-    expect(updateArgs.data).not.toHaveProperty('content')
-    expect(updateArgs.data).not.toHaveProperty('mediaUrls')
     expect(updateArgs.data).not.toHaveProperty('accountId')
     expect(updateArgs.data).not.toHaveProperty('status')
   })
@@ -1086,5 +1186,286 @@ describe('MCP Tools - update_post 边界：scheduledTime 非日期字符串', ()
     expect(data.errorCode).toBe('INVALID_SCHEDULED_TIME')
     // 不能进 update 路径
     expect(postMock.update).not.toHaveBeenCalled()
+  })
+})
+
+// ===== v0.3.1: upload_media_from_path 测试 =====
+
+describe('MCP Tools - upload_media_from_path (executeTool)', () => {
+  beforeEach(() => {
+    resetMocks()
+    readFileSyncSpy.mockReset()
+  })
+
+  it('成功：读取本地 PNG 文件并上传', async () => {
+    readFileSyncSpy.mockReturnValue(Buffer.from('fake-png-data'))
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/Users/test/Downloads/photo.png' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.url).toMatch(/\/api\/uploads\//)
+    expect(data.mimeType).toBe('image/png')
+    expect(data.size).toBe(13) // 'fake-png-data'.length = 13
+    expect(data.filename).toBe('photo.png')
+  })
+
+  it('支持自定义 filename', async () => {
+    readFileSyncSpy.mockReturnValue(Buffer.from('data'))
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/tmp/x.jpg', filename: 'custom-name.jpg' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.filename).toBe('custom-name.jpg')
+  })
+
+  it('支持显式指定 mimeType', async () => {
+    readFileSyncSpy.mockReturnValue(Buffer.from('data'))
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/tmp/video.bin', mimeType: 'video/mp4' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.mimeType).toBe('video/mp4')
+    // 未传 filename 时使用 path.basename(filePath)，即 video.bin
+    expect(data.filename).toBe('video.bin')
+  })
+
+  it('文件不存在返回 FILE_NOT_FOUND', async () => {
+    const err = new Error('ENOENT') as NodeJS.ErrnoException
+    err.code = 'ENOENT'
+    readFileSyncSpy.mockImplementation(() => { throw err })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/nonexistent/file.jpg' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('FILE_NOT_FOUND')
+  })
+
+  it('读取其他错误返回 READ_FAILED', async () => {
+    readFileSyncSpy.mockImplementation(() => { throw new Error('permission denied') })
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/root/secret.jpg' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('READ_FAILED')
+  })
+
+  it('文件超限返回 FILE_TOO_LARGE', async () => {
+    const big = Buffer.alloc(11 * 1024 * 1024, 0) // 11MB
+    readFileSyncSpy.mockReturnValue(big)
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/tmp/big.png' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('FILE_TOO_LARGE')
+  })
+
+  it('不支持的文件扩展名返回 UNSUPPORTED_MIME', async () => {
+    readFileSyncSpy.mockReturnValue(Buffer.from('data'))
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/tmp/doc.pdf' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('UNSUPPORTED_MIME')
+  })
+
+  it('缺少 filePath 返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      {} as never,
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+  })
+
+  it('read scope 调用返回 INSUFFICIENT_SCOPE', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_path',
+      { filePath: '/tmp/photo.jpg' },
+      { userId: 'u1', scope: 'read' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INSUFFICIENT_SCOPE')
+  })
+})
+
+// ===== v0.3.1: upload_media_from_base64 测试 =====
+
+describe('MCP Tools - upload_media_from_base64 (executeTool)', () => {
+  beforeEach(() => {
+    resetMocks()
+  })
+
+  it('成功：上传纯 base64 编码的 PNG', async () => {
+    // 用 Buffer 编码一个小 PNG 数据为 base64
+    const original = Buffer.from('fake-png-data')
+    const b64 = original.toString('base64')
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: b64, filename: 'test.png', mimeType: 'image/png' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.url).toMatch(/\/api\/uploads\//)
+    expect(data.mimeType).toBe('image/png')
+    expect(data.size).toBe(13) // 'fake-png-data'.length = 13
+    expect(data.filename).toBe('test.png')
+  })
+
+  it('成功：支持 data URI 格式', async () => {
+    const original = Buffer.from('hello-img')
+    const b64 = original.toString('base64')
+    const dataUri = `data:image/jpeg;base64,${b64}`
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: dataUri },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.url).toMatch(/\/api\/uploads\//)
+    expect(data.mimeType).toBe('image/jpeg')
+    expect(data.size).toBe(9) // 'hello-img'.length
+    expect(data.filename).toMatch(/\.jpg$/)
+  })
+
+  it('data URI 优先使用传入的 mimeType', async () => {
+    const b64 = Buffer.from('x').toString('base64')
+    const dataUri = `data:application/octet-stream;base64,${b64}`
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: dataUri, mimeType: 'image/gif' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.mimeType).toBe('image/gif')
+  })
+
+  it('无 mimeType 时从 filename 扩展名推断', async () => {
+    const b64 = Buffer.from('data').toString('base64')
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: b64, filename: 'video.mp4' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.mimeType).toBe('video/mp4')
+    expect(data.filename).toBe('video.mp4')
+  })
+
+  it('文件超限返回 FILE_TOO_LARGE', async () => {
+    // 创建 6MB 的 base64 数据（解码后约 4.5MB，小于 5MB 上限）
+    // 但我们需要超限的，创建 5MB+1 原始数据
+    const big = Buffer.alloc(5 * 1024 * 1024 + 1, 0)
+    const b64 = big.toString('base64')
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: b64, mimeType: 'image/png' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('FILE_TOO_LARGE')
+  })
+
+  it('不支持的 MIME 类型返回 UNSUPPORTED_MIME', async () => {
+    const b64 = Buffer.from('data').toString('base64')
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: b64, filename: 'doc.pdf' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('UNSUPPORTED_MIME')
+  })
+
+  it('缺少 data 返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      {} as never,
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+  })
+
+  it('空字符串 data 返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: '' },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+  })
+
+  it('read scope 调用返回 INSUFFICIENT_SCOPE', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: Buffer.from('x').toString('base64'), mimeType: 'image/png' },
+      { userId: 'u1', scope: 'read' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INSUFFICIENT_SCOPE')
+  })
+
+  it('无 mimeType 无 filename 无 data URI 时返回 UNSUPPORTED_MIME', async () => {
+    const b64 = Buffer.from('data').toString('base64')
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool(
+      'upload_media_from_base64',
+      { data: b64 },
+      { userId: 'u1', scope: 'read_write' }
+    )
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('UNSUPPORTED_MIME')
+  })
+})
+
+// ===== 确保 TOOLS 列表包含新工具 =====
+
+describe('MCP Tools - TOOLS 列表完整性', () => {
+  it('应包含所有 9 个工具定义', async () => {
+    const { TOOLS } = await import('@/mcp/external/tools')
+    const names = TOOLS.map(t => t.name)
+    expect(names).toContain('upload_media_from_path')
+    expect(names).toContain('upload_media_from_base64')
+    expect(names).toHaveLength(9)
+  })
+
+  it('新工具都需要 write scope', async () => {
+    const { TOOL_SCOPE } = await import('@/mcp/external/tools')
+    expect(TOOL_SCOPE['upload_media_from_path']).toBe('write')
+    expect(TOOL_SCOPE['upload_media_from_base64']).toBe('write')
   })
 })

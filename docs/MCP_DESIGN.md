@@ -9,6 +9,8 @@
 | **v0.2.2** | **2026-06-01** | **添加 externalPostUrl 必填说明，修复发布回传问题** |
 | **v0.2.3** | **2026-06-01** | **mediaUrls 返回完整 HTTP URL，CLI 可直接下载；集成端点替代独立服务** |
 | **v0.3** | **2026-06-02** | **写能力 MVP**：新增 `upload_media_from_url` / `create_post` / `update_post` 三个写工具；引入 Scope 权限系统（`read` / `write` / `read_write` 三档）；写工具受字段白名单 + 状态锁双重保护 |
+| **v0.3.1** | **2026-06-02** | **本地媒体上传**：新增 `upload_media_from_path`（本地文件路径直接读取）和 `upload_media_from_base64`（base64 编码数据，上限 5MB）两个写工具 |
+| **v0.3.2** | **2026-06-02** | **扩展 update_post**：支持通过外部 MCP 修改 content 和 mediaUrls，方便 AI 辅助编辑内容 |
 
 ## 概述
 
@@ -79,13 +81,15 @@
 | `get_post_detail` | 获取帖子详情 | read |
 | `report_publish_result` | 报告发布结果 | read |
 
-**写工具（write / read_write scope，v0.3）**
+**写工具（write / read_write scope，v0.3 / v0.3.1）**
 
-| 工具 | 描述 | 权限 |
-|------|------|------|
-| `upload_media_from_url` | 服务端拉 URL 媒体存盘 | write |
-| `create_post` | 创建 scheduled 帖子 | write |
-| `update_post` | 限制性更新（仅发布时间/时区） | write |
+| 工具 | 描述 | 权限 | 版本 |
+|------|------|------|------|
+| `upload_media_from_url` | 服务端拉 URL 媒体存盘 | write | v0.3 |
+| `upload_media_from_path` | 从本地文件路径读取媒体存盘 | write | v0.3.1 |
+| `upload_media_from_base64` | 从 base64 编码数据上传媒体 | write | v0.3.1 |
+| `create_post` | 创建 scheduled 帖子 | write | v0.3 |
+| `update_post` | 限制性更新（支持 content/mediaUrls/scheduledTime/timezone） | write | v0.3.2 |
 
 ### 2.2 工具详细定义
 
@@ -357,40 +361,67 @@
 6. `timezone` 缺省填 `Asia/Shanghai`
 7. 创建 Post（status='scheduled'），返回完整数据
 
-#### 2.2.7 update_post（v0.3 新增）
+#### 2.2.7 update_post（v0.3 新增，v0.3.2 扩展）
 
 ```typescript
 {
   name: "update_post",
-  description: "更新 draft/scheduled 帖子的发布时间/时区。只能修改白名单字段，其它字段被静默忽略。",
+  description: "更新 draft/scheduled 帖子的内容、媒体或发布时间。只能修改白名单字段。",
   inputSchema: {
     type: "object",
     properties: {
       postId: { type: "string" },
-      scheduledTime: { type: "string" },
-      timezone: { type: "string" }
+      content: { type: "string", description: "帖子正文" },
+      mediaUrls: { 
+        type: "array", 
+        items: { type: "string" },
+        description: "媒体 URL 列表（需先用 upload_media_from_* 工具上传）"
+      },
+      scheduledTime: { type: "string", description: "计划发布时间，ISO 8601 格式" },
+      timezone: { type: "string", description: "时区，如 Asia/Shanghai" }
     },
     required: ["postId"]
   }
+}
+
+// 成功返回
+{
+  "success": true,
+  "post": {
+    "id": "clx_post_abc",
+    "accountId": "acct_xyz",
+    "accountDisplayName": "我的小红书",
+    "content": "更新后的内容",
+    "mediaUrls": ["/api/uploads/2026-06-02/abc.png"],
+    "scheduledTime": "2026-06-02T15:00:00+08:00",
+    "timezone": "Asia/Shanghai",
+    "status": "scheduled",
+    "publishToken": "tok_01d725b1..."
+  }
+}
+
+// 失败返回
+{
+  "success": false,
+  "error": "cannot update post in status 'published'",
+  "errorCode": "INVALID_STATUS"
 }
 ```
 
 **服务端处理流程**：
 1. 校验 `postId` 属于当前用户、未软删
 2. **状态锁**：必须是 `draft` 或 `scheduled`，否则返回 `INVALID_STATUS`
-3. **字段白名单**：服务端只接受 `scheduledTime` 和 `timezone`；其它字段（`content` / `mediaUrls` / `accountId` / `status`）**直接忽略**，不会写库
-4. `scheduledTime` 同样必须是未来时间
-5. 执行 `prisma.post.update({ data: 白名单字段 })`
-6. 返回更新后的 post
+3. **字段白名单**：服务端只接受 `content`、`mediaUrls`、`scheduledTime` 和 `timezone`；`accountId` 和 `status` **直接忽略**，不会写库
+4. **内容校验**：`content` 与 `mediaUrls` 至少有一个非空，否则返回 `EMPTY_CONTENT`
+5. `scheduledTime` 必须是未来时间
+6. 执行 `prisma.post.update({ data: 白名单字段 })`
+7. 返回更新后的 post
 
-**为什么不重新生成 publishToken？**
-publishToken 验证的是「第三方有权更新此帖的发布状态」，与帖子内容/时间无关。改时间不影响发布权，所以沿用原 token 即可，避免 AI 改了 schedule 后旧 token 失效导致流程断裂。
-
-**为什么不支持改 content/media？**
-外部 AI 已经能通过 create_post 重新创建（虽然麻烦），但故意不开放是为了：
-- 防止 AI 在审核前偷偷改内容绕过人工 review
-- 防止 AI 误换账号、误换媒体（社媒事故第一杀手）
-- 强制所有内容变更走「删 + 重建」流程，保留审计完整性
+**v0.3.2 扩展说明**：
+- 原来只支持修改 `scheduledTime` 和 `timezone`，方便 AI 辅助编辑
+- 现在额外支持 `content`（帖子正文）和 `mediaUrls`（媒体 URL 列表）
+- 媒体 URL 需先用 `upload_media_from_url` / `upload_media_from_path` / `upload_media_from_base64` 上传后获得
+- `accountId` 仍不可改（防止 AI 误换账号）；`status` 仍不可改（防止绕过状态机）
 
 ### 2.3 发布流程
 

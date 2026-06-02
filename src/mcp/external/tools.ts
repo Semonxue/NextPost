@@ -9,6 +9,8 @@
  *
  * v0.3 MVP 写工具（需要 write / read_write scope）：
  * - upload_media_from_url: 从 URL 拉取媒体存到 NextPost
+ * - upload_media_from_path: 从本地文件路径读取媒体存到 NextPost
+ * - upload_media_from_base64: 从 base64 编码数据上传媒体
  * - create_post: 创建 scheduled 帖子
  * - update_post: 限制性更新（仅 scheduledTime / timezone）
  *
@@ -19,6 +21,8 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type {
   ExternalAccount,
@@ -41,10 +45,12 @@ export const TOOL_SCOPE: Record<string, ToolRequiredScope> = {
   get_pending_posts: 'read',
   get_post_detail: 'read',
   report_publish_result: 'read',
-  // v0.3 write
-  upload_media_from_url: 'write',
-  create_post: 'write',
-  update_post: 'write',
+// v0.3 write
+upload_media_from_url: 'write',
+upload_media_from_path: 'write',
+upload_media_from_base64: 'write',
+create_post: 'write',
+update_post: 'write',
 };
 
 // 文件大小上限（与 /api/media/upload 保持一致）
@@ -185,6 +191,50 @@ export const TOOLS: Tool[] = [
     }
   },
   {
+    name: 'upload_media_from_path',
+    description: '从本地文件系统路径读取媒体文件并存入 NextPost，返回可在 create_post 中使用的 URL。需要 write 或 read_write 权限。适用于 MCP 服务器与文件在同一台机器的场景，无 base64 编码开销，支持任意大小文件。文件大小上限 10MB，仅支持图片/视频。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filePath: {
+          type: 'string',
+          description: '本地文件绝对路径，如 /Users/xxx/Downloads/photo.jpg'
+        },
+        filename: {
+          type: 'string',
+          description: '可选，自定义保存文件名（含扩展名）。不传则使用原始文件名'
+        },
+        mimeType: {
+          type: 'string',
+          description: '可选，显式指定 MIME 类型。不传则根据文件扩展名推断'
+        }
+      },
+      required: ['filePath']
+    }
+  },
+  {
+    name: 'upload_media_from_base64',
+    description: '从 base64 编码的数据上传媒体文件存入 NextPost，返回可在 create_post 中使用的 URL。需要 write 或 read_write 权限。适用于无法提供本地路径或公网 URL 的场景。文件大小上限 5MB（base64 编码后约 6.7MB），仅支持图片/视频。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'string',
+          description: 'Base64 编码的文件内容（支持纯 base64 或 data URI 格式如 data:image/png;base64,xxx）'
+        },
+        filename: {
+          type: 'string',
+          description: '文件名（含扩展名，如 photo.jpg）。不传则根据 mimeType 推断'
+        },
+        mimeType: {
+          type: 'string',
+          description: 'MIME 类型（如 image/jpeg）。如果 data 是 data URI 格式则可省略'
+        }
+      },
+      required: ['data']
+    }
+  },
+  {
     name: 'create_post',
     description: '创建一个新的 scheduled 帖子。需要 write 或 read_write 权限。content 与 mediaUrls 至少要有一个非空；scheduledTime 必须是未来时间的 ISO 8601 字符串（如 2026-06-02T10:00:00+08:00）。返回的 publishToken 是后续发布结果回传的关键。',
     inputSchema: {
@@ -217,13 +267,22 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'update_post',
-    description: '更新一个 draft 或 scheduled 帖子的发布时间/时区。需要 write 或 read_write 权限。【重要】只能修改 scheduledTime 和 timezone，其它字段（content/mediaUrls/accountId/status）一律忽略，不会被改动。已进入 publishing/published/failed 状态的帖子不可修改。',
+    description: '更新一个 draft 或 scheduled 帖子的内容、媒体或发布时间。需要 write 或 read_write 权限。可修改 content、mediaUrls、scheduledTime、timezone；accountId 和 status 不可改。已进入 publishing/published/failed 状态的帖子不可修改。',
     inputSchema: {
       type: 'object',
       properties: {
         postId: {
           type: 'string',
           description: '要更新的帖子 ID'
+        },
+        content: {
+          type: 'string',
+          description: '帖子正文'
+        },
+        mediaUrls: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '媒体 URL 列表（需先用 upload_media_from_* 工具上传）'
         },
         scheduledTime: {
           type: 'string',
@@ -534,6 +593,151 @@ async function uploadMediaFromUrl(
   };
 }
 
+// MIME 类型推断：根据扩展名
+const EXT_TO_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+};
+
+// 根据 MIME 推断扩展名
+function mimeToExt(mimeType: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'video/mp4': '.mp4',
+    'video/webm': '.webm',
+  };
+  return map[mimeType] || '';
+}
+
+/**
+ * 从本地文件路径读取媒体存到 NextPost
+ */
+async function uploadMediaFromPath(
+  _userId: string,
+  filePath: string,
+  filename?: string,
+  mimeType?: string
+): Promise<UploadMediaResult | { error: string; errorCode: string }> {
+  if (!filePath || typeof filePath !== 'string') {
+    return { error: 'filePath is required', errorCode: 'INVALID_ARGUMENT' };
+  }
+
+  // 读取文件
+  let fileBuffer: Buffer;
+  try {
+    fileBuffer = fs.readFileSync(filePath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return { error: `file not found: ${filePath}`, errorCode: 'FILE_NOT_FOUND' };
+    }
+    return {
+      error: `failed to read file: ${err instanceof Error ? err.message : 'unknown'}`,
+      errorCode: 'READ_FAILED',
+    };
+  }
+
+  // 文件大小校验
+  if (fileBuffer.byteLength > MAX_MEDIA_SIZE) {
+    return {
+      error: `file too large: ${fileBuffer.byteLength} > ${MAX_MEDIA_SIZE}`,
+      errorCode: 'FILE_TOO_LARGE',
+    };
+  }
+
+  // MIME 校验
+  const effectiveMime = mimeType || EXT_TO_MIME[path.extname(filePath).toLowerCase()] || '';
+  if (!effectiveMime || !ALLOWED_MIME_TYPES.has(effectiveMime)) {
+    return {
+      error: `unsupported mime type: ${effectiveMime || 'unknown'}`,
+      errorCode: 'UNSUPPORTED_MIME',
+    };
+  }
+
+  // 文件名：用自定义的、或取原始文件名
+  const finalFilename = filename || path.basename(filePath);
+
+  const result = await uploadFile(fileBuffer, finalFilename, effectiveMime);
+  return {
+    url: result.url,
+    mimeType: result.mimeType,
+    size: result.size,
+    filename: result.filename,
+  };
+}
+
+// base64 大小上限（5MB 原始文件 ≈ 6.7MB base64）
+const MAX_BASE64_SIZE = 5 * 1024 * 1024;
+
+/**
+ * 从 base64 编码数据上传媒体存到 NextPost
+ */
+async function uploadMediaFromBase64(
+  _userId: string,
+  data: string,
+  filename?: string,
+  mimeType?: string
+): Promise<UploadMediaResult | { error: string; errorCode: string }> {
+  if (!data || typeof data !== 'string') {
+    return { error: 'data is required', errorCode: 'INVALID_ARGUMENT' };
+  }
+
+  // 支持 data URI 格式：data:image/png;base64,xxxxx
+  let effectiveMime = mimeType || '';
+  let rawBase64 = data;
+  const dataUriMatch = data.match(/^data:([^;]+);base64,(.+)$/);
+  if (dataUriMatch) {
+    effectiveMime = effectiveMime || dataUriMatch[1];
+    rawBase64 = dataUriMatch[2];
+  }
+
+  // 解码 base64
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(rawBase64, 'base64');
+  } catch {
+    return { error: 'invalid base64 data', errorCode: 'INVALID_BASE64' };
+  }
+
+  // 大小校验（解码后的原始大小）
+  if (buffer.byteLength > MAX_BASE64_SIZE) {
+    return {
+      error: `file too large: ${buffer.byteLength} > ${MAX_BASE64_SIZE}`,
+      errorCode: 'FILE_TOO_LARGE',
+    };
+  }
+
+  // MIME 校验：如果给了 filename 没给 mimeType，尝试从扩展名推断
+  if (!effectiveMime && filename) {
+    effectiveMime = EXT_TO_MIME[path.extname(filename).toLowerCase()] || '';
+  }
+  if (!effectiveMime || !ALLOWED_MIME_TYPES.has(effectiveMime)) {
+    return {
+      error: `unsupported mime type: ${effectiveMime || 'unknown'}。请提供 mimeType 参数或使用 data URI 格式`,
+      errorCode: 'UNSUPPORTED_MIME',
+    };
+  }
+
+  // 文件名
+  const finalFilename = filename || `${Date.now()}${mimeToExt(effectiveMime)}`;
+
+  const result = await uploadFile(buffer, finalFilename, effectiveMime);
+  return {
+    url: result.url,
+    mimeType: result.mimeType,
+    size: result.size,
+    filename: result.filename,
+  };
+}
+
 /**
  * 提取 Post 写入返回的字段
  */
@@ -617,11 +821,13 @@ async function createPost(
 }
 
 /**
- * 限制性更新帖子（仅 scheduledTime / timezone）
+ * 限制性更新帖子（v0.3.2：支持 content 和 mediaUrls）
  */
 async function updatePost(
   userId: string,
   postId: string,
+  content?: string,
+  mediaUrls?: string[],
   scheduledTime?: string,
   timezone?: string
 ): Promise<WriteResult> {
@@ -642,8 +848,28 @@ async function updatePost(
     };
   }
 
-  // 字段白名单
+  // 字段白名单：content, mediaUrls, scheduledTime, timezone
   const data: Record<string, unknown> = {};
+  
+  // content - 可选，但要校验与 mediaUrls 至少有一个非空
+  if (content !== undefined) {
+    data.content = content;
+  }
+  
+  // mediaUrls - 可选
+  if (mediaUrls !== undefined) {
+    data.mediaUrls = JSON.stringify(mediaUrls);
+  }
+
+  // 内容校验：content 与 mediaUrls 至少有一个非空
+  const hasContent = content !== undefined && content.trim().length > 0;
+  const hasMedia = mediaUrls !== undefined && mediaUrls.length > 0;
+  if (!hasContent && !hasMedia && (content !== undefined || mediaUrls !== undefined)) {
+    // 只有当至少传了一个字段时才校验
+    return { success: false, error: 'content or mediaUrls required', errorCode: 'EMPTY_CONTENT' };
+  }
+
+  // scheduledTime - 可选
   if (scheduledTime !== undefined) {
     const date = new Date(scheduledTime);
     if (isNaN(date.getTime())) {
@@ -654,6 +880,8 @@ async function updatePost(
     }
     data.scheduledTime = date;
   }
+
+  // timezone - 可选
   if (timezone !== undefined) {
     data.timezone = timezone;
   }
@@ -824,6 +1052,36 @@ export async function executeTool(
         };
       }
 
+      case 'upload_media_from_path': {
+        const { filePath, filename, mimeType } = args as {
+          filePath: string;
+          filename?: string;
+          mimeType?: string;
+        };
+        const result = await uploadMediaFromPath(ctx.userId, filePath, filename, mimeType);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      case 'upload_media_from_base64': {
+        const { data, filename, mimeType } = args as {
+          data: string;
+          filename?: string;
+          mimeType?: string;
+        };
+        const result = await uploadMediaFromBase64(ctx.userId, data, filename, mimeType);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
       case 'create_post': {
         const { accountId, content, mediaUrls, scheduledTime, timezone } = args as {
           accountId: string;
@@ -849,12 +1107,14 @@ export async function executeTool(
       }
 
       case 'update_post': {
-        const { postId, scheduledTime, timezone } = args as {
+        const { postId, content, mediaUrls, scheduledTime, timezone } = args as {
           postId: string;
+          content?: string;
+          mediaUrls?: string[];
           scheduledTime?: string;
           timezone?: string;
         };
-        const result = await updatePost(ctx.userId, postId, scheduledTime, timezone);
+        const result = await updatePost(ctx.userId, postId, content, mediaUrls, scheduledTime, timezone);
         return {
           content: [{
             type: 'text',

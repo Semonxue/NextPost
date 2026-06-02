@@ -364,6 +364,23 @@ export default function CalendarPage() {
             )}
           </div>
 
+          {/* 状态筛选 */}
+          <div className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+            {statusFilters.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  statusFilter === f.value
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
           {/* 清除筛选 */}
           {hasActiveFilters && (
             <button
@@ -371,66 +388,49 @@ export default function CalendarPage() {
                 setStatusFilter("all");
                 clearAllFilters();
               }}
-              className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             >
-              <X size={16} />
+              <X size={12} />
               清除
             </button>
           )}
         </div>
       </div>
 
-      {/* 状态筛选 - 独立一行 */}
-      <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 w-fit">
-        {statusFilters.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setStatusFilter(f.value)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              statusFilter === f.value
-                ? "bg-blue-600 text-white"
-                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Calendar */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
               {currentDate.getFullYear()}年 {monthNames[currentDate.getMonth()]}
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <button
                 onClick={() => navigateMonth(-1)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
               >
-                <ChevronLeft size={20} className="text-gray-600 dark:text-gray-400" />
+                <ChevronLeft size={16} className="text-gray-600 dark:text-gray-400" />
               </button>
               <button
                 onClick={() => setCurrentDate(new Date())}
-                className="px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="px-2 py-1 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
               >
                 今天
               </button>
               <button
                 onClick={() => navigateMonth(1)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
               >
-                <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
+                <ChevronRight size={16} className="text-gray-600 dark:text-gray-400" />
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5">
             {dayNames.map((day) => (
               <div
                 key={day}
-                className="text-center text-sm font-medium text-gray-500 dark:text-gray-400 py-2"
+                className="text-center text-xs font-medium text-gray-400 dark:text-gray-500 py-1"
               >
                 {day}
               </div>
@@ -451,7 +451,7 @@ export default function CalendarPage() {
                 <div
                   key={index}
                   onClick={() => day && setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
-                  className={`min-h-[80px] p-2 border border-gray-100 dark:border-gray-700 rounded-lg cursor-pointer transition-colors ${
+                  className={`min-h-[100px] p-0.5 border border-gray-100 dark:border-gray-700 rounded cursor-pointer transition-colors ${
                     day ? "hover:bg-gray-50 dark:hover:bg-gray-700/50" : "bg-gray-50 dark:bg-gray-900 cursor-default"
                   } ${isToday ? "bg-blue-50 dark:bg-blue-900/20" : ""} ${
                     isSelected ? "ring-2 ring-blue-500" : ""
@@ -460,40 +460,49 @@ export default function CalendarPage() {
                   {day && (
                     <>
                       <span
-                        className={`text-sm font-medium ${
+                        className={`text-[10px] font-medium block mb-0.5 ${
                           isToday
                             ? "text-blue-600 dark:text-blue-400"
-                            : "text-gray-700 dark:text-gray-300"
+                            : "text-gray-400 dark:text-gray-500"
                         }`}
                       >
                         {day}
                       </span>
                       {dayPosts.length > 0 && (
-                        <div className="mt-1 space-y-1">
-                          {dayPosts.slice(0, 2).map((post) => {
+                        <div className="space-y-0.5">
+                          {dayPosts.slice(0, 4).map((post) => {
                             const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
                             return (
                               <div
                                 key={post.id}
-                                className={`text-xs px-1 py-0.5 rounded truncate flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
+                                className={`text-[10px] p-0.5 rounded flex items-center gap-1 ${statusColors[post.status] || statusColors.draft}`}
                               >
                                 {mediaArr.length > 0 && (
                                   <MediaThumbnail
                                     urls={mediaArr}
-                                    size={16}
-                                    className="rounded"
+                                    size={28}
+                                    className="rounded flex-shrink-0"
                                   />
                                 )}
-                                {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[10px] font-medium truncate">
+                                    {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </div>
+                                  {post.content && (
+                                    <div className="text-[9px] opacity-60 truncate dark:opacity-40">
+                                      {post.content}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
-                          {dayPosts.length > 2 && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              +{dayPosts.length - 2} 更多
+                          {dayPosts.length > 4 && (
+                            <div className="text-[9px] text-gray-400 dark:text-gray-500 text-center">
+                              +{dayPosts.length - 4}
                             </div>
                           )}
                         </div>
@@ -539,9 +548,10 @@ export default function CalendarPage() {
                 </div>
               ) : (
                 selectedDatePosts.map((post) => (
-                  <div
+                  <Link
                     key={post.id}
-                    className="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    href={`/posts/${post.id}/edit`}
+                    className="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
@@ -552,7 +562,7 @@ export default function CalendarPage() {
                           {statusLabels[post.status] || "未知"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         {post.externalPostUrl && (
                           <a
                             href={post.externalPostUrl}
@@ -564,17 +574,12 @@ export default function CalendarPage() {
                             <ExternalLink size={14} className="text-blue-500" />
                           </a>
                         )}
-                        <Link
-                          href={`/posts/${post.id}/edit`}
-                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
-                        >
-                          <span className="text-xs text-blue-600 dark:text-blue-400">
-                            {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </Link>
+                        <span className="text-xs text-blue-600 dark:text-blue-400">
+                          {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
@@ -589,7 +594,7 @@ export default function CalendarPage() {
                         {post.content || "（无文字内容）"}
                       </p>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </div>
