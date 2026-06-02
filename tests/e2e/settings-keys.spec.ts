@@ -179,30 +179,45 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     await expect(page.getByTestId('filter-read_write')).toContainText('2');
   });
 
-  test('TC-SETTINGS-007: 修改已有 key 的 scope（read → read_write）', async ({ page }) => {
-    // 先造一个 read key
+  test('TC-SETTINGS-007: UI 不再提供修改 scope 的入口（只能删了重建）', async ({ page }) => {
+    // 造一个 read key
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    const created = await prisma.externalApiKey.create({
-      data: { userId, name: 'Upgrade Me', key: keyValue, permissions: 'read' },
+    await prisma.externalApiKey.create({
+      data: { userId, name: 'Immutable', key: keyValue, permissions: 'read' },
     });
-
-    // 接受 confirm 对话框（必须在 navigation 之前注册）
-    page.on('dialog', (dialog) => dialog.accept());
 
     await page.goto('/settings');
 
-    // 找到这一行，改 select
-    const row = page.getByTestId('external-key-row').filter({ hasText: 'Upgrade Me' });
-    const scopeSelect = row.getByTestId('key-scope-select');
-    await scopeSelect.selectOption('read_write');
+    const row = page.getByTestId('external-key-row').filter({ hasText: 'Immutable' });
+    // 行内不再有 scope <select>
+    await expect(row.getByTestId('key-scope-select')).toHaveCount(0);
+    // 类型 label 还在
+    await expect(row.getByTestId('key-type-badge')).toHaveText('只读');
+    // 列表上方有"不可修改"提示
+    await expect(page.getByText(/Key 的类型.*不可修改/)).toBeVisible();
+    // 删除按钮 tooltip 提示了"要改类型？删了重建"
+    const deleteBtn = row.getByTestId('key-delete-btn');
+    await expect(deleteBtn).toHaveAttribute('title', /要改类型？删了重建/);
+  });
 
-    // 等 DB 更新
-    await expect.poll(async () => {
-      const k = await prisma.externalApiKey.findUnique({ where: { id: created.id } });
-      return k?.permissions;
-    }, { timeout: 5000 }).toBe('read_write');
+  test('TC-SETTINGS-008: 刷新页面后 scope 显示仍然正确（不被任何残留表单污染）', async ({ page }) => {
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    await prisma.externalApiKey.create({
+      data: { userId, name: 'Persist Me', key: keyValue, permissions: 'read_write' },
+    });
+
+    await page.goto('/settings');
+    await expect(page.getByTestId('external-keys-list').getByText('Persist Me')).toBeVisible();
+
+    // 刷新
+    await page.reload();
+    const row = page.getByTestId('external-key-row').filter({ hasText: 'Persist Me' });
+    await expect(row).toBeVisible();
+    await expect(row.getByTestId('key-type-badge')).toHaveText('读写');
   });
 });
 
