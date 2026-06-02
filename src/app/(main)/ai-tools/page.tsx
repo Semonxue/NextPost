@@ -16,7 +16,6 @@ import { redirect } from "next/navigation";
 import { TOOLS, TOOL_SCOPE } from "@/mcp/external/tools";
 import prisma from "@/lib/prisma";
 import { ShieldAlert, Wrench, Plug, KeyRound, ScrollText } from "lucide-react";
-import { RevealKeyButton } from "./RevealKeyButton";
 import { CopyButton } from "./CopyButton";
 
 export const dynamic = "force-dynamic";
@@ -160,52 +159,21 @@ export default async function AIToolsPage() {
             </p>
           </div>
 
-          {/* 你的 Keys */}
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              <KeyRound size={16} />
-              你的 API Key（{keys.length}）
-            </h3>
-            {keys.length === 0 ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-                还没有 API Key。前往{" "}
-                <a href="/settings" className="text-blue-600 hover:underline">设置</a>{" "}
-                创建一个。
-              </div>
-            ) : (
-              <ul className="space-y-2">
-                {keys.map((k) => (
-                  <li
-                    key={k.id}
-                    className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900 rounded-lg px-4 py-2.5"
-                    data-testid="apikey-row"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900 dark:text-white truncate">
-                          {k.name}
-                        </span>
-                        <span
-                          className={`text-xs px-1.5 py-0.5 rounded ${
-                            k.permissions === "read_write"
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                              : k.permissions === "write"
-                                ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
-                                : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                          }`}
-                        >
-                          {k.permissions}
-                        </span>
-                      </div>
-                      <code className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-                        {k.keyPreview}
-                      </code>
-                    </div>
-                    <RevealKeyButton keyId={k.id} />
-                  </li>
-                ))}
-              </ul>
-            )}
+          {/* 你的 Keys —— 仅展示状态 + 跳转设置（不在此页做 Key 管理） */}
+          <div className="flex items-center justify-between gap-3 bg-gray-50 dark:bg-gray-900 rounded-lg px-4 py-3" data-testid="apikey-summary">
+            <div className="flex items-center gap-2 min-w-0">
+              <KeyRound size={16} className="text-gray-500 shrink-0" />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                你当前有 <strong data-testid="apikey-count">{keys.length}</strong> 个 API Key
+              </span>
+            </div>
+            <a
+              href="/settings"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline shrink-0"
+              data-testid="goto-settings-link"
+            >
+              去设置管理 →
+            </a>
           </div>
 
           {/* 客户端配置示例 */}

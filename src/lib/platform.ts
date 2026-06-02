@@ -51,6 +51,9 @@ export interface MediaItem {
   size?: number; // 文件大小
 }
 
+// 视频文件扩展名列表
+const VIDEO_EXTENSIONS = ["mp4", "webm", "ogg", "mov", "m4v", "avi", "mkv"];
+
 /**
  * 计算文字长度（用于 Twitter 等平台的字符计数）
  * Twitter 使用特殊的计数方式：
@@ -119,4 +122,40 @@ export function isImageFile(file: File): boolean {
  */
 export function isVideoFile(file: File): boolean {
   return file.type.startsWith("video/");
+}
+
+/**
+ * 根据 MIME 类型判断是否为视频
+ */
+export function isVideoMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith("video/");
+}
+
+/**
+ * 根据 MIME 类型判断是否为图片
+ */
+export function isImageMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith("image/");
+}
+
+/**
+ * 根据 URL 后缀判断是否为视频 URL
+ * 支持查询参数（如 .mp4?token=xxx）
+ */
+export function isVideoUrl(url: string): boolean {
+  if (!url) return false;
+  // 去掉查询参数
+  const cleanUrl = url.split("?")[0].split("#")[0];
+  const ext = cleanUrl.toLowerCase().split(".").pop() || "";
+  return VIDEO_EXTENSIONS.includes(ext);
+}
+
+/**
+ * 根据 URL 后缀判断是否为图片 URL
+ */
+export function isImageUrl(url: string): boolean {
+  if (!url) return false;
+  const cleanUrl = url.split("?")[0].split("#")[0];
+  const ext = cleanUrl.toLowerCase().split(".").pop() || "";
+  return ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext);
 }

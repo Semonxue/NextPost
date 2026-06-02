@@ -106,6 +106,22 @@ export async function validateApiKey(apiKey: string): Promise<{
       data: { lastUsedAt: new Date() }
     });
 
+    // 【v0.4 修复】自动迁移遗留的 'read_report' → 'read'。
+    // 背景：v0.2 时代所有 key 默认是 'read_report'，但用户/AI 客户端经常误以为是
+    // 'read_write'。parseScope 会静默降级为 'read'，所以工具调用都返回 INSUFFICIENT_SCOPE。
+    // 这里主动把 DB 改对，让状态自我修复，并打日志提醒（用户后续能通过 Settings UI
+    // 看到这条 key 的真实 scope = 'read'，需要的话手动删了重建为 read_write）。
+    if (apiKeyRecord.permissions === 'read_report') {
+      await prisma.externalApiKey.update({
+        where: { id: apiKeyRecord.id },
+        data: { permissions: 'read' },
+      });
+      console.warn(
+        `[MCP Auth] Auto-migrated legacy key ${apiKeyRecord.id} (name="${apiKeyRecord.name}", user=${apiKeyRecord.userId}) from 'read_report' to 'read'. User should recreate if they need write.`
+      );
+      apiKeyRecord.permissions = 'read';
+    }
+
     return {
       valid: true,
       userId: apiKeyRecord.userId,
@@ -227,6 +243,13 @@ export async function listApiKeys(userId: string): Promise<{
   error?: string;
 }> {
   try {
+    // 【v0.4】先把遗留的 read_report 一次性迁到 read，让 Settings UI 展示真实 scope
+    // (幂等：updateMany 在没匹配行时 count=0，不抛错)
+    await prisma.externalApiKey.updateMany({
+      where: { userId, permissions: 'read_report' },
+      data: { permissions: 'read' },
+    });
+
     const keys = await prisma.externalApiKey.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }

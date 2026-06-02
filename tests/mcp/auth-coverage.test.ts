@@ -93,6 +93,47 @@ describe('MCP Auth - 补充测试', () => {
       expect(result.userId).toBe('u1')
     })
 
+    it('【v0.4 关键】read_report 遗留 key 应被自动迁移到 read，并返回 scope=read', async () => {
+      externalApiKeyMock.findUnique.mockResolvedValue({
+        id: 'k1', userId: 'u1', name: 'Old', key: 'npk_old',
+        permissions: 'read_report',
+        expiresAt: null,
+      })
+      externalApiKeyMock.update.mockResolvedValue({})
+      const { validateApiKey } = await import('@/mcp/external/auth')
+      const result = await validateApiKey('npk_old')
+
+      expect(result.valid).toBe(true)
+      // 关键：scope 是 read，不是 read_write（不是 read_report）
+      expect(result.scope).toBe('read')
+      // update 被调用了两次：一次更新 lastUsedAt，一次迁移 read_report → read
+      expect(externalApiKeyMock.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'k1' },
+          data: { permissions: 'read' },
+        })
+      )
+    })
+
+    it('【v0.4】非 read_report 的 key 不触发迁移 update', async () => {
+      externalApiKeyMock.findUnique.mockResolvedValue({
+        id: 'k1', userId: 'u1', name: 'New', key: 'npk_new',
+        permissions: 'read_write',
+        expiresAt: null,
+      })
+      externalApiKeyMock.update.mockResolvedValue({})
+      const { validateApiKey } = await import('@/mcp/external/auth')
+      const result = await validateApiKey('npk_new')
+
+      expect(result.valid).toBe(true)
+      expect(result.scope).toBe('read_write')
+      // 只调了一次 update（lastUsedAt），没有迁移 update
+      const updateCalls = externalApiKeyMock.update.mock.calls.filter(
+        (call) => 'permissions' in (call[0]?.data ?? {})
+      )
+      expect(updateCalls).toHaveLength(0)
+    })
+
     it('should handle db errors', async () => {
       externalApiKeyMock.findUnique.mockRejectedValue(new Error('DB error'))
       const { validateApiKey } = await import('@/mcp/external/auth')

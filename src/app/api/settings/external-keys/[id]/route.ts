@@ -2,13 +2,18 @@
  * 外部 API Key 单个操作接口
  *
  * DELETE /api/settings/external-keys/:id - 删除指定 Key
- * PATCH  /api/settings/external-keys/:id - 修改 name / scope
+ * PATCH  /api/settings/external-keys/:id - 修改 name（scope 不可改）
+ *
+ * 【v0.4 安全设计】scope 在创建后不可修改。原因：
+ *   1. 防手抖 / 防钓鱼：UI 已经不允许改，但 API 直接调也能改就是漏洞
+ *   2. 审计干净：要改权限必须删了重建，DB 里有完整的"创建"事件
+ *   3. 一致性：UI / API 行为统一
+ * 如需升级权限（只读 → 读写），请用户删除后重新创建。
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { deleteApiKey, parseScope } from '@/mcp/external/auth';
-import type { Scope } from '@/mcp/external/types';
+import { deleteApiKey } from '@/mcp/external/auth';
 import prisma from '@/lib/prisma';
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -27,17 +32,22 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Key ID is required' }, { status: 400 });
   }
 
-  const result = await deleteApiKey(session.user.id, id);
+  try {
+    const result = await deleteApiKey(session.user.id, id);
 
-  if (!result.success) {
-    return NextResponse.json({ error: result.error }, { status: 404 });
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting API Key:', error);
+    return NextResponse.json({ error: 'Failed to delete API Key' }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true });
 }
 
-// PATCH 修改 name / scope
-// Body: { name?: string, scope?: 'read' | 'write' | 'read_write' }
+// PATCH 修改 name（scope 不可改）
+// Body: { name?: string }
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const session = await auth();
 
@@ -57,37 +67,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // 至少要有一个可改字段
-  if (body.name === undefined && body.scope === undefined) {
+  // 【v0.4 安全】scope 字段不接受。即使传了也直接 400 拒绝。
+  if (body.scope !== undefined) {
     return NextResponse.json(
-      { error: 'No updatable fields provided (name / scope)' },
+      {
+        error: "scope is immutable after creation. Delete the key and create a new one if you need different permissions.",
+        errorCode: 'SCOPE_IMMUTABLE',
+      },
       { status: 400 }
     );
   }
 
-  const data: { name?: string; permissions?: Scope } = {};
-
-  if (body.name !== undefined) {
-    if (typeof body.name !== 'string' || body.name.trim() === '') {
-      return NextResponse.json({ error: 'name must be a non-empty string' }, { status: 400 });
-    }
-    data.name = body.name.trim();
+  // 至少要有一个可改字段
+  if (body.name === undefined) {
+    return NextResponse.json(
+      { error: 'No updatable fields provided (only "name" is supported via PATCH)' },
+      { status: 400 }
+    );
   }
 
-  if (body.scope !== undefined) {
-    if (typeof body.scope !== 'string') {
-      return NextResponse.json({ error: 'scope must be a string' }, { status: 400 });
-    }
-    // parseScope 内部会做白名单 + 安全降级；这里再做一次显式白名单以便对错误值返回 400
-    const allowed = ['read', 'write', 'read_write', 'read_report'];
-    if (!allowed.includes(body.scope)) {
-      return NextResponse.json(
-        { error: `scope must be one of: ${allowed.join(', ')}` },
-        { status: 400 }
-      );
-    }
-    data.permissions = parseScope(body.scope);
+  if (typeof body.name !== 'string' || body.name.trim() === '') {
+    return NextResponse.json({ error: 'name must be a non-empty string' }, { status: 400 });
   }
+  const data: { name: string } = { name: body.name.trim() };
 
   try {
     // 验证归属：只能改自己的 key

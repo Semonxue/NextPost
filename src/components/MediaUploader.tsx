@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { Image, Video, X, Upload, AlertCircle } from "lucide-react";
 import { MediaItem, PlatformConfig, formatFileSize, isImageFile, isVideoFile } from "@/lib/platform";
 import { useUIStore } from "@/stores/uiStore";
+import { MediaPreview } from "@/components/MediaPreview";
 
 interface MediaUploaderProps {
   platformConfig: PlatformConfig;
@@ -235,20 +236,24 @@ export function MediaUploader({
             <div key={item.id} className="relative group">
               <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
                 {item.type === "video" ? (
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <Video size={32} className="text-gray-400" />
-                    {item.file && (
-                      <span className="absolute bottom-1 left-1 text-xs bg-black/50 text-white px-1 rounded">
-                        {formatFileSize(item.size || 0)}
-                      </span>
-                    )}
-                  </div>
+                  <MediaPreview
+                    src={item.preview}
+                    type="video"
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
+                    showPlayIcon={true}
+                  />
                 ) : (
                   <img
                     src={item.preview}
                     alt=""
                     className="w-full h-full object-cover"
                   />
+                )}
+                {item.file && item.type === "video" && (
+                  <span className="absolute bottom-1 left-1 text-xs bg-black/50 text-white px-1 rounded z-10">
+                    {formatFileSize(item.size || 0)}
+                  </span>
                 )}
               </div>
               <button

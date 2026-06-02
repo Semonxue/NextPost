@@ -53,8 +53,21 @@ export class LocalStorageEngine implements StorageEngine {
     }
   }
 
+  /**
+   * 获取文件访问 URL（用于媒体预览）
+   */
   getUrl(relativePath: string): string {
-    return `${this.baseUrl}/${relativePath}`;
+    return `/api/uploads/${relativePath}`;
+  }
+  
+  /**
+   * 获取相对路径（用于内部文件操作）
+   */
+  getRelativePath(url: string): string | null {
+    if (url.startsWith("/api/uploads/")) {
+      return url.slice("/api/uploads/".length);
+    }
+    return null;
   }
 
   async exists(relativePath: string): Promise<boolean> {
@@ -65,13 +78,6 @@ export class LocalStorageEngine implements StorageEngine {
     } catch {
       return false;
     }
-  }
-
-  private getRelativePath(url: string): string | null {
-    if (url.startsWith(this.baseUrl)) {
-      return url.slice(this.baseUrl.length + 1);
-    }
-    return null;
   }
 }
 
