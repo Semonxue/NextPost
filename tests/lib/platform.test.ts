@@ -6,6 +6,10 @@ import {
   formatFileSize,
   isImageFile,
   isVideoFile,
+  isVideoMimeType,
+  isImageMimeType,
+  isVideoUrl,
+  isImageUrl,
   DEFAULT_PLATFORM_CONFIG,
 } from "@/lib/platform";
 
@@ -123,6 +127,101 @@ describe("platform utilities", () => {
       expect(isVideoFile(new File([], "test.jpg", { type: "image/jpeg" }))).toBe(false);
       expect(isVideoFile(new File([], "test.pdf", { type: "application/pdf" }))).toBe(false);
       expect(isVideoFile(new File([], "test.txt", { type: "text/plain" }))).toBe(false);
+    });
+  });
+
+  describe("isVideoMimeType", () => {
+    it("should return true for video MIME types", () => {
+      expect(isVideoMimeType("video/mp4")).toBe(true);
+      expect(isVideoMimeType("video/webm")).toBe(true);
+      expect(isVideoMimeType("video/ogg")).toBe(true);
+      expect(isVideoMimeType("video/quicktime")).toBe(true);
+    });
+
+    it("should handle case insensitivity", () => {
+      expect(isVideoMimeType("Video/MP4")).toBe(true);
+      expect(isVideoMimeType("VIDEO/WEBM")).toBe(true);
+    });
+
+    it("should return false for non-video MIME types", () => {
+      expect(isVideoMimeType("image/jpeg")).toBe(false);
+      expect(isVideoMimeType("audio/mp3")).toBe(false);
+      expect(isVideoMimeType("application/pdf")).toBe(false);
+      expect(isVideoMimeType("text/plain")).toBe(false);
+    });
+  });
+
+  describe("isImageMimeType", () => {
+    it("should return true for image MIME types", () => {
+      expect(isImageMimeType("image/jpeg")).toBe(true);
+      expect(isImageMimeType("image/png")).toBe(true);
+      expect(isImageMimeType("image/gif")).toBe(true);
+      expect(isImageMimeType("image/webp")).toBe(true);
+    });
+
+    it("should handle case insensitivity", () => {
+      expect(isImageMimeType("Image/JPEG")).toBe(true);
+      expect(isImageMimeType("IMAGE/PNG")).toBe(true);
+    });
+
+    it("should return false for non-image MIME types", () => {
+      expect(isImageMimeType("video/mp4")).toBe(false);
+      expect(isImageMimeType("audio/mp3")).toBe(false);
+      expect(isImageMimeType("application/pdf")).toBe(false);
+    });
+  });
+
+  describe("isVideoUrl", () => {
+    it("should return true for video URLs", () => {
+      expect(isVideoUrl("https://example.com/video.mp4")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.webm")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.ogg")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.mov")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.m4v")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.avi")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.mkv")).toBe(true);
+    });
+
+    it("should handle URLs with query parameters", () => {
+      expect(isVideoUrl("https://example.com/video.mp4?token=abc")).toBe(true);
+      expect(isVideoUrl("https://example.com/video.mp4#section")).toBe(true);
+    });
+
+    it("should return false for non-video URLs", () => {
+      expect(isVideoUrl("https://example.com/image.jpg")).toBe(false);
+      expect(isVideoUrl("https://example.com/file.pdf")).toBe(false);
+      expect(isVideoUrl("https://example.com/audio.mp3")).toBe(false);
+    });
+
+    it("should return false for empty or null URLs", () => {
+      expect(isVideoUrl("")).toBe(false);
+    });
+  });
+
+  describe("isImageUrl", () => {
+    it("should return true for image URLs", () => {
+      expect(isImageUrl("https://example.com/image.jpg")).toBe(true);
+      expect(isImageUrl("https://example.com/image.jpeg")).toBe(true);
+      expect(isImageUrl("https://example.com/image.png")).toBe(true);
+      expect(isImageUrl("https://example.com/image.gif")).toBe(true);
+      expect(isImageUrl("https://example.com/image.webp")).toBe(true);
+      expect(isImageUrl("https://example.com/image.bmp")).toBe(true);
+      expect(isImageUrl("https://example.com/image.svg")).toBe(true);
+    });
+
+    it("should handle URLs with query parameters", () => {
+      expect(isImageUrl("https://example.com/image.jpg?width=800")).toBe(true);
+      expect(isImageUrl("https://example.com/image.png#preview")).toBe(true);
+    });
+
+    it("should return false for non-image URLs", () => {
+      expect(isImageUrl("https://example.com/video.mp4")).toBe(false);
+      expect(isImageUrl("https://example.com/file.pdf")).toBe(false);
+      expect(isImageUrl("https://example.com/audio.mp3")).toBe(false);
+    });
+
+    it("should return false for empty URLs", () => {
+      expect(isImageUrl("")).toBe(false);
     });
   });
 
