@@ -20,9 +20,10 @@
 | 6 | 帖子编辑 | `/posts/:id/edit` | 编辑已有帖子 | P0 |
 | 7 | 日历视图 | `/calendar` | 按日历展示发布计划 | P0 |
 | 8 | 列表视图 | `/posts` | 表格形式管理所有帖子 | P0 |
-| 9 | AI tools | `/ai-tools` | MCP 配置 + 工具列表（v0.3）| P1 |
+| 9 | AI tools | `/ai-tools` | MCP 配置 + 工具列表（v0.4）| P1 |
 | 10 | 设置页 | `/settings` | 用户设置和 API Key 管理 | P1 |
-| 11 | AI 对话（Phase 2）| `/chat` | NextPost 内部 AI 助手（规划中）| P2 |
+| 11 | 回收站 | `/trash` | 软删除的帖子/账号列表 + 恢复 / 永久删除 | P1 |
+| 12 | AI 对话（Phase 2）| `/chat` | NextPost 内部 AI 助手（规划中）| P2 |
 
 ### 导航结构
 
@@ -32,9 +33,9 @@
 ├── 日历视图 (Calendar)
 ├── 帖子列表 (Posts)
 ├── 账号管理 (Accounts)
-├── 回收站 (Trash)        ← v0.3 新增
-├── AI tools                ← v0.3 新增（MCP 配置 + 工具列表）
-└── 设置 (Settings)
+├── AI tools                ← v0.4 新增（MCP 配置 + 工具列表）
+├── 设置 (Settings)
+└── 回收站 (Trash)
 ```
 
 ---
@@ -247,7 +248,13 @@ AI 调用工具修改
 - 列：内容预览、账号、发布时间、状态、操作
 - 支持筛选（账号、状态、日期范围）
 - 支持排序
-- 分页
+- 分页（使用 `Pagination` 组件）
+
+**分页组件功能：**
+- 显示当前页显示范围（如：显示 1-20，共 50 条）
+- 每页条数选择器（10/20/50/100 条）
+- 上一页/下一页按钮
+- 最多显示 5 个页码按钮，支持智能省略号
 
 **布局示意：**
 ```
@@ -265,11 +272,16 @@ AI 调用工具修改
 │        │  │ 📝 │ 草稿内 │@小号C│   -      │编辑│删除│  │
 │        │  └────┴────────┴──────┴────────┴────┴────┘  │
 │        │                                              │
-│        │  < 1 2 3 ... 10 >                            │
+│        │  显示 1-20，共 50 条  [每页 ▼ 20]  < 1 2 3 >│
 └────────┴──────────────────────────────────────────────┘
 ```
 
-### 5b. AI tools 页（v0.3 新增）— 替代原 `/chat` 占位
+**回收站分页：**
+- 帖子和账号 Tab 各自独立分页
+- 切换 Tab 时重置到第一页
+- Tab 显示对应类型的总数量
+
+### 5b. AI tools 页（v0.4 新增）— 替代原 `/chat` 占位
 
 > **设计目的**：让用户**真实看到**外部 AI 工具能调到的所有 MCP 工具，并提供各客户端的配置示例。**关键：工具列表不是硬编码，而是 Server Component 在请求时从 `src/mcp/external/tools.ts` 的 `TOOLS` 常量加载**——这跟 `/api/mcp` 接口的 source of truth 是同一份。
 
@@ -281,18 +293,15 @@ AI 调用工具修改
 ┌─────────────────────────────────────────────────────────────┐
 │ 🔧 AI tools                                                  │
 │  副标题：NextPost 通过 MCP 对外暴露 N 个工具，让外部 AI ...   │
-│  标签：[MCP v0.3] [工具数：7] [读取：4] [写入：3]              │
+│  标签：[MCP v0.4] [工具数：9] [读取：4] [写入：5]              │
 ├─────────────────────────────────────────────────────────────┤
 │ 1. MCP 配置                                                   │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │ MCP 端点：POST http://localhost:3000/api/mcp           │  │
 │  │                                                        │  │
-│  │ 你的 API Key (N)                                       │  │
-│  │  ┌──────────────────────────────────────────┬────┐    │  │
-│  │ │ Test Key  [read_write]  npk_abc...xyz... │Reveal│  │  │
-│  │ └──────────────────────────────────────────┴────┘    │  │
-│  │  点 Reveal 调 /api/settings/external-keys/reveal     │  │
-│  │  返回完整 key，可复制                                   │  │
+│  │ 你的 API Key (N) → [去设置管理]                        │  │
+│  │  本页只展示摘要（不展示 key 明文 / Reveal）            │  │
+│  │  跳转 /settings 看完整 key、reveal、删除、新建          │  │
 │  │                                                        │  │
 │  │ 客户端配置示例（4 个折叠面板）                          │  │
 │  │  ▶ Claude Desktop                                      │  │
@@ -304,7 +313,7 @@ AI 调用工具修改
 │  │ 权限范围表（read / write / read_write）                 │  │
 │  └────────────────────────────────────────────────────────┘  │
 ├─────────────────────────────────────────────────────────────┤
-│ 2. MCP 工具（7 个，实时从 src/mcp/external/tools.ts 加载）   │
+│ 2. MCP 工具（9 个，实时从 src/mcp/external/tools.ts 加载）   │
 │  读取工具（4）                                               │
 │  ┌─ list_accounts [read] ───────────────────────────┐       │
 │  │ 获取账号列表（脱敏）                              │       │
@@ -312,15 +321,18 @@ AI 调用工具修改
 │  └──────────────────────────────────────────────────┘       │
 │  ┌─ get_pending_posts [read] ───────────────────────┐       │
 │  ...                                                         │
-│  写入工具（3，需 write / read_write scope）                  │
+│  写入工具（5，需 write / read_write scope）                  │
 │  ┌─ upload_media_from_url [write] ──────────────────┐       │
+│  ┌─ upload_media_from_path [write] ─────────────────┐       │
+│  ┌─ upload_media_from_base64 [write] ───────────────┐       │
 │  ┌─ create_post [write] ─────────────────────────────┐       │
 │  ┌─ update_post [write] ─────────────────────────────┐       │
 ├─────────────────────────────────────────────────────────────┤
 │ 3. 写工具安全约束                                             │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │ ⚠ 不提供 delete：外部 MCP 没有任何删除工具               │  │
-│  │ ⚠ update_post 字段白名单：只接受 scheduledTime/timezone │  │
+│  │ ⚠ update_post 字段白名单：v0.4.2 起 content / mediaUrls /│  │
+│  │   scheduledTime / timezone 可改，accountId / status 忽略 │  │
 │  │ ⚠ update_post 状态锁：仅 draft/scheduled 可改            │  │
 │  │ ⚠ upload_media_from_url 限制：http/https、≤10MB、6 mime │  │
 │  └────────────────────────────────────────────────────────┘  │
@@ -333,22 +345,21 @@ AI 调用工具修改
 |------|------|----------|
 | 工具列表 + inputSchema | `import { TOOLS } from "@/mcp/external/tools"` | ✅ |
 | 工具 scope 标签 | `import { TOOL_SCOPE } from "@/mcp/external/tools"` | ✅ |
-| 用户的 API Keys | `prisma.externalApiKey.findMany({where:{userId}})` | ❌（仅 preview） |
-| 完整 API Key | `/api/settings/external-keys/reveal`（reactive 调用） | ❌（仅 reveal 时） |
+| 用户的 API Key 数量 | `prisma.externalApiKey.count({where:{userId}})` | ✅（仅计数） |
+| 完整 API Key 管理 | 跳转到 `/settings` | —（不在本页） |
 
-> **安全性**：完整 key **永远不进服务端 HTML**。服务端 select 时拿全 key，渲染时只把前 12 位 preview 写进 HTML。Reveal 按钮在客户端调 `/api/settings/external-keys/reveal` 单独拿完整 key。
+> **安全性 v0.4 变更**：本页**不再展示**完整 key、preview 或 Reveal 按钮。完整 key 管理（reveal / 复制 / 删除 / 新建）全部在 `/settings` 完成。这避免在多处泄露 key 明文。
 
 **交互（client components）**：
-- `RevealKeyButton`（`src/app/(main)/ai-tools/RevealKeyButton.tsx`）：点击 → 调 reveal API → 显示 input + 复制 + 隐藏
 - `CopyButton`（`src/app/(main)/ai-tools/CopyButton.tsx`）：通用文本复制到剪贴板（带 fallback for non-secure contexts）
 
 **E2E 覆盖**（`tests/e2e/ai-tools.spec.ts`，9 用例，全过）：
 - 页面渲染 + 标题
-- 7 个工具卡片可见
+- 9 个工具卡片可见
 - 写工具带 `write` 标签
 - 工具卡片展开显示 inputSchema
-- API Key 列表 + Reveal 按钮
-- 空状态（无 key）
+- API Key summary 计数 + 跳设置链接
+- 无 key 时 summary 计数为 0
 - 安全约束 section
 - 4 个客户端配置示例
 - 未登录重定向
@@ -433,7 +444,7 @@ AI 调用工具修改
 | Badge | 状态标签 | 待实现 |
 | Card | 卡片容器 | 待实现 |
 | Table | 表格组件 | 待实现 |
-| Pagination | 分页器 | 待实现 |
+| Pagination | 分页器（含每页条数选择器 + 智能省略号） | 已实现（`src/components/ui/Pagination.tsx`） |
 
 ### 业务组件
 
@@ -506,8 +517,9 @@ AI 调用工具修改
 // app/(main)/posts/new/page.tsx
 // app/(main)/posts/[id]/edit/page.tsx
 // app/(main)/accounts/page.tsx
-// app/(main)/chat/page.tsx
-// app/(main)/settings/page.tsx
+// app/(main)/ai-tools/page.tsx      # MCP 配置 + 工具列表（v0.4）
+// app/(main)/trash/page.tsx         # 回收站（v0.3 起）
+// app/(main)/settings/page.tsx      # API Key 管理（含 scope 选择）
 ```
 
 ### 状态管理（Zustand）

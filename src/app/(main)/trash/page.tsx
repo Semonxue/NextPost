@@ -1,14 +1,12 @@
 "use client";
-
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { Trash2, RotateCcw, AlertTriangle, FileText, User, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/ui/Pagination";
 import { useUIStore } from "@/stores/uiStore";
-
 type TabKey = "posts" | "accounts";
-
 interface TrashPost {
   id: string;
   content: string;
@@ -21,7 +19,6 @@ interface TrashPost {
   deleteNote: string | null;
   createdAt: string;
 }
-
 interface TrashAccount {
   id: string;
   name: string;
@@ -33,7 +30,6 @@ interface TrashAccount {
   deleteNote: string | null;
   createdAt: string;
 }
-
 export default function TrashPage() {
   const { status } = useSession();
   const { addToast } = useUIStore();
@@ -42,15 +38,25 @@ export default function TrashPage() {
   const [accounts, setAccounts] = useState<TrashAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
-
+  const [totalPosts, setTotalPosts] = useState(0);
+  const [totalAccounts, setTotalAccounts] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const fetchTrash = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/trash");
+      const params = new URLSearchParams();
+      params.set("postsLimit", pageSize.toString());
+      params.set("postsOffset", ((currentPage - 1) * pageSize).toString());
+      params.set("accountsLimit", pageSize.toString());
+      params.set("accountsOffset", ((currentPage - 1) * pageSize).toString());
+      const res = await fetch(`/api/trash?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setPosts(data.posts || []);
         setAccounts(data.accounts || []);
+        setTotalPosts(data.totalPosts || 0);
+        setTotalAccounts(data.totalAccounts || 0);
       } else {
         addToast({ type: "error", message: "获取回收站失败" });
       }
@@ -59,8 +65,7 @@ export default function TrashPage() {
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
-
+  }, [addToast, currentPage, pageSize]);
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -69,7 +74,6 @@ export default function TrashPage() {
       fetchTrash();
     }
   }, [status, fetchTrash]);
-
   const handleRestore = async (id: string, type: TabKey) => {
     setActing(id);
     try {
@@ -91,7 +95,6 @@ export default function TrashPage() {
       setActing(null);
     }
   };
-
   const handlePermanentDelete = async (id: string, type: TabKey) => {
     if (!confirm("确定要永久删除吗？此操作无法撤销。")) return;
     setActing(id);
@@ -114,7 +117,6 @@ export default function TrashPage() {
       setActing(null);
     }
   };
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -122,7 +124,6 @@ export default function TrashPage() {
       </div>
     );
   }
-
   return (
     <div className="max-w-5xl space-y-6">
       <div>
@@ -131,12 +132,11 @@ export default function TrashPage() {
           已删除的帖子和账号可以在此恢复或永久删除
         </p>
       </div>
-
       {/* Tab 切换 */}
       <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-4">
           <button
-            onClick={() => setTab("posts")}
+            onClick={() => { setTab("posts"); setCurrentPage(1); }}
             data-testid="tab-posts"
             className={`px-4 py-2 font-medium border-b-2 transition-colors ${
               tab === "posts"
@@ -145,10 +145,10 @@ export default function TrashPage() {
             }`}
           >
             <FileText size={16} className="inline mr-1" />
-            帖子 ({posts.length})
+            帖子 ({totalPosts})
           </button>
           <button
-            onClick={() => setTab("accounts")}
+            onClick={() => { setTab("accounts"); setCurrentPage(1); }}
             data-testid="tab-accounts"
             className={`px-4 py-2 font-medium border-b-2 transition-colors ${
               tab === "accounts"
@@ -157,11 +157,10 @@ export default function TrashPage() {
             }`}
           >
             <User size={16} className="inline mr-1" />
-            账号 ({accounts.length})
+            账号 ({totalAccounts})
           </button>
         </nav>
       </div>
-
       {/* 列表 */}
       {tab === "posts" ? (
         posts.length === 0 ? (
@@ -277,7 +276,27 @@ export default function TrashPage() {
           ))}
         </div>
       )}
-
+      {/* 分页 */}
+      {tab === "posts" && totalPosts > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={totalPosts}
+          pageSize={pageSize}
+          onPageChange={(page) => setCurrentPage(page)}
+          onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
+      )}
+      {tab === "accounts" && totalAccounts > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={totalAccounts}
+          pageSize={pageSize}
+          onPageChange={(page) => setCurrentPage(page)}
+          onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
+      )}
       {/* 提示 */}
       {(posts.length > 0 || accounts.length > 0) && (
         <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-300">
@@ -293,7 +312,6 @@ export default function TrashPage() {
     </div>
   );
 }
-
 function EmptyState({ message, hint }: { message: string; hint: string }) {
   return (
     <div

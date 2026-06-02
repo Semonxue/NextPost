@@ -1,12 +1,12 @@
 /**
- * /ai-tools 页面 E2E（v0.3）
+ * /ai-tools 页面 E2E（v0.4）
  *
  * 验证：
  * 1. 页面从 MCP 真实加载工具列表（不是硬编码）
- * 2. 用户的 API Key 列表正确显示
- * 3. Reveal 按钮能拿到完整 key
- * 4. Copy 按钮能复制配置
- * 5. 工具卡片展开后能看到 inputSchema
+ * 2. API Key summary 区显示正确计数 + 跳转到 /settings
+ * 3. 工具卡片展开后能看到 inputSchema
+ * 4. 客户端配置示例（4 个）有 Copy 按钮
+ * 5. 安全约束 section 渲染
  */
 
 import { test, expect } from '@playwright/test';
@@ -71,7 +71,7 @@ test.describe('AI tools 页面', () => {
     await expect(page.getByText(/MCP.*Model Context Protocol/)).toBeVisible();
   });
 
-  test('TC-AITOOLS-002: 显示 7 个工具卡片（从 MCP 真实加载）', async ({ page }) => {
+  test('TC-AITOOLS-002: 显示 9 个工具卡片（4 读 + 5 写，从 MCP 真实加载）', async ({ page }) => {
     await page.goto('/ai-tools');
 
     // 等待所有工具卡片渲染
@@ -108,34 +108,35 @@ test.describe('AI tools 页面', () => {
     await expect(card.getByText('accountId').first()).toBeVisible();
   });
 
-  test('TC-AITOOLS-005: API Key 列表显示 + Reveal 按钮可拿到完整 key', async ({ page }) => {
+  test('TC-AITOOLS-005: API Key summary 显示 + 跳转设置链接', async ({ page }) => {
     await page.goto('/ai-tools');
 
-    // 看到 key 名称
-    await expect(page.getByText('Test Key')).toBeVisible();
-    // 看到权限标签
-    await expect(page.getByText('read_write').first()).toBeVisible();
-    // 看到 preview（前 12 位 = npk_ + 8 字符）
-    const expectedPreview = apiKeyFull.substring(0, 12) + '...';
-    await expect(page.getByText(expectedPreview)).toBeVisible();
+    // 看到 apikey-summary
+    const summary = page.getByTestId('apikey-summary');
+    await expect(summary).toBeVisible();
+    // 看到 1 个 key 的计数
+    await expect(page.getByTestId('apikey-count')).toHaveText('1');
+    // 看到跳转设置的链接
+    const link = page.getByTestId('goto-settings-link');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', '/settings');
 
-    // 点击 Reveal
-    await page.getByTestId('apikey-reveal-btn').click();
-    // 出现完整 key 的 input
-    const revealed = page.getByTestId('apikey-revealed');
-    await expect(revealed).toBeVisible();
-    const inputValue = await revealed.locator('input').inputValue();
-    expect(inputValue).toBe(apiKeyFull);
+    // 此页不再展示 key 明文/reveal（管理在 /settings）
+    await expect(page.getByText(apiKeyFull.substring(0, 12) + '...')).toHaveCount(0);
   });
 
-  test('TC-AITOOLS-006: 没有 API Key 时显示空状态', async ({ page }) => {
+  test('TC-AITOOLS-006: 没有 API Key 时 summary 计数为 0', async ({ page }) => {
     // 删除刚才创建的 key
     await prisma.externalApiKey.delete({ where: { id: apiKeyId } });
     // 标记为已删除，避免 afterEach 重复删
     apiKeyId = '';
 
     await page.goto('/ai-tools');
-    await expect(page.getByText(/还没有 API Key/)).toBeVisible();
+    const summary = page.getByTestId('apikey-summary');
+    await expect(summary).toBeVisible();
+    await expect(page.getByTestId('apikey-count')).toHaveText('0');
+    // 跳转链接仍在
+    await expect(page.getByTestId('goto-settings-link')).toBeVisible();
   });
 
   test('TC-AITOOLS-007: 安全约束 section 渲染', async ({ page }) => {

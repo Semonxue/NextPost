@@ -1814,15 +1814,15 @@ VALUES ('post-test-001', 'user-test-001', 'acct-test-001', '测试内容', '2026
 | 模块 | 单元测试 | 覆盖率（stmts） | 备注 |
 |------|---------|-----------------|------|
 | `mcp/external/auth.ts` | 17 用例 | 100% | parseScope / hasScope / validateApiKey / generateApiKey / deleteApiKey / listApiKeys |
-| `mcp/external/tools.ts` | 41 用例 | 93.33% | 4 读 + 3 写 + scope 强制 + URL/媒体校验 + 错误分支 |
+| `mcp/external/tools.ts` | 41 用例 | 93.33% | 4 读 + 5 写 + scope 强制 + URL/媒体校验 + 错误分支 |
 | `mcp/external/server.ts` | 集成 E2E | — | 端到端流程 |
 | **全量** | **262 用例** | **89.4%** stmts / **84%** branches | 0 失败，tsc 干净 |
 
-**新增加的安全断言**（相对 v0.3）：
+**新增加的安全断言**（相对 v0.4 初版）：
 
-- 写工具不允许 read scope 调（3 个工具 × 2 个错 scope = 6 断言）
+- 写工具不允许 read scope 调（5 个工具 × 2 个错 scope = 10 断言）
 - 写工具不允许 write scope 调读工具（2 断言）
-- 字段白名单静默忽略（3 断言：content / mediaUrls / accountId / status 各一）
+- 字段白名单静默忽略（2 断言：accountId / status 各一，content / mediaUrls 在 v0.4.2 起已加入白名单可改）
 - 状态锁拒绝 publishing/published/failed（3 断言）
 - 媒体 URL 协议白名单 + mime 白名单 + 大小限制（5 断言）
 - 过去时间拒绝（2 断言：create + update）

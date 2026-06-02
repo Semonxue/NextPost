@@ -12,19 +12,23 @@ const {
   mockPostFindFirst,
   mockPostUpdate,
   mockPostDelete,
+  mockPostCount,
   mockAccountFindMany,
   mockAccountFindFirst,
   mockAccountUpdate,
   mockAccountDelete,
+  mockAccountCount,
 } = vi.hoisted(() => ({
   mockPostFindMany: vi.fn(),
   mockPostFindFirst: vi.fn(),
   mockPostUpdate: vi.fn(),
   mockPostDelete: vi.fn(),
+  mockPostCount: vi.fn(),
   mockAccountFindMany: vi.fn(),
   mockAccountFindFirst: vi.fn(),
   mockAccountUpdate: vi.fn(),
   mockAccountDelete: vi.fn(),
+  mockAccountCount: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -34,12 +38,14 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: mockPostFindFirst,
       update: mockPostUpdate,
       delete: mockPostDelete,
+      count: mockPostCount,
     },
     account: {
       findMany: mockAccountFindMany,
       findFirst: mockAccountFindFirst,
       update: mockAccountUpdate,
       delete: mockAccountDelete,
+      count: mockAccountCount,
     },
   },
 }));
@@ -71,9 +77,11 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
   // 这里通过 mockAccountFindMany 单独提供
 
   describe('GET /api/trash', () => {
+    const makeReq = (qs = '') => new NextRequest(`http://localhost/api/trash${qs}`);
+
     it('应该返回 401 当未登录', async () => {
       (auth as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-      const response = await GET();
+      const response = await GET(makeReq());
       expect(response.status).toBe(401);
     });
 
@@ -85,9 +93,11 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
         { id: 'acct-1', name: '已删除的账号', handle: 'deleted' },
       ];
       mockPostFindMany.mockResolvedValue(mockPosts);
+      mockPostCount.mockResolvedValue(1);
       mockAccountFindMany.mockResolvedValue(mockAccounts);
+      mockAccountCount.mockResolvedValue(1);
 
-      const response = await GET();
+      const response = await GET(makeReq());
       const data = await response.json();
 
       expect(response.status).toBe(200);
@@ -99,8 +109,10 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
 
     it('应该过滤只查询 deletedAt 不为 null 的项', async () => {
       mockPostFindMany.mockResolvedValue([]);
+      mockPostCount.mockResolvedValue(0);
       mockAccountFindMany.mockResolvedValue([]);
-      await GET();
+      mockAccountCount.mockResolvedValue(0);
+      await GET(makeReq());
 
       expect(mockPostFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -111,8 +123,24 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
 
     it('应该处理数据库错误', async () => {
       mockPostFindMany.mockRejectedValue(new Error('DB error'));
-      const response = await GET();
+      const response = await GET(makeReq());
       expect(response.status).toBe(500);
+    });
+
+    it('应该支持分页参数 postsLimit/postsOffset/accountsLimit/accountsOffset', async () => {
+      mockPostFindMany.mockResolvedValue([]);
+      mockPostCount.mockResolvedValue(0);
+      mockAccountFindMany.mockResolvedValue([]);
+      mockAccountCount.mockResolvedValue(0);
+
+      await GET(makeReq('?postsLimit=10&postsOffset=20&accountsLimit=5&accountsOffset=10'));
+
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 10, skip: 20 }),
+      );
+      expect(mockAccountFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 5, skip: 10 }),
+      );
     });
   });
 

@@ -11,6 +11,10 @@
  * 确保首屏就是真实数据。
  */
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "AI tools" };
+
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { TOOLS, TOOL_SCOPE } from "@/mcp/external/tools";

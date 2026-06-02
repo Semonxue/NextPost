@@ -7,16 +7,17 @@
  * - get_post_detail: 获取帖子详情
  * - report_publish_result: 报告发布结果
  *
- * v0.3 MVP 写工具（需要 write / read_write scope）：
- * - upload_media_from_url: 从 URL 拉取媒体存到 NextPost
- * - upload_media_from_path: 从本地文件路径读取媒体存到 NextPost
- * - upload_media_from_base64: 从 base64 编码数据上传媒体
- * - create_post: 创建 scheduled 帖子
- * - update_post: 限制性更新（仅 scheduledTime / timezone）
+ * v0.4 MCP 写能力（需要 write / read_write scope）：
+ * - upload_media_from_url:     从 URL 拉取媒体存到 NextPost          (v0.4)
+ * - upload_media_from_path:    从本地文件路径读取媒体存到 NextPost   (v0.4.1)
+ * - upload_media_from_base64:  从 base64 编码数据上传媒体             (v0.4.1)
+ * - create_post:               创建 scheduled 帖子                  (v0.4)
+ * - update_post:               限制性更新（v0.4.2 起支持 content / mediaUrls）  (v0.4 / v0.4.2)
  *
  * 设计原则：
  * - 外部 MCP 不提供 delete
- * - update 字段白名单（content/media/account/status 全部不可改）
+ * - update_post 字段白名单：白名单内（content / mediaUrls / scheduledTime / timezone）可改，
+ *   白名单外（accountId / status）静默忽略
  * - status 锁：仅 draft / scheduled 可改；publishing/published/failed 全部锁死
  */
 
@@ -848,28 +849,25 @@ async function updatePost(
     };
   }
 
-  // 字段白名单：content, mediaUrls, scheduledTime, timezone
+  // 字段白名单：content / mediaUrls / scheduledTime / timezone 可改
+  // accountId / status 不在白名单中，传了也静默忽略
   const data: Record<string, unknown> = {};
-  
-  // content - 可选，但要校验与 mediaUrls 至少有一个非空
+
   if (content !== undefined) {
     data.content = content;
   }
-  
-  // mediaUrls - 可选
+
   if (mediaUrls !== undefined) {
     data.mediaUrls = JSON.stringify(mediaUrls);
   }
 
-  // 内容校验：content 与 mediaUrls 至少有一个非空
+  // 内容校验：content 与 mediaUrls 至少有一个非空（只在显式传了其中一个时）
   const hasContent = content !== undefined && content.trim().length > 0;
   const hasMedia = mediaUrls !== undefined && mediaUrls.length > 0;
-  if (!hasContent && !hasMedia && (content !== undefined || mediaUrls !== undefined)) {
-    // 只有当至少传了一个字段时才校验
+  if ((content !== undefined || mediaUrls !== undefined) && !hasContent && !hasMedia) {
     return { success: false, error: 'content or mediaUrls required', errorCode: 'EMPTY_CONTENT' };
   }
 
-  // scheduledTime - 可选
   if (scheduledTime !== undefined) {
     const date = new Date(scheduledTime);
     if (isNaN(date.getTime())) {
@@ -881,7 +879,6 @@ async function updatePost(
     data.scheduledTime = date;
   }
 
-  // timezone - 可选
   if (timezone !== undefined) {
     data.timezone = timezone;
   }

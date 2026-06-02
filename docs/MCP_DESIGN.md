@@ -8,9 +8,9 @@
 | **v0.2.1** | **2026-06-01** | **Phase 1 MVP 实现完成** |
 | **v0.2.2** | **2026-06-01** | **添加 externalPostUrl 必填说明，修复发布回传问题** |
 | **v0.2.3** | **2026-06-01** | **mediaUrls 返回完整 HTTP URL，CLI 可直接下载；集成端点替代独立服务** |
-| **v0.3** | **2026-06-02** | **写能力 MVP**：新增 `upload_media_from_url` / `create_post` / `update_post` 三个写工具；引入 Scope 权限系统（`read` / `write` / `read_write` 三档）；写工具受字段白名单 + 状态锁双重保护 |
-| **v0.3.1** | **2026-06-02** | **本地媒体上传**：新增 `upload_media_from_path`（本地文件路径直接读取）和 `upload_media_from_base64`（base64 编码数据，上限 5MB）两个写工具 |
-| **v0.3.2** | **2026-06-02** | **扩展 update_post**：支持通过外部 MCP 修改 content 和 mediaUrls，方便 AI 辅助编辑内容 |
+| **v0.4** | **2026-06-02** | **MCP 写能力 MVP**：新增 `upload_media_from_url` / `create_post` / `update_post` 三个写工具（v0.4 初版 update_post 仅支持 scheduledTime / timezone）；引入 Scope 权限系统（`read` / `write` / `read_write` 三档）；写工具受字段白名单 + 状态锁双重保护 |
+| **v0.4.1** | **2026-06-02** | **本地媒体上传**：新增 `upload_media_from_path`（本地文件路径直接读取）和 `upload_media_from_base64`（base64 编码数据，上限 5MB）两个写工具 |
+| **v0.4.2** | **2026-06-02** | **扩展 update_post**：支持通过外部 MCP 修改 content 和 mediaUrls，方便 AI 辅助编辑内容 |
 
 ## 概述
 
@@ -48,14 +48,14 @@
 **设计理念**：外部 AI 可能已经有 Twitter/X 的发布能力，NextPost 负责：
 1. **提供计划数据**：让外部 AI 知道要发布什么（v0.2 起的 `list_accounts` / `get_pending_posts` / `get_post_detail`）
 2. **接收发布结果**：外部发布后回调通知（v0.2 起的 `report_publish_result`）
-3. **创建/更新计划**（v0.3 新增）：让外部 AI 在 NextPost 里直接排期，不必切到 Web UI
+3. **创建/更新计划**（v0.4 新增）：让外部 AI 在 NextPost 里直接排期，不必切到 Web UI
 
 **特点**：
 - 本地部署友好，无需公网 Webhook
 - 同步模式：一次一个发布
 - API Key 多用户隔离
-- **v0.3 写能力受 scope 权限控制**：默认 `read` 只能读，写操作需要 `write` 或 `read_write` scope
-- **v0.3 写工具受字段白名单 + 状态锁保护**：防止 AI 篡改已发布内容、误换账号、误改状态
+- **v0.4 写能力受 scope 权限控制**：默认 `read` 只能读，写操作需要 `write` 或 `read_write` scope
+- **v0.4 写工具受字段白名单 + 状态锁保护**：防止 AI 篡改已发布内容、误换账号、误改状态
 
 ### 1.2 内部 MCP Server（Phase 2）
 
@@ -81,15 +81,15 @@
 | `get_post_detail` | 获取帖子详情 | read |
 | `report_publish_result` | 报告发布结果 | read |
 
-**写工具（write / read_write scope，v0.3 / v0.3.1）**
+**写工具（write / read_write scope，v0.4 / v0.4.1，共 5 个）**
 
 | 工具 | 描述 | 权限 | 版本 |
 |------|------|------|------|
-| `upload_media_from_url` | 服务端拉 URL 媒体存盘 | write | v0.3 |
-| `upload_media_from_path` | 从本地文件路径读取媒体存盘 | write | v0.3.1 |
-| `upload_media_from_base64` | 从 base64 编码数据上传媒体 | write | v0.3.1 |
-| `create_post` | 创建 scheduled 帖子 | write | v0.3 |
-| `update_post` | 限制性更新（支持 content/mediaUrls/scheduledTime/timezone） | write | v0.3.2 |
+| `upload_media_from_url` | 服务端拉 URL 媒体存盘 | write | v0.4 |
+| `upload_media_from_path` | 从本地文件路径读取媒体存盘 | write | v0.4.1 |
+| `upload_media_from_base64` | 从 base64 编码数据上传媒体 | write | v0.4.1 |
+| `create_post` | 创建 scheduled 帖子 | write | v0.4 |
+| `update_post` | 限制性更新（v0.4.2 起支持 content / mediaUrls + scheduledTime / timezone） | write | v0.4 / v0.4.2 |
 
 ### 2.2 工具详细定义
 
@@ -263,7 +263,7 @@
 
 > ⚠️ **重要**：成功发布时必须回传 `externalPostUrl`（完整 URL），不能只传 `externalPostId`。否则 NextPost 界面无法显示"查看已发布内容"的跳转按钮。
 
-#### 2.2.5 upload_media_from_url（v0.3 新增）
+#### 2.2.5 upload_media_from_url（v0.4 新增）
 
 ```typescript
 {
@@ -309,7 +309,7 @@
 6. 推断文件扩展名（按 mime），调用现有 `uploadFile()` 走 `LocalStorageEngine`
 7. 返回 `{ url, mimeType, size, filename }`
 
-#### 2.2.6 create_post（v0.3 新增）
+#### 2.2.6 create_post（v0.4 新增）
 
 ```typescript
 {
@@ -361,7 +361,7 @@
 6. `timezone` 缺省填 `Asia/Shanghai`
 7. 创建 Post（status='scheduled'），返回完整数据
 
-#### 2.2.7 update_post（v0.3 新增，v0.3.2 扩展）
+#### 2.2.7 update_post（v0.4 新增，v0.4.2 扩展）
 
 ```typescript
 {
@@ -417,7 +417,7 @@
 6. 执行 `prisma.post.update({ data: 白名单字段 })`
 7. 返回更新后的 post
 
-**v0.3.2 扩展说明**：
+**v0.4.2 扩展说明**：
 - 原来只支持修改 `scheduledTime` 和 `timezone`，方便 AI 辅助编辑
 - 现在额外支持 `content`（帖子正文）和 `mediaUrls`（媒体 URL 列表）
 - 媒体 URL 需先用 `upload_media_from_url` / `upload_media_from_path` / `upload_media_from_base64` 上传后获得
@@ -541,9 +541,9 @@ export async function startExternalServer() {
 }
 ```
 
-### 3.4 Scope 权限系统（v0.3 新增）
+### 3.4 Scope 权限系统（v0.4 新增）
 
-v0.3 起，每个 API Key 都有一个 `scope` 字段，决定它能调用哪些工具。Scope 解析在 `validateApiKey` 中完成，连同 `userId` 一起返回：
+v0.4 起，每个 API Key 都有一个 `scope` 字段，决定它能调用哪些工具。Scope 解析在 `validateApiKey` 中完成，连同 `userId` 一起返回：
 
 ```typescript
 // src/mcp/external/auth.ts
@@ -570,7 +570,7 @@ export function hasScope(scope: Scope, required: 'read' | 'write'): boolean {
 
 **三档 scope 对照表**：
 
-| scope | 读取工具（4） | 写工具（3，v0.3） | 典型用途 |
+| scope | 读取工具（4） | 写工具（5，v0.4 / v0.4.1） | 典型用途 |
 |-------|--------------|-----------------|----------|
 | `read`（默认） | ✅ | ❌ | 监控类客户端、只读面板 |
 | `write` | ❌ | ✅ | 纯写自动化（需要时单独签发） |
@@ -585,10 +585,13 @@ const TOOL_SCOPE: Record<string, 'read' | 'write'> = {
   get_pending_posts: 'read',
   get_post_detail: 'read',
   report_publish_result: 'read',
-  // v0.3
+  // v0.4
   upload_media_from_url: 'write',
   create_post: 'write',
   update_post: 'write',
+  // v0.4.1
+  upload_media_from_path: 'write',
+  upload_media_from_base64: 'write',
 };
 
 // 执行前检查
@@ -608,16 +611,16 @@ if (!hasScope(ctx.scope, required)) {
 
 **为什么三层防护（scope + 字段白名单 + 状态锁）？**
 - **scope 防止越权**：read-only key 根本调不到写工具
-- **字段白名单防止 AI 改危险字段**：即使有 write 权限，也只能改时间不能改内容/账号/状态
+- **字段白名单防止 AI 改危险字段**：即使有 write 权限，也只能改白名单内字段（v0.4.2 起含 content / mediaUrls / scheduledTime / timezone），accountId / status 不可改
 - **状态锁防止改已发布内容**：publishing/published/failed 状态下服务端拒绝任何更新
 - 三层叠加 = 单一层被绕过的风险被其它层兜住
 
-### 3.5 写工具安全约束（v0.3 新增）
+### 3.5 写工具安全约束（v0.4 新增）
 
 | 约束 | 适用工具 | 实现位置 |
 |------|---------|---------|
 | **不提供 delete** | （无） | 工具列表里根本没有删除工具；所有删除走 Web UI 软删除 |
-| **字段白名单** | `update_post` | 服务端 `updatePost()` 只读 `scheduledTime` / `timezone`，其它字段忽略 |
+| **字段白名单** | `update_post` | 服务端 `updatePost()` 只接受白名单内字段（v0.4.2 起含 `content` / `mediaUrls` / `scheduledTime` / `timezone`），白名单外（`accountId` / `status`）静默忽略 |
 | **状态锁** | `update_post` | 服务端 `updatePost()` 检查 `existing.status ∈ {draft, scheduled}`，否则 `INVALID_STATUS` |
 | **账号归属校验** | `create_post` | 服务端 `prisma.account.findFirst({ userId, deletedAt: null })` |
 | **未来时间校验** | `create_post` / `update_post` | `scheduledTime > Date.now()`，否则 `SCHEDULED_TIME_IN_PAST` |
@@ -713,22 +716,28 @@ async function aiDeletePost(postId: string, reason: string, aiModel: string) {
 }
 ```
 
-> ⚠️ **v0.3 重要变更**：外部 MCP **不提供** `delete` 操作。所有删除只能通过 Web UI 走软删除（`/api/posts/:id` DELETE → 设置 `deletedAt`）。删除后可在 `/api/trash` 查看、恢复或永久删除。所以本节的"AI 删除"实际只对**内部 MCP**（Phase 2）有意义。
+> ⚠️ **v0.4 重要变更**：外部 MCP **不提供** `delete` 操作。所有删除只能通过 Web UI 走软删除（`/api/posts/:id` DELETE → 设置 `deletedAt`）。删除后可在 `/api/trash` 查看、恢复或永久删除。所以本节的"AI 删除"实际只对**内部 MCP**（Phase 2）有意义。
 
-### 5.3 写工具防护（v0.3 新增）
+### 5.3 写工具防护（v0.4 新增）
 
 `update_post` 的字段白名单 + 状态锁是写在服务端的硬约束，不依赖客户端的"自觉"：
 
 ```typescript
-// 字段白名单实现
+// 字段白名单实现（v0.4.2 起 content / mediaUrls 也加入白名单）
 const data: Record<string, unknown> = {};
-if (scheduledTime !== undefined) {  // 只接受白名单字段
+if (content !== undefined) {        // v0.4.2: 帖子正文可改
+  data.content = content;
+}
+if (mediaUrls !== undefined) {      // v0.4.2: 媒体列表可改
+  data.mediaUrls = JSON.stringify(mediaUrls);
+}
+if (scheduledTime !== undefined) {  // v0.4: 计划时间可改
   data.scheduledTime = new Date(scheduledTime);
 }
-if (timezone !== undefined) {
+if (timezone !== undefined) {       // v0.4: 时区可改
   data.timezone = timezone;
 }
-// 客户端传 content / mediaUrls / accountId / status 全部被忽略
+// 客户端传 accountId / status 仍然被忽略（白名单外）
 // 不抛错（保持向后兼容），但不会写库
 
 // 状态锁
@@ -917,13 +926,13 @@ const NON_RETRYABLE_ERRORS = [
 |------|------|
 | `src/mcp/external/types.ts` | 类型定义（错误码、脱敏数据结构、Scope、WriteResult） |
 | `src/mcp/external/auth.ts` | API Key 认证（验证、生成、删除、列表）+ Scope 解析 |
-| `src/mcp/external/tools.ts` | MCP 工具实现（v0.3：4 读 + 3 写 = 7 个工具 + scope 强制 + 字段白名单 + 状态锁） |
+| `src/mcp/external/tools.ts` | MCP 工具实现（v0.4 / v0.4.1：4 读 + 5 写 = 9 个工具 + scope 强制 + 字段白名单 + 状态锁） |
 | `src/mcp/external/server.ts` | MCP Server 主入口（基于 @modelcontextprotocol/sdk） |
 | `src/app/api/mcp/route.ts` | Next.js 集成 MCP 端点（带 scope 透传） |
 | `src/app/api/settings/external-keys/route.ts` | API Key 管理接口 |
 | `tests/mcp/external.test.ts` | 单元测试（基础：14 用例） |
 | `tests/mcp/auth-coverage.test.ts` | Scope 解析 / hasScope 单元测试 |
-| `tests/mcp/tools-coverage.test.ts` | 7 个工具 + scope 强制 + URL/媒体校验 全量单元测试 |
+| `tests/mcp/tools-coverage.test.ts` | 9 个工具 + scope 强制 + URL/媒体校验 全量单元测试 |
 | `tests/e2e/mcp.spec.ts` | E2E 测试 |
 
 ### 11.2 启动方式
@@ -952,7 +961,7 @@ pnpm test:e2e -- tests/e2e/mcp.spec.ts
 pnpm test:coverage
 ```
 
-**v0.3 覆盖率**（`mcp/external/`）：
+**v0.4 覆盖率**（`mcp/external/`）：
 
 | 文件 | Stmts | Branches | Funcs | Lines |
 |------|-------|----------|-------|-------|

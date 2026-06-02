@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { redirect, useRouter, useParams } from "next/navigation";
@@ -10,7 +9,6 @@ import { MediaUploader } from "@/components/MediaUploader";
 import { ContentEditor } from "@/components/ContentEditor";
 import { useUIStore } from "@/stores/uiStore";
 import { PlatformConfig, DEFAULT_PLATFORM_CONFIG } from "@/lib/platform";
-
 interface Account {
   id: string;
   name: string;
@@ -20,7 +18,6 @@ interface Account {
     name: string;
   };
 }
-
 interface Post {
   id: string;
   content: string;
@@ -33,7 +30,6 @@ interface Post {
   externalPostUrl: string | null;
   publishToken: string | null;
 }
-
 export default function EditPostPage() {
   const { status } = useSession();
   const router = useRouter();
@@ -55,14 +51,12 @@ export default function EditPostPage() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
   const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
-
   // 默认平台配置
   const defaultConfig: PlatformConfig = {
     platformId: "",
     platformName: "Twitter",
     ...DEFAULT_PLATFORM_CONFIG.Twitter,
   };
-
   // 将 UTC Date 对象转换为指定时区的 datetime-local 格式字符串
   const formatDateTimeLocal = (date: Date, timezone: string): string => {
     try {
@@ -88,7 +82,6 @@ export default function EditPostPage() {
       return date.toISOString().slice(0, 16);
     }
   };
-
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -97,19 +90,16 @@ export default function EditPostPage() {
       fetchData();
     }
   }, [status]);
-
   const fetchData = async () => {
     try {
       const [accountsRes, postRes] = await Promise.all([
         fetch("/api/accounts"),
         fetch(`/api/posts/${params.id}`),
       ]);
-
       if (accountsRes.ok) {
         const accountsData = await accountsRes.json();
         setAccounts(accountsData);
       }
-
       if (postRes.ok) {
         const postData = await postRes.json();
         setPost(postData);
@@ -146,7 +136,6 @@ export default function EditPostPage() {
       setLoading(false);
     }
   };
-
   // 获取平台配置
   const fetchPlatformConfig = async (accountId: string) => {
     try {
@@ -168,30 +157,25 @@ export default function EditPostPage() {
       console.error("获取平台配置失败:", error);
     }
   };
-
   // 账号变更时获取新的平台配置
   const handleAccountChange = (accountId: string) => {
     setFormData((prev) => ({ ...prev, accountId }));
     fetchPlatformConfig(accountId);
   };
-
   // 媒体变更处理
   const handleMediaChange = useCallback((urls: string[], files: File[]) => {
     setExistingMediaUrls(urls);
     setMediaFiles(files);
   }, []);
-
   const handleSubmit = async () => {
     if (!formData.accountId) {
       addToast({ type: "error", message: "请选择账号" });
       return;
     }
-
     if (!formData.content.trim()) {
       addToast({ type: "error", message: "请输入内容" });
       return;
     }
-
     // 检查文字长度
     if (platformConfig) {
       const { calculateContentLength } = await import("@/lib/platform");
@@ -201,9 +185,7 @@ export default function EditPostPage() {
         return;
       }
     }
-
     setSaving(true);
-
     try {
       // 如果有新文件，先上传
       let mediaUrls: string[] = [...existingMediaUrls];
@@ -253,7 +235,6 @@ export default function EditPostPage() {
           externalPostUrl: formData.externalPostUrl || null,
         }),
       });
-
       if (res.ok) {
         addToast({ type: "success", message: "帖子已更新" });
         router.push("/posts");
@@ -267,11 +248,9 @@ export default function EditPostPage() {
       setSaving(false);
     }
   };
-
   const handleStatusChange = (newStatus: string) => {
     setFormData({ ...formData, status: newStatus });
   };
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -279,13 +258,11 @@ export default function EditPostPage() {
       </div>
     );
   }
-
   const statusOptions = [
     { value: "draft", label: "草稿", color: "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" },
     { value: "scheduled", label: "已计划", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" },
     { value: "published", label: "已发布", color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" },
   ];
-
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -294,7 +271,6 @@ export default function EditPostPage() {
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">编辑帖子</h1>
       </div>
-
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 space-y-6">
         {/* 状态切换 */}
         <div>
@@ -322,7 +298,6 @@ export default function EditPostPage() {
             切换状态：草稿（未发布）→ 已计划（定时发布）→ 已发布（已对外发布）
           </p>
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             选择账号
@@ -339,7 +314,6 @@ export default function EditPostPage() {
             ))}
           </select>
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             内容
@@ -352,7 +326,6 @@ export default function EditPostPage() {
             rows={6}
           />
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             媒体（可选）
@@ -364,7 +337,6 @@ export default function EditPostPage() {
             onChange={handleMediaChange}
           />
         </div>
-
         {/* Publish Token - 只读显示 */}
         {post?.publishToken && (
           <div>
@@ -393,7 +365,6 @@ export default function EditPostPage() {
             </p>
           </div>
         )}
-
         {/* 外部链接 - 已发布帖子专用 */}
         {formData.status === "published" && (
           <div>
@@ -413,7 +384,6 @@ export default function EditPostPage() {
             </p>
           </div>
         )}
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -434,7 +404,6 @@ export default function EditPostPage() {
               </p>
             )}
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               时区
@@ -451,7 +420,6 @@ export default function EditPostPage() {
             </select>
           </div>
         </div>
-
         <div className="flex gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <Button variant="secondary" onClick={() => router.push("/posts")} className="flex-1">
             取消

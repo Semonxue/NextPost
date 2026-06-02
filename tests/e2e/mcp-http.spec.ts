@@ -145,7 +145,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(body.result?.protocolVersion).toBeDefined();
     });
 
-    test('TC-MCP-HTTP-005: tools/list 暴露全部 7 个工具', async () => {
+    test('TC-MCP-HTTP-005: tools/list 暴露全部 9 个工具（4 读 + 5 写）', async () => {
       const { body } = await callMcp(readKey, 'tools/list', {}, 1);
       const names: string[] = body.result?.tools?.map((t: { name: string }) => t.name) ?? [];
       expect(names).toEqual(
@@ -303,7 +303,8 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
     });
 
     test('TC-MCP-HTTP-015: update_post 字段白名单 + 状态锁', async () => {
-      // 1. 字段白名单：传 content/mediaUrls/accountId/status 应被忽略
+      // 字段白名单（v0.3.2）：白名单内字段（content / mediaUrls / scheduledTime / timezone）可改，
+      // 名单外的（accountId / status）静默忽略。
       const data1 = await callTool(rwKey, 'update_post', {
         postId: testPost.id,
         scheduledTime: '2027-02-01T10:00:00Z',
@@ -315,10 +316,11 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(data1.success).toBe(true);
 
       const dbPost = await prisma.post.findUnique({ where: { id: testPost.id } });
-      expect(dbPost?.content).toBe('HTTP test post'); // 未被改
-      expect(dbPost?.mediaUrls).toBe('[]'); // 未被改
-      expect(dbPost?.status).toBe('scheduled'); // 未被改
-      expect(dbPost?.scheduledTime?.toISOString()).toBe('2027-02-01T10:00:00.000Z'); // 改了
+      expect(dbPost?.content).toBe('HACKED'); // 白名单内,被改
+      expect(dbPost?.mediaUrls).toBe('["/evil.jpg"]'); // 白名单内,被改
+      expect(dbPost?.status).toBe('scheduled'); // 名单外,未被改
+      expect(dbPost?.accountId).toBe(testAccount.id); // 名单外,未被改
+      expect(dbPost?.scheduledTime?.toISOString()).toBe('2027-02-01T10:00:00.000Z'); // 白名单内,被改
 
       // 2. 状态锁：published 状态拒绝
       await prisma.post.update({

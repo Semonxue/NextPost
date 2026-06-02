@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState, useMemo } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
@@ -7,7 +6,6 @@ import { Bot, Key, User, Plus, Trash2, Copy, Eye, Pencil, Check, Filter } from "
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useUIStore } from "@/stores/uiStore";
-
 interface ExternalApiKey {
   id: string;
   name: string;
@@ -15,14 +13,12 @@ interface ExternalApiKey {
   keyPreview: string;
   createdAt: string;
 }
-
 // 归一化 permissions 字段到 3 值之一
 function normalizeScope(p: string): "read" | "write" | "read_write" {
   if (p === "read_write") return "read_write";
   if (p === "write") return "write";
   return "read";
 }
-
 // UI 显示标签 + 颜色
 const SCOPE_META: Record<
   "read" | "write" | "read_write",
@@ -50,9 +46,7 @@ const SCOPE_META: Record<
     bg: "bg-blue-50 dark:bg-blue-900/20",
   },
 };
-
 type FilterMode = "all" | "read" | "read_write";
-
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const { addToast } = useUIStore();
@@ -71,7 +65,6 @@ export default function SettingsPage() {
   const [showNewKey, setShowNewKey] = useState<string | null>(null);
   // 列表过滤器
   const [keyFilter, setKeyFilter] = useState<FilterMode>("all");
-
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -80,14 +73,12 @@ export default function SettingsPage() {
       fetchSettings();
     }
   }, [status]);
-
   const fetchSettings = async () => {
     try {
       const [settingsRes, keysRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/settings/external-keys")
       ]);
-
       if (settingsRes.ok) {
         const data = await settingsRes.json();
         setAiConfig({
@@ -96,7 +87,6 @@ export default function SettingsPage() {
           model: data.aiModel || "gpt-4",
         });
       }
-
       if (keysRes.ok) {
         const keysData = await keysRes.json();
         setExternalKeys(keysData.keys || []);
@@ -107,13 +97,11 @@ export default function SettingsPage() {
       setLoading(false);
     }
   };
-
   const handleCreateKey = async () => {
     if (!newKeyName.trim()) {
       addToast({ type: "error", message: "请输入 Key 名称" });
       return;
     }
-
     setCreating(true);
     try {
       const res = await fetch("/api/settings/external-keys", {
@@ -121,7 +109,6 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newKeyName, scope: newKeyScope }),
       });
-
       if (res.ok) {
         const data = await res.json();
         setShowNewKey(data.key);
@@ -140,10 +127,8 @@ export default function SettingsPage() {
       setCreating(false);
     }
   };
-
   const handleDeleteKey = async (id: string) => {
     if (!confirm("确定要删除这个 API Key 吗？")) return;
-
     try {
       const res = await fetch(`/api/settings/external-keys/${id}?id=${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -156,7 +141,6 @@ export default function SettingsPage() {
       addToast({ type: "error", message: "删除失败" });
     }
   };
-
   const handleRevealKey = async (id: string, name: string) => {
     try {
       const res = await fetch(`/api/settings/external-keys/reveal?id=${id}`);
@@ -171,12 +155,10 @@ export default function SettingsPage() {
       addToast({ type: "error", message: "获取 Key 失败" });
     }
   };
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     addToast({ type: "success", message: "已复制到剪贴板" });
   };
-
   const handleSaveAI = async () => {
     setSaving(true);
     try {
@@ -194,12 +176,10 @@ export default function SettingsPage() {
       setSaving(false);
     }
   };
-
   const handleLogout = async () => {
     if (!confirm("确定要退出登录吗？")) return;
     await signOut({ callbackUrl: "/login" });
   };
-
   // 分类 + 过滤
   const partitionedKeys = useMemo(() => {
     const readOnly = externalKeys.filter((k) => normalizeScope(k.permissions) === "read");
@@ -207,14 +187,12 @@ export default function SettingsPage() {
     const writeOnly = externalKeys.filter((k) => normalizeScope(k.permissions) === "write");
     return { readOnly, readWrite, writeOnly };
   }, [externalKeys]);
-
   const filteredKeys = useMemo(() => {
     if (keyFilter === "read") return partitionedKeys.readOnly;
     if (keyFilter === "read_write") return partitionedKeys.readWrite;
     // "all" 显示 read + read_write；write-only 单独放在最后
     return [...partitionedKeys.readOnly, ...partitionedKeys.readWrite, ...partitionedKeys.writeOnly];
   }, [keyFilter, partitionedKeys]);
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -222,26 +200,22 @@ export default function SettingsPage() {
       </div>
     );
   }
-
   const aiProviders = [
     { value: "openai", label: "OpenAI (GPT-4)" },
     { value: "anthropic", label: "Anthropic (Claude)" },
     { value: "ollama", label: "Ollama (本地)" },
   ];
-
   const aiModels: Record<string, string[]> = {
     openai: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
     anthropic: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"],
     ollama: ["llama2", "codellama", "mistral"],
   };
-
   return (
     <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">设置</h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">管理你的账号和 AI 配置</p>
       </div>
-
       {/* User Info */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3 mb-4">
@@ -263,7 +237,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
-
       {/* AI Config */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3 mb-4">
@@ -287,7 +260,6 @@ export default function SettingsPage() {
               ))}
             </select>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               API Key
@@ -308,7 +280,6 @@ export default function SettingsPage() {
                 : "你的 API Key 将被加密存储"}
             </p>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               模型
@@ -325,13 +296,11 @@ export default function SettingsPage() {
               ))}
             </select>
           </div>
-
           <Button onClick={handleSaveAI} loading={saving} className="w-full">
             保存 AI 配置
           </Button>
         </div>
       </div>
-
       {/* MCP API Keys */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-3 mb-4">
@@ -346,7 +315,6 @@ export default function SettingsPage() {
           🔒 Key 的类型（只读 / 读写）在创建后<span className="font-semibold">不可修改</span>——
           防止手抖或被钓鱼瞬间从只读升级到读写。需要改？删除后重建。
         </p>
-
         {/* 创建新 Key —— 2 个大 radio card（只读 / 读写） */}
         <div className="mb-5 space-y-3" data-testid="create-key-form">
           <div className="flex gap-2">
@@ -362,7 +330,6 @@ export default function SettingsPage() {
               创建
             </Button>
           </div>
-
           {/* 类型选择：2 个大 radio card */}
           <div>
             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
@@ -394,7 +361,6 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
-
         {/* 新 Key 提示 */}
         {showNewKey && (
           <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -417,7 +383,6 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
-
         {/* Key 列表 —— 类型过滤 + 卡片化 */}
         {externalKeys.length > 0 ? (
           <div data-testid="external-keys-list">
@@ -446,7 +411,6 @@ export default function SettingsPage() {
                 testId="filter-read_write"
               />
             </div>
-
             {filteredKeys.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
                 该类型下暂无 Key
@@ -517,7 +481,6 @@ export default function SettingsPage() {
                 })}
               </div>
             )}
-
             {/* 写-only key 提示（如果有） */}
             {partitionedKeys.writeOnly.length > 0 && keyFilter === "all" && (
               <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
@@ -531,7 +494,6 @@ export default function SettingsPage() {
           </p>
         )}
       </div>
-
       {/* Danger Zone */}
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-red-200 dark:border-red-900">
         <h2 className="text-lg font-semibold text-red-600 dark:text-red-400 mb-4">危险区域</h2>
@@ -542,9 +504,7 @@ export default function SettingsPage() {
     </div>
   );
 }
-
 // ===== 复用小组件 =====
-
 function TypeRadio({
   label,
   desc,
@@ -590,7 +550,6 @@ function TypeRadio({
     </button>
   );
 }
-
 function FilterTab({
   active,
   onClick,
@@ -628,4 +587,3 @@ function FilterTab({
     </button>
   );
 }
-

@@ -1,12 +1,10 @@
 "use client";
-
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-
 export default function RegisterPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -15,23 +13,18 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
     if (password !== confirmPassword) {
       setError("两次密码输入不一致");
       return;
     }
-
     if (password.length < 6) {
       setError("密码长度至少为6位");
       return;
     }
-
     setLoading(true);
-
     try {
       // 注册
       const registerRes = await fetch("/api/auth/register", {
@@ -39,14 +32,11 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, email }),
       });
-
       const registerData = await registerRes.json();
-
       if (!registerRes.ok) {
         setError(registerData.error || "注册失败");
         return;
       }
-
       // 注册成功后跳转到登录页
       router.push("/login?registered=true");
     } catch {
@@ -55,14 +45,12 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
-
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-blue-600 mb-2">NextPost</h1>
         <p className="text-gray-600 dark:text-gray-400">创建您的账号</p>
       </div>
-
       <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           label="用户名"
@@ -72,7 +60,6 @@ export default function RegisterPage() {
           placeholder="请输入用户名"
           required
         />
-
         <Input
           label="邮箱（可选）"
           type="email"
@@ -80,7 +67,6 @@ export default function RegisterPage() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="请输入邮箱"
         />
-
         <Input
           label="密码"
           type="password"
@@ -89,7 +75,6 @@ export default function RegisterPage() {
           placeholder="请输入密码（至少6位）"
           required
         />
-
         <Input
           label="确认密码"
           type="password"
@@ -98,16 +83,13 @@ export default function RegisterPage() {
           placeholder="请再次输入密码"
           required
         />
-
         {error && (
           <p className="text-sm text-red-500 text-center">{error}</p>
         )}
-
         <Button type="submit" className="w-full" loading={loading}>
           注册
         </Button>
       </form>
-
       <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
         已有账号？{" "}
         <Link href="/login" className="text-blue-600 hover:underline">

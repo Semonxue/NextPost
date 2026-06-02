@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
@@ -7,8 +6,8 @@ import Link from "next/link";
 import { Plus, Edit2, Trash2, Calendar, Filter, X, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { MediaThumbnail } from "@/components/MediaThumbnail";
+import { Pagination } from "@/components/ui/Pagination";
 import { useUIStore } from "@/stores/uiStore";
-
 interface Post {
   id: string;
   content: string;
@@ -19,19 +18,16 @@ interface Post {
   externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
 }
-
 interface Account {
   id: string;
   name: string;
   handle: string;
   platform: { id: string; name: string };
 }
-
 interface Platform {
   id: string;
   name: string;
 }
-
 export default function PostsPage() {
   const { status } = useSession();
   const { addToast } = useUIStore();
@@ -44,7 +40,9 @@ export default function PostsPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [showAccountFilter, setShowAccountFilter] = useState(false);
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
-
+  const [totalPosts, setTotalPosts] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -53,7 +51,6 @@ export default function PostsPage() {
       fetchData();
     }
   }, [status]);
-
   const fetchData = async () => {
     try {
       const [postsRes, accountsRes] = await Promise.all([
@@ -85,7 +82,6 @@ export default function PostsPage() {
       setLoading(false);
     }
   };
-
   const fetchPosts = async () => {
     try {
       const params = new URLSearchParams();
@@ -101,25 +97,36 @@ export default function PostsPage() {
         selectedPlatforms.forEach(id => params.append("platformIds", id));
       }
       
+      params.set("limit", pageSize.toString());
+      params.set("offset", ((currentPage - 1) * pageSize).toString());
+      
       const queryString = params.toString();
-      const url = queryString ? `/api/posts?${queryString}` : "/api/posts";
+      const url = `/api/posts?${queryString}`;
       
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setPosts(data.posts || []);
+        setTotalPosts(data.total || 0);
       }
     } catch (error) {
       console.error("获取帖子失败:", error);
     }
   };
-
   useEffect(() => {
     if (status === "authenticated") {
       fetchPosts();
     }
-  }, [statusFilter, selectedAccounts, selectedPlatforms, status]);
+  }, [status, statusFilter, selectedAccounts, selectedPlatforms, currentPage, pageSize]);
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1);
+  };
   const toggleAccountFilter = (accountId: string) => {
     setSelectedAccounts(prev => 
       prev.includes(accountId)
@@ -127,7 +134,6 @@ export default function PostsPage() {
         : [...prev, accountId]
     );
   };
-
   const togglePlatformFilter = (platformId: string) => {
     setSelectedPlatforms(prev => 
       prev.includes(platformId)
@@ -135,17 +141,13 @@ export default function PostsPage() {
         : [...prev, platformId]
     );
   };
-
   const clearAllFilters = () => {
     setSelectedAccounts([]);
     setSelectedPlatforms([]);
   };
-
   const hasFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0;
-
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这个帖子吗？")) return;
-
     try {
       const res = await fetch(`/api/posts/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -156,7 +158,6 @@ export default function PostsPage() {
       addToast({ type: "error", message: "删除失败" });
     }
   };
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -164,14 +165,12 @@ export default function PostsPage() {
       </div>
     );
   }
-
   const statusFilters = [
     { value: "all", label: "全部" },
     { value: "draft", label: "草稿" },
     { value: "scheduled", label: "已计划" },
     { value: "published", label: "已发布" },
   ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -239,7 +238,6 @@ export default function PostsPage() {
               </div>
             )}
           </div>
-
           {/* 平台筛选 */}
           <div className="relative">
             <button
@@ -289,7 +287,6 @@ export default function PostsPage() {
               </div>
             )}
           </div>
-
           {/* 清除筛选 */}
           {hasFilters && (
             <button
@@ -302,7 +299,6 @@ export default function PostsPage() {
           )}
         </div>
       </div>
-
       {/* 状态筛选 - 独立一行 */}
       <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 w-fit">
         {statusFilters.map((f) => (
@@ -319,7 +315,6 @@ export default function PostsPage() {
           </button>
         ))}
       </div>
-
       {/* 帖子列表 */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         {posts.length === 0 ? (
@@ -424,6 +419,17 @@ export default function PostsPage() {
           </div>
         )}
       </div>
+      {/* 分页 */}
+      {posts.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={totalPosts}
+          pageSize={pageSize}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          pageSizeOptions={[10, 20, 50, 100]}
+        />
+      )}
     </div>
   );
 }

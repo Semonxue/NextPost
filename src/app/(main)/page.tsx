@@ -1,18 +1,15 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Calendar, FileText, TrendingUp, Clock, Plus, ArrowRight } from "lucide-react";
-
 interface Stats {
   totalPosts: number;
   scheduled: number;
   published: number;
   drafts: number;
 }
-
 interface RecentPost {
   id: string;
   content: string;
@@ -20,35 +17,29 @@ interface RecentPost {
   status: string;
   account: { name: string; handle: string };
 }
-
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const [stats, setStats] = useState<Stats>({ totalPosts: 0, scheduled: 0, published: 0, drafts: 0 });
   const [recentPosts, setRecentPosts] = useState<RecentPost[]>([]);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
     }
-
     if (status === "authenticated") {
       fetchDashboardData();
     }
   }, [status]);
-
   const fetchDashboardData = async () => {
     try {
       const [statsRes, postsRes] = await Promise.all([
         fetch("/api/posts/stats"),
         fetch("/api/posts?limit=5"),
       ]);
-
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData);
       }
-
       if (postsRes.ok) {
         const postsData = await postsRes.json();
         setRecentPosts(postsData.posts || []);
@@ -59,7 +50,6 @@ export default function DashboardPage() {
       setLoading(false);
     }
   };
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -67,14 +57,12 @@ export default function DashboardPage() {
       </div>
     );
   }
-
   const statCards = [
     { label: "本周计划", value: stats.scheduled, icon: Calendar, color: "blue" },
     { label: "已发布", value: stats.published, icon: TrendingUp, color: "green" },
     { label: "草稿", value: stats.drafts, icon: FileText, color: "yellow" },
     { label: "总计", value: stats.totalPosts, icon: Clock, color: "purple" },
   ];
-
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -94,7 +82,6 @@ export default function DashboardPage() {
           新建帖子
         </Link>
       </div>
-
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat) => {
@@ -119,7 +106,6 @@ export default function DashboardPage() {
           );
         })}
       </div>
-
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link
@@ -139,7 +125,6 @@ export default function DashboardPage() {
             <ArrowRight className="text-gray-400 group-hover:text-blue-600 transition-colors" size={20} />
           </div>
         </Link>
-
         <Link
           href="/accounts"
           className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition-colors group"
@@ -158,7 +143,6 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
-
       {/* Recent Posts */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">

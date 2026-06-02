@@ -11,9 +11,9 @@ const navItems = [
   { href: "/calendar", label: "日历视图", icon: Calendar },
   { href: "/posts", label: "帖子列表", icon: FileText },
   { href: "/accounts", label: "账号管理", icon: Users },
-  { href: "/trash", label: "回收站", icon: Trash2 },
   { href: "/ai-tools", label: "AI tools", icon: Wrench },
   { href: "/settings", label: "设置", icon: Settings },
+  { href: "/trash", label: "回收站", icon: Trash2 },
 ];
 
 export function Sidebar() {

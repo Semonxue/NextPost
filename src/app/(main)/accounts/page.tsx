@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
@@ -8,7 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { useUIStore } from "@/stores/uiStore";
-
 interface Account {
   id: string;
   name: string;
@@ -16,7 +14,6 @@ interface Account {
   description?: string;
   platform: { name: string; icon?: string };
 }
-
 export default function AccountsPage() {
   const { data: session, status } = useSession();
   const { addToast } = useUIStore();
@@ -26,7 +23,6 @@ export default function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [formData, setFormData] = useState({ name: "", handle: "", description: "" });
   const [saving, setSaving] = useState(false);
-
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -35,7 +31,6 @@ export default function AccountsPage() {
       fetchAccounts();
     }
   }, [status]);
-
   const fetchAccounts = async () => {
     try {
       const res = await fetch("/api/accounts");
@@ -49,7 +44,6 @@ export default function AccountsPage() {
       setLoading(false);
     }
   };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -60,17 +54,14 @@ export default function AccountsPage() {
     }
     
     setSaving(true);
-
     try {
       const url = editingAccount ? `/api/accounts/${editingAccount.id}` : "/api/accounts";
       const method = editingAccount ? "PATCH" : "POST";
-
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
       if (res.ok) {
         addToast({ type: "success", message: editingAccount ? "账号已更新" : "账号已创建" });
         fetchAccounts();
@@ -87,10 +78,8 @@ export default function AccountsPage() {
       setSaving(false);
     }
   };
-
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这个账号吗？")) return;
-
     try {
       const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -101,13 +90,11 @@ export default function AccountsPage() {
       addToast({ type: "error", message: "删除失败" });
     }
   };
-
   const openEditModal = (account: Account) => {
     setEditingAccount(account);
     setFormData({ name: account.name, handle: account.handle, description: account.description || "" });
     setModalOpen(true);
   };
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -115,7 +102,6 @@ export default function AccountsPage() {
       </div>
     );
   }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -128,7 +114,6 @@ export default function AccountsPage() {
           添加账号
         </Button>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts.length === 0 ? (
             <div className="col-span-full bg-white dark:bg-gray-800 rounded-xl p-8 text-center border border-gray-200 dark:border-gray-700">
@@ -171,8 +156,6 @@ export default function AccountsPage() {
                   >
                     <Trash2 size={16} className="text-red-500" />
                   </button>
-REPLACE
-
                 </div>
               </div>
               {account.description && (
@@ -185,7 +168,6 @@ REPLACE
           ))
         )}
       </div>
-
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingAccount ? "编辑账号" : "添加账号"}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input

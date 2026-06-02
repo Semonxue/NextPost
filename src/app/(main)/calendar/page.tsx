@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
@@ -8,7 +7,6 @@ import Link from "next/link";
 import { useUIStore } from "@/stores/uiStore";
 import { Button } from "@/components/ui/Button";
 import { MediaThumbnail } from "@/components/MediaThumbnail";
-
 interface Post {
   id: string;
   content: string;
@@ -19,19 +17,16 @@ interface Post {
   externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
 }
-
 interface Account {
   id: string;
   name: string;
   handle: string;
   platform: { id: string; name: string };
 }
-
 interface Platform {
   id: string;
   name: string;
 }
-
 export default function CalendarPage() {
   const { status } = useSession();
   const { addToast } = useUIStore();
@@ -46,7 +41,6 @@ export default function CalendarPage() {
   const [showAccountFilter, setShowAccountFilter] = useState(false);
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
-
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -55,7 +49,6 @@ export default function CalendarPage() {
       fetchData();
     }
   }, [status]);
-
   const fetchData = async () => {
     try {
       const statusParam = statusFilter === "all" ? "" : `?status=${statusFilter}`;
@@ -88,7 +81,6 @@ export default function CalendarPage() {
       setLoading(false);
     }
   };
-
   const fetchPosts = async () => {
     try {
       const params = new URLSearchParams();
@@ -114,13 +106,11 @@ export default function CalendarPage() {
       console.error("获取帖子失败:", error);
     }
   };
-
   useEffect(() => {
     if (status === "authenticated") {
       fetchPosts();
     }
   }, [selectedAccounts, selectedPlatforms, statusFilter, status]);
-
   const toggleAccountFilter = (accountId: string) => {
     setSelectedAccounts(prev => 
       prev.includes(accountId)
@@ -128,7 +118,6 @@ export default function CalendarPage() {
         : [...prev, accountId]
     );
   };
-
   const togglePlatformFilter = (platformId: string) => {
     setSelectedPlatforms(prev => 
       prev.includes(platformId)
@@ -136,14 +125,11 @@ export default function CalendarPage() {
         : [...prev, platformId]
     );
   };
-
   const clearAllFilters = () => {
     setSelectedAccounts([]);
     setSelectedPlatforms([]);
   };
-
   const hasActiveFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0 || statusFilter !== "all";
-
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -164,7 +150,6 @@ export default function CalendarPage() {
     
     return days;
   };
-
   const getPostsForDate = (day: number) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -178,7 +163,6 @@ export default function CalendarPage() {
       );
     });
   };
-
   const getPostsForSelectedDate = () => {
     if (!selectedDate) return [];
     const year = selectedDate.getFullYear();
@@ -194,33 +178,27 @@ export default function CalendarPage() {
       );
     });
   };
-
   const navigateMonth = (direction: number) => {
     const newDate = new Date(currentDate);
     newDate.setMonth(currentDate.getMonth() + direction);
     setCurrentDate(newDate);
     setSelectedDate(null);
   };
-
   const monthNames = [
     "一月", "二月", "三月", "四月", "五月", "六月",
     "七月", "八月", "九月", "十月", "十一月", "十二月"
   ];
-
   const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
-
   const statusColors: Record<string, string> = {
     draft: "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400",
     scheduled: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
     published: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
   };
-
   const statusLabels: Record<string, string> = {
     draft: "草稿",
     scheduled: "已计划",
     published: "已发布",
   };
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -228,10 +206,8 @@ export default function CalendarPage() {
       </div>
     );
   }
-
   const days = getDaysInMonth(currentDate);
   const selectedDatePosts = getPostsForSelectedDate();
-
   const formatSelectedDate = () => {
     if (!selectedDate) return "";
     const year = selectedDate.getFullYear();
@@ -239,14 +215,12 @@ export default function CalendarPage() {
     const day = String(selectedDate.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
-
   const statusFilters = [
     { value: "all", label: "全部" },
     { value: "draft", label: "草稿" },
     { value: "scheduled", label: "已计划" },
     { value: "published", label: "已发布" },
   ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -314,7 +288,6 @@ export default function CalendarPage() {
               </div>
             )}
           </div>
-
           {/* 平台筛选 */}
           <div className="relative">
             <button
@@ -364,7 +337,6 @@ export default function CalendarPage() {
               </div>
             )}
           </div>
-
           {/* 状态筛选 */}
           <div className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
             {statusFilters.map((f) => (
@@ -381,7 +353,6 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
-
           {/* 清除筛选 */}
           {hasActiveFilters && (
             <button
@@ -397,7 +368,6 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Calendar */}
         <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3">
@@ -426,7 +396,6 @@ export default function CalendarPage() {
               </button>
             </div>
           </div>
-
           <div className="grid grid-cols-7 gap-0.5">
             {dayNames.map((day) => (
               <div
@@ -447,7 +416,6 @@ export default function CalendarPage() {
                 currentDate.getMonth() === selectedDate.getMonth() &&
                 currentDate.getFullYear() === selectedDate.getFullYear();
               const dayPosts = day ? getPostsForDate(day) : [];
-
               return (
                 <div
                   key={index}
@@ -517,7 +485,6 @@ export default function CalendarPage() {
             })}
           </div>
         </div>
-
         {/* Selected Date Details */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -602,7 +569,6 @@ export default function CalendarPage() {
               )}
             </div>
           )}
-
           {!selectedDate && (
             <p className="text-gray-500 dark:text-gray-400 text-sm">点击日历上的日期查看详情或添加计划</p>
           )}
