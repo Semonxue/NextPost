@@ -43,9 +43,10 @@ export interface PlatformConfig {
 // 媒体项接口
 export interface MediaItem {
   id: string;
-  preview: string; // 缩略图（base64 或 URL）
+  preview: string; // 预览图（base64 或 URL）
   file?: File; // 新上传的文件
   url?: string; // 已存在的 URL
+  thumbnailUrl?: string; // 缩略图 URL（服务端生成的小图）
   type: "image" | "video";
   name?: string; // 文件名
   size?: number; // 文件大小

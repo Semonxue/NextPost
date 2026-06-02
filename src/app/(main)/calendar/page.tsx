@@ -15,6 +15,7 @@ interface Post {
   scheduledTime: string | null;
   status: string;
   mediaUrls: string | null;
+  mediaThumbnails: string | null; // 缩略图 URL 数组
   externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
 }
@@ -472,6 +473,7 @@ export default function CalendarPage() {
                         <div className="space-y-0.5">
                           {dayPosts.slice(0, 4).map((post) => {
                             const mediaArr = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+                            const thumbnailsArr = post.mediaThumbnails ? JSON.parse(post.mediaThumbnails) : [];
                             return (
                               <div
                                 key={post.id}
@@ -480,6 +482,7 @@ export default function CalendarPage() {
                                 {mediaArr.length > 0 && (
                                   <MediaThumbnail
                                     urls={mediaArr}
+                                    thumbnails={thumbnailsArr}
                                     size={28}
                                     className="rounded flex-shrink-0"
                                   />

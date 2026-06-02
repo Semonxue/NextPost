@@ -29,6 +29,7 @@ interface Post {
   timezone: string;
   status: string;
   mediaUrls: string | null;
+  mediaThumbnails: string | null;
   externalPostUrl: string | null;
   publishToken: string | null;
 }
@@ -53,12 +54,39 @@ export default function EditPostPage() {
   const [loading, setLoading] = useState(true);
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
+  const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
 
   // 默认平台配置
   const defaultConfig: PlatformConfig = {
     platformId: "",
     platformName: "Twitter",
     ...DEFAULT_PLATFORM_CONFIG.Twitter,
+  };
+
+  // 将 UTC Date 对象转换为指定时区的 datetime-local 格式字符串
+  const formatDateTimeLocal = (date: Date, timezone: string): string => {
+    try {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const parts = formatter.formatToParts(date);
+      const getPart = (type: string) => parts.find(p => p.type === type)?.value || "";
+      const year = getPart("year");
+      const month = getPart("month");
+      const day = getPart("day");
+      const hour = getPart("hour");
+      const minute = getPart("minute");
+      return `${year}-${month}-${day}T${hour}:${minute}`;
+    } catch {
+      // 如果时区转换失败，使用本地时间
+      return date.toISOString().slice(0, 16);
+    }
   };
 
   useEffect(() => {
@@ -88,7 +116,7 @@ export default function EditPostPage() {
         setFormData({
           accountId: postData.accountId,
           content: postData.content,
-          scheduledTime: postData.scheduledTime ? new Date(postData.scheduledTime).toISOString().slice(0, 16) : "",
+          scheduledTime: postData.scheduledTime ? formatDateTimeLocal(new Date(postData.scheduledTime), postData.timezone) : "",
           timezone: postData.timezone,
           status: postData.status,
           externalPostUrl: postData.externalPostUrl || "",
@@ -98,6 +126,12 @@ export default function EditPostPage() {
         if (postData.mediaUrls) {
           const urls = JSON.parse(postData.mediaUrls);
           setExistingMediaUrls(urls);
+        }
+        
+        // 解析已有缩略图
+        if (postData.mediaThumbnails) {
+          const thumbnails = JSON.parse(postData.mediaThumbnails);
+          setMediaThumbnails(thumbnails);
         }
         
         // 获取平台配置
@@ -173,6 +207,7 @@ export default function EditPostPage() {
     try {
       // 如果有新文件，先上传
       let mediaUrls: string[] = [...existingMediaUrls];
+      let mediaThumbnailsResult: string[] = [...mediaThumbnails];
       
       for (const file of mediaFiles) {
         const uploadFormData = new FormData();
@@ -192,6 +227,10 @@ export default function EditPostPage() {
         
         const uploadData = await uploadRes.json();
         mediaUrls.push(uploadData.url);
+        // 保存服务端生成的缩略图 URL
+        if (uploadData.thumbnailUrl) {
+          mediaThumbnailsResult.push(uploadData.thumbnailUrl);
+        }
       }
       
       // 根据状态决定 scheduledTime：只有 scheduled 状态才保留计划时间，其他状态保留原值
@@ -207,6 +246,7 @@ export default function EditPostPage() {
           accountId: formData.accountId,
           content: formData.content,
           mediaUrls,
+          mediaThumbnails: mediaThumbnailsResult,
           scheduledTime: scheduledTimeValue,
           timezone: formData.timezone,
           status: formData.status,
@@ -320,6 +360,7 @@ export default function EditPostPage() {
           <MediaUploader
             platformConfig={platformConfig || defaultConfig}
             initialUrls={existingMediaUrls}
+            initialThumbnails={mediaThumbnails}
             onChange={handleMediaChange}
           />
         </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { uploadFile } from "@/lib/storage";
+import { uploadFileWithThumbnail } from "@/lib/storage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,15 +27,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "不支持的文件类型" }, { status: 400 });
     }
 
-    // 读取文件并上传
+    // 读取文件并上传（自动生成缩略图）
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await uploadFile(buffer, file.name, file.type);
+    const result = await uploadFileWithThumbnail(buffer, file.name, file.type);
 
     return NextResponse.json({
       url: result.url,
+      thumbnailUrl: result.thumbnailUrl,
       filename: result.filename,
       mimeType: result.mimeType,
       size: result.size,
+      thumbnailSize: result.thumbnailSize,
     });
   } catch (error) {
     console.error("上传文件失败:", error);

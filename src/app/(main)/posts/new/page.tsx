@@ -40,6 +40,7 @@ function NewPostContent() {
   const [saving, setSaving] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
+  const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
 
   // 默认平台配置
   const defaultConfig: PlatformConfig = {
@@ -161,6 +162,7 @@ function NewPostContent() {
     try {
       // 如果有新文件，先上传
       let mediaUrls: string[] = [...existingMediaUrls];
+      let mediaThumbnailsResult: string[] = [...mediaThumbnails];
       
       for (const file of mediaFiles) {
         const uploadFormData = new FormData();
@@ -180,6 +182,10 @@ function NewPostContent() {
         
         const uploadData = await uploadRes.json();
         mediaUrls.push(uploadData.url);
+        // 保存服务端生成的缩略图 URL
+        if (uploadData.thumbnailUrl) {
+          mediaThumbnailsResult.push(uploadData.thumbnailUrl);
+        }
       }
       
       const res = await fetch("/api/posts", {
@@ -188,6 +194,7 @@ function NewPostContent() {
         body: JSON.stringify({
           ...formData,
           mediaUrls,
+          mediaThumbnails: mediaThumbnailsResult,
           scheduledTime: formData.scheduledTime || null,
           status: asDraft ? "draft" : formData.scheduledTime ? "scheduled" : "draft",
         }),

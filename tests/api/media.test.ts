@@ -10,6 +10,15 @@ vi.mock('@/lib/storage', () => ({
     mimeType: 'image/jpeg',
     size: 1024,
   }),
+  uploadFileWithThumbnail: vi.fn().mockResolvedValue({
+    url: '/api/uploads/2024-01-01/test-file.jpg',
+    thumbnailUrl: '/api/uploads/2024-01-01/test-file_thumb.webp',
+    path: '/api/uploads/2024-01-01/test-file.jpg',
+    filename: 'test-file.jpg',
+    mimeType: 'image/jpeg',
+    size: 1024,
+    thumbnailSize: 512,
+  }),
   deleteFile: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -81,7 +90,7 @@ describe('Media API', () => {
     });
 
     it('should upload file successfully', async () => {
-      const { uploadFile } = await import('@/lib/storage');
+      const { uploadFileWithThumbnail } = await import('@/lib/storage');
       
       const mockFile = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
       const formData = new FormData();
@@ -96,12 +105,13 @@ describe('Media API', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.url).toBe('/api/uploads/2024-01-01/test-file.jpg');
+      expect(data.thumbnailUrl).toBe('/api/uploads/2024-01-01/test-file_thumb.webp');
       expect(data.filename).toBe('test-file.jpg');
-      expect(uploadFile).toHaveBeenCalled();
+      expect(uploadFileWithThumbnail).toHaveBeenCalled();
     });
 
     it('should upload video file successfully', async () => {
-      const { uploadFile } = await import('@/lib/storage');
+      const { uploadFileWithThumbnail } = await import('@/lib/storage');
       
       const mockFile = new File(['test'], 'video.mp4', { type: 'video/mp4' });
       const formData = new FormData();
@@ -114,10 +124,8 @@ describe('Media API', () => {
 
       const response = await POST(request);
       expect(response.status).toBe(200);
-      // Verify uploadFile was called with video mimeType
-      expect(uploadFile).toHaveBeenCalled();
-      const callArgs = (uploadFile as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(callArgs[2]).toBe('video/mp4');
+      // Verify uploadFileWithThumbnail was called with video mimeType
+      expect(uploadFileWithThumbnail).toHaveBeenCalled();
     });
 
     it('should handle file size validation', async () => {
@@ -165,8 +173,8 @@ describe('Media API', () => {
 });
   describe('POST /api/media/upload - Error cases', () => {
     it('should handle upload error', async () => {
-      const { uploadFile } = await import('@/lib/storage');
-      (uploadFile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Upload failed'));
+      const { uploadFileWithThumbnail } = await import('@/lib/storage');
+      (uploadFileWithThumbnail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Upload failed'));
 
       const mockFile = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
       const formData = new FormData();

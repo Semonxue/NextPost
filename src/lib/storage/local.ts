@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { StorageEngine, UploadResult } from './types';
+import { generateThumbnail } from './thumbnail';
 
 // 确保目录存在
 async function ensureDir(dirPath: string): Promise<void> {
@@ -37,6 +38,59 @@ export class LocalStorageEngine implements StorageEngine {
     await fs.writeFile(filePath, file);
     
     return this.getUrl(relativePath);
+  }
+
+  /**
+   * 上传图片并生成缩略图
+   * @returns 上传结果，包含 originalUrl 和 thumbnailUrl
+   */
+  async uploadWithThumbnail(file: Buffer, filename: string, mimeType: string): Promise<{
+    url: string;
+    thumbnailUrl: string;
+    path: string;
+    filename: string;
+    mimeType: string;
+    size: number;
+    thumbnailSize: number;
+  }> {
+    // 生成唯一文件名
+    const ext = path.extname(filename);
+    const baseName = path.basename(filename, ext);
+    const uniqueName = `${uuidv4()}${ext}`;
+    const relativePath = `${new Date().toISOString().slice(0, 10)}/${uniqueName}`;
+    const thumbnailPath = `${new Date().toISOString().slice(0, 10)}/${baseName}_thumb.webp`;
+    
+    // 确保目录存在
+    const dirPath = path.join(this.baseDir, path.dirname(relativePath));
+    await ensureDir(dirPath);
+    
+    // 写入原文件
+    const filePath = path.join(this.baseDir, relativePath);
+    await fs.writeFile(filePath, file);
+    
+    // 生成并写入缩略图（仅对图片生成）
+    const isImage = mimeType.startsWith('image/');
+    let thumbnailBuffer: Buffer | null = null;
+    
+    if (isImage) {
+      try {
+        thumbnailBuffer = await generateThumbnail(file);
+        const thumbPath = path.join(this.baseDir, thumbnailPath);
+        await fs.writeFile(thumbPath, thumbnailBuffer);
+      } catch (err) {
+        console.error('生成缩略图失败:', err);
+      }
+    }
+    
+    return {
+      url: this.getUrl(relativePath),
+      thumbnailUrl: thumbnailBuffer ? this.getUrl(thumbnailPath) : this.getUrl(relativePath),
+      path: relativePath,
+      filename,
+      mimeType,
+      size: file.length,
+      thumbnailSize: thumbnailBuffer?.length || 0,
+    };
   }
 
   async delete(url: string): Promise<void> {

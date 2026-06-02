@@ -37,6 +37,36 @@ export async function uploadFile(
   };
 }
 
+// 上传文件并生成缩略图（仅本地存储支持）
+export async function uploadFileWithThumbnail(
+  file: Buffer,
+  filename: string,
+  mimeType: string
+): Promise<{
+  url: string;
+  thumbnailUrl: string;
+  path: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  thumbnailSize: number;
+}> {
+  if (localStorage instanceof LocalStorageEngine) {
+    return localStorage.uploadWithThumbnail(file, filename, mimeType);
+  }
+  // 其他存储引擎回退到普通上传
+  const url = await uploadFile(file, filename, mimeType);
+  return {
+    url: url.url,
+    thumbnailUrl: url.url,
+    path: url.path,
+    filename: url.filename,
+    mimeType: url.mimeType,
+    size: url.size,
+    thumbnailSize: 0,
+  };
+}
+
 // 删除文件
 export async function deleteFile(url: string): Promise<void> {
   const engine = getStorageEngine();

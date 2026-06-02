@@ -270,6 +270,7 @@ describe('Posts API', () => {
         status: 'scheduled',
         accountId: 'acct-1',
         mediaUrls: '["https://example.com/image.jpg"]',
+        mediaThumbnails: '[]',
       })
 
       const request = new NextRequest('http://localhost/api/posts', {
@@ -290,6 +291,42 @@ describe('Posts API', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             mediaUrls: expect.any(String),
+          }),
+        })
+      )
+    })
+
+    it('should create post with mediaUrls and thumbnails', async () => {
+      mockAccountFindFirst.mockResolvedValue({ id: 'acct-1', userId: 'user-123' })
+      mockPostCreate.mockResolvedValue({
+        id: 'post-new',
+        content: '帖子内容',
+        status: 'scheduled',
+        accountId: 'acct-1',
+        mediaUrls: '["https://example.com/image.jpg"]',
+        mediaThumbnails: '["https://example.com/image_thumb.webp"]',
+      })
+
+      const request = new NextRequest('http://localhost/api/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          accountId: 'acct-1',
+          content: '帖子内容',
+          mediaUrls: ['https://example.com/image.jpg'],
+          mediaThumbnails: ['https://example.com/image_thumb.webp'],
+          scheduledTime: '2024-12-01T10:00:00',
+        }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            mediaUrls: expect.any(String),
+            mediaThumbnails: expect.any(String),
           }),
         })
       )

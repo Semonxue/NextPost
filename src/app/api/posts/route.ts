@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
-    const { accountId, content, mediaUrls, scheduledTime, timezone, status } = await request.json();
+    const { accountId, content, mediaUrls, mediaThumbnails, scheduledTime, timezone, status } = await request.json();
 
     if (!accountId) {
       return NextResponse.json({ error: "请选择账号" }, { status: 400 });
@@ -96,6 +96,7 @@ export async function POST(request: NextRequest) {
         accountId,
         content: content || "",
         mediaUrls: JSON.stringify(mediaUrls || []),
+        mediaThumbnails: JSON.stringify(mediaThumbnails || []), // 缩略图 URL 数组
         scheduledTime: scheduledTimeFinal,
         timezone: timezone || "Asia/Shanghai",
         status: finalStatus,

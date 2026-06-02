@@ -9,6 +9,7 @@ import { MediaPreview } from "@/components/MediaPreview";
 interface MediaUploaderProps {
   platformConfig: PlatformConfig;
   initialUrls?: string[];
+  initialThumbnails?: string[]; // 服务端生成的缩略图 URL 数组
   onChange: (urls: string[], files: File[]) => void;
   maxFileSize?: number; // 默认 10MB
 }
@@ -16,6 +17,7 @@ interface MediaUploaderProps {
 export function MediaUploader({
   platformConfig,
   initialUrls = [],
+  initialThumbnails = [],
   onChange,
   maxFileSize = 10 * 1024 * 1024,
 }: MediaUploaderProps) {
@@ -25,8 +27,9 @@ export function MediaUploader({
     // 初始化已有媒体
     return initialUrls.map((url, index) => ({
       id: `initial-${index}`,
-      preview: url,
+      preview: initialThumbnails[index] || url, // 优先使用缩略图作为预览
       url,
+      thumbnailUrl: initialThumbnails[index] || url, // 使用服务端生成的缩略图
       type: url.match(/\.(mp4|webm|ogg|mov)$/i) ? "video" : "image",
     }));
   });
@@ -176,7 +179,7 @@ export function MediaUploader({
           continue;
         }
 
-        // 生成缩略图
+        // 生成本地预览缩略图
         const thumbnail = await generateThumbnail(file);
         const newItem: MediaItem = {
           id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

@@ -41,7 +41,7 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const { accountId, content, mediaUrls, scheduledTime, timezone, status, externalPostUrl } = await request.json();
+    const { accountId, content, mediaUrls, mediaThumbnails, scheduledTime, timezone, status, externalPostUrl } = await request.json();
 
     // 验证帖子归属（且未被软删除）
     const existingPost = await prisma.post.findFirst({
@@ -74,6 +74,7 @@ export async function PATCH(
         accountId: accountId || existingPost.accountId,
         content: content !== undefined ? content : existingPost.content,
         mediaUrls: mediaUrls !== undefined ? JSON.stringify(mediaUrls) : existingPost.mediaUrls,
+        mediaThumbnails: mediaThumbnails !== undefined ? JSON.stringify(mediaThumbnails) : existingPost.mediaThumbnails,
         scheduledTime: scheduledTimeFinal,
         timezone: timezone || existingPost.timezone,
         status: status !== undefined ? status : existingPost.status,

@@ -79,7 +79,8 @@ model Post {
   userId        String
   accountId     String
   content String
-  mediaUrls     String   @default("[]")
+  mediaUrls     String   @default("[]")   // JSON 数组：["url1", "url2"]
+  mediaThumbnails String @default("[]")   // JSON 数组：["thumb1", "thumb2"]，与服务端缩略图一一对应
   scheduledTime DateTime?
   timezone String   @default("Asia/Shanghai")
   status        String   @default("draft")  // draft, scheduled, publishing, published, failed
@@ -115,6 +116,7 @@ model Media {
   userId    String
   type String
   url       String
+  thumbnailUrl String?                      // 服务端生成的缩略图 URL
   filename String
   size      Int
   mimeType  String
