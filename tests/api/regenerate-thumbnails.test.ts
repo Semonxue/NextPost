@@ -106,7 +106,7 @@ describe('Regenerate Thumbnails API', () => {
       // Mock post update
       mockPostUpdate.mockResolvedValue({ id: 'post-1' })
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -121,7 +121,7 @@ describe('Regenerate Thumbnails API', () => {
         { id: 'post-2', mediaUrls: null },
       ])
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -139,7 +139,7 @@ describe('Regenerate Thumbnails API', () => {
       // All fs.access calls succeed (thumbnails exist)
       fsMock.access.mockResolvedValue(undefined)
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -149,7 +149,7 @@ describe('Regenerate Thumbnails API', () => {
     it('should return 401 when not authenticated', async () => {
       ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       expect(response.status).toBe(401)
     })
 
@@ -158,7 +158,7 @@ describe('Regenerate Thumbnails API', () => {
         { id: 'post-1', mediaUrls: 'invalid json' },
       ])
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -182,7 +182,7 @@ describe('Regenerate Thumbnails API', () => {
       fsMock.writeFile.mockResolvedValue(undefined)
       mockPostUpdate.mockResolvedValue({ id: 'post-1' })
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -207,7 +207,7 @@ describe('Regenerate Thumbnails API', () => {
       fsMock.writeFile.mockResolvedValue(undefined)
       mockPostUpdate.mockResolvedValue({ id: 'post-1' })
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -231,7 +231,7 @@ describe('Regenerate Thumbnails API', () => {
       fsMock.writeFile.mockResolvedValue(undefined)
       mockPostUpdate.mockResolvedValue({ id: 'post-1' })
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -248,7 +248,7 @@ describe('Regenerate Thumbnails API', () => {
         },
       ])
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -267,7 +267,7 @@ describe('Regenerate Thumbnails API', () => {
       // Thumbnail doesn't exist + original file doesn't exist
       fsMock.access.mockRejectedValue(new Error('Not found'))
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -291,7 +291,7 @@ describe('Regenerate Thumbnails API', () => {
       fsMock.writeFile.mockResolvedValue(undefined)
       mockPostUpdate.mockResolvedValue({ id: 'post-1' })
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -317,7 +317,7 @@ describe('Regenerate Thumbnails API', () => {
       // readFile throws
       fsMock.readFile.mockRejectedValue(new Error('Read failed'))
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -327,7 +327,7 @@ describe('Regenerate Thumbnails API', () => {
     it('should return 500 when an unexpected error occurs', async () => {
       mockPostFindMany.mockRejectedValue(new Error('Database connection lost'))
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(500)
@@ -343,7 +343,7 @@ describe('Regenerate Thumbnails API', () => {
         },
       ])
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
@@ -371,7 +371,7 @@ describe('Regenerate Thumbnails API', () => {
       fsMock.writeFile.mockResolvedValue(undefined)
       mockPostUpdate.mockResolvedValue({ id: 'post-1' })
 
-      const response = await POST()
+      const response = await POST(new Request("http://localhost/api"))
       const data = await response.json()
 
       expect(response.status).toBe(200)
