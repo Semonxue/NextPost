@@ -8,6 +8,13 @@ export default defineConfig({
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     exclude: ['tests/e2e/**'],
     environment: 'jsdom',
+    // Important: do NOT reset mock implementations between tests
+    // because vi.mock(...) implementations should be preserved
+    clearMocks: true,
+    mockReset: false,
+    restoreMocks: false,
+    unstubGlobals: false,
+    unstubEnvs: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

@@ -127,6 +127,18 @@ describe('Accounts API', () => {
   })
 
   describe('PATCH /api/accounts/:id', () => {
+    it('should return 401 when not authenticated', async () => {
+      ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '新名称' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      expect(response.status).toBe(401)
+    })
+
     it('should update account successfully', async () => {
       mockFindFirst.mockResolvedValue({
         id: 'acct-1',
@@ -165,6 +177,101 @@ describe('Accounts API', () => {
       expect(response.status).toBe(404)
     })
 
+    it('should keep existing description when not provided', async () => {
+      mockFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        description: 'old description',
+        userId: 'user-123',
+      })
+      mockUpdate.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        description: 'old description',
+        platform: { name: 'Twitter' },
+      })
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ name: '账号' }), // No description field
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      // description was not in body, so it should keep the existing value
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ description: 'old description' }),
+        })
+      )
+    })
+
+    it('should update description when provided', async () => {
+      mockFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        description: 'old description',
+        userId: 'user-123',
+      })
+      mockUpdate.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        description: 'new description',
+        platform: { name: 'Twitter' },
+      })
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ description: 'new description' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ description: 'new description' }),
+        })
+      )
+    })
+
+    it('should clear description when set to null', async () => {
+      mockFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        description: 'old description',
+        userId: 'user-123',
+      })
+      mockUpdate.mockResolvedValue({
+        id: 'acct-1',
+        name: '账号',
+        handle: 'oldacc',
+        description: null,
+        platform: { name: 'Twitter' },
+      })
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ description: null }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      expect(response.status).toBe(200)
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ description: null }),
+        })
+      )
+    })
+
     it('should strip @ from handle', async () => {
       mockFindFirst.mockResolvedValue({
         id: 'acct-1',
@@ -197,6 +304,17 @@ describe('Accounts API', () => {
   })
 
   describe('DELETE /api/accounts/:id', () => {
+    it('should return 401 when not authenticated', async () => {
+      ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/accounts/acct-1', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(request, { params: Promise.resolve({ id: 'acct-1' }) })
+      expect(response.status).toBe(401)
+    })
+
     it('should soft-delete account (not hard delete) successfully', async () => {
       mockFindFirst.mockResolvedValue({
         id: 'acct-1',

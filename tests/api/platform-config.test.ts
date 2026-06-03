@@ -97,6 +97,89 @@ describe('GET /api/accounts/:id/config（平台配置）', () => {
     expect(data.maxImages).toBe(10);
   });
 
+  it('应该使用数据库自定义配置（覆盖默认值）', async () => {
+    // 当数据库中存在自定义配置时，应使用数据库配置
+    mockAccountFindFirst.mockResolvedValue({
+      id: 'acct-1',
+      platformId: 'platform-twitter',
+      platform: {
+        name: 'Twitter',
+        config: {
+          maxContentLength: 1000, // 覆盖默认 280
+          maxImages: 10, // 覆盖默认 4
+          maxVideos: 2, // 覆盖默认 1
+          allowMixedMedia: false, // 覆盖默认 true
+        },
+      },
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/accounts/acct-1/config'),
+      { params: Promise.resolve({ id: 'acct-1' }) }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.maxContentLength).toBe(1000);
+    expect(data.maxImages).toBe(10);
+    expect(data.maxVideos).toBe(2);
+    expect(data.allowMixedMedia).toBe(false);
+  });
+
+  it('应该在未知平台名且无配置时使用全局默认值', async () => {
+    // 未知平台名 (不在 DEFAULT_PLATFORM_CONFIG 中) 且没有数据库配置
+    mockAccountFindFirst.mockResolvedValue({
+      id: 'acct-1',
+      platformId: 'platform-unknown',
+      platform: {
+        name: 'UnknownPlatform',
+        config: null,
+      },
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/accounts/acct-1/config'),
+      { params: Promise.resolve({ id: 'acct-1' }) }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    // 应使用全局默认值
+    expect(data.maxContentLength).toBe(280);
+    expect(data.maxImages).toBe(4);
+    expect(data.maxVideos).toBe(1);
+    expect(data.allowMixedMedia).toBe(true);
+  });
+
+  it('应该部分覆盖配置 (部分使用 dbConfig, 部分使用默认)', async () => {
+    // 数据库配置只提供部分字段，其他使用默认
+    mockAccountFindFirst.mockResolvedValue({
+      id: 'acct-1',
+      platformId: 'platform-twitter',
+      platform: {
+        name: 'Twitter',
+        config: {
+          maxContentLength: 500,
+          // maxImages 不提供 -> 使用默认
+          // maxVideos 不提供 -> 使用默认
+          // allowMixedMedia 不提供 -> 使用默认
+        },
+      },
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/accounts/acct-1/config'),
+      { params: Promise.resolve({ id: 'acct-1' }) }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.maxContentLength).toBe(500); // 来自 dbConfig
+    expect(data.maxImages).toBe(4); // 来自 Twitter 默认
+    expect(data.maxVideos).toBe(1); // 来自 Twitter 默认
+    expect(data.allowMixedMedia).toBe(true); // 来自 Twitter 默认
+  });
+
   it('应该返回 500 当数据库错误', async () => {
     mockAccountFindFirst.mockRejectedValue(new Error('DB error'));
     const response = await GET(

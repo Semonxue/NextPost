@@ -397,9 +397,109 @@ describe('Posts API', () => {
       )
       expect(response.status).toBe(404)
     })
+
+    it('should return 401 when not authenticated', async () => {
+      ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+      const response = await GET_BY_ID(
+        new NextRequest('http://localhost/api/posts/post-1'),
+        { params: Promise.resolve({ id: 'post-1' }) }
+      )
+      expect(response.status).toBe(401)
+    })
   })
 
   describe('PATCH /api/posts/:id', () => {
+    it('should return 401 when not authenticated', async () => {
+      ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ content: '新内容' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(401)
+    })
+
+    it('should switch account successfully', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '内容',
+        status: 'draft',
+        accountId: 'acct-1',
+        account: { userId: 'user-123' },
+      })
+      mockAccountFindFirst.mockResolvedValue({ id: 'acct-2', userId: 'user-123' })
+      mockPostUpdate.mockResolvedValue({
+        id: 'post-1',
+        accountId: 'acct-2',
+      })
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ accountId: 'acct-2' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(200)
+      expect(mockPostUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ accountId: 'acct-2' }),
+        })
+      )
+    })
+
+    it('should update scheduledTime to a date', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '内容',
+        status: 'scheduled',
+        accountId: 'acct-1',
+        scheduledTime: new Date('2024-12-01T10:00:00Z'),
+        account: { userId: 'user-123' },
+      })
+      mockPostUpdate.mockResolvedValue({ id: 'post-1' })
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ scheduledTime: '2025-01-15T10:00:00Z' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(200)
+      expect(mockPostUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ scheduledTime: expect.any(Date) }),
+        })
+      )
+    })
+
+    it('should clear scheduledTime when set to null/empty', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '内容',
+        status: 'scheduled',
+        accountId: 'acct-1',
+        scheduledTime: new Date('2024-12-01T10:00:00Z'),
+        account: { userId: 'user-123' },
+      })
+      mockPostUpdate.mockResolvedValue({ id: 'post-1' })
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ scheduledTime: '' }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(200)
+      expect(mockPostUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ scheduledTime: null }),
+        })
+      )
+    })
+
     it('should update post content', async () => {
       mockPostFindFirst.mockResolvedValue({
         id: 'post-1',
@@ -463,9 +563,81 @@ describe('Posts API', () => {
       const response = await PATCH(request, { params: Promise.resolve({ id: 'post-999' }) })
       expect(response.status).toBe(404)
     })
+
+    it('should update mediaUrls and mediaThumbnails', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '内容',
+        status: 'draft',
+        accountId: 'acct-1',
+        mediaUrls: '[]',
+        mediaThumbnails: '[]',
+        account: { userId: 'user-123' },
+      })
+      mockPostUpdate.mockResolvedValue({ id: 'post-1' })
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          mediaUrls: ['https://example.com/new.jpg'],
+          mediaThumbnails: ['https://example.com/new_thumb.webp'],
+        }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(200)
+      expect(mockPostUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            mediaUrls: expect.any(String),
+            mediaThumbnails: expect.any(String),
+          }),
+        })
+      )
+    })
+
+    it('should update externalPostUrl', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        content: '内容',
+        status: 'published',
+        accountId: 'acct-1',
+        externalPostUrl: null,
+        account: { userId: 'user-123' },
+      })
+      mockPostUpdate.mockResolvedValue({ id: 'post-1' })
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          externalPostUrl: 'https://twitter.com/user/status/123',
+        }),
+      })
+
+      const response = await PATCH(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(200)
+      expect(mockPostUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            externalPostUrl: 'https://twitter.com/user/status/123',
+          }),
+        })
+      )
+    })
   })
 
   describe('DELETE /api/posts/:id', () => {
+    it('should return 401 when not authenticated', async () => {
+      ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+
+      const request = new NextRequest('http://localhost/api/posts/post-1', {
+        method: 'DELETE',
+      })
+
+      const response = await DELETE(request, { params: Promise.resolve({ id: 'post-1' }) })
+      expect(response.status).toBe(401)
+    })
+
     it('should soft-delete post (not hard delete) successfully', async () => {
       mockPostFindFirst.mockResolvedValue({
         id: 'post-1',

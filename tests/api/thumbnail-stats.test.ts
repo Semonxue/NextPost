@@ -1,11 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Use vi.hoisted to properly hoist mock functions
-const { mockPostFindMany, mockPostCount, mockAccountFindMany } = vi.hoisted(() => ({
-  mockPostFindMany: vi.fn(),
-  mockPostCount: vi.fn(),
-  mockAccountFindMany: vi.fn(),
-}))
+const { mockPostFindMany, mockPostCount, mockAccountFindMany, fsMock } = vi.hoisted(() => {
+  // Shared fs mock instances
+  const access = vi.fn()
+  const readFile = vi.fn()
+  const writeFile = vi.fn()
+  const readdir = vi.fn()
+  const stat = vi.fn()
+  const fsMock = { access, readFile, writeFile, readdir, stat }
+
+  return {
+    mockPostFindMany: vi.fn(),
+    mockPostCount: vi.fn(),
+    mockAccountFindMany: vi.fn(),
+    fsMock,
+  }
+})
 
 // Mock prisma module
 vi.mock('@/lib/prisma', () => ({
@@ -26,24 +37,10 @@ vi.mock('@/lib/auth', () => ({
   auth: vi.fn(),
 }))
 
-// Mock fs module with proper default export
+// Mock fs with SHARED vi.fn instances
 vi.mock('fs', () => ({
-  default: {
-    promises: {
-      readdir: vi.fn(),
-      stat: vi.fn(),
-      access: vi.fn(),
-      writeFile: vi.fn(),
-      readFile: vi.fn(),
-    },
-  },
-  promises: {
-    readdir: vi.fn(),
-    stat: vi.fn(),
-    access: vi.fn(),
-    writeFile: vi.fn(),
-    readFile: vi.fn(),
-  },
+  default: { promises: fsMock },
+  promises: fsMock,
 }))
 
 import { GET } from '@/app/api/stats/route'
@@ -62,31 +59,20 @@ describe('Stats API - Thumbnail Stats', () => {
 
   describe('GET /api/stats - Thumbnail Statistics', () => {
     it('should return thumbnailStats with valid structure', async () => {
-      // Mock account count
       mockPostCount.mockResolvedValue(1)
-      
-      // Mock posts for status distribution
-      mockPostCount.mockResolvedValueOnce(1) // accounts
-      mockPostCount.mockResolvedValueOnce(5) // total posts
-      mockPostCount.mockResolvedValue(2) // draft count
-      
-      // Mock posts with media
       mockPostFindMany.mockResolvedValue([
         { id: 'post-1', mediaUrls: '[]', mediaThumbnails: '[]' },
       ])
-      
-      // Mock account stats
       mockAccountFindMany.mockResolvedValue([
         { name: 'Test Account', _count: { posts: 5 } },
       ])
-      
-      // Mock fs to simulate empty uploads directory
-      ;(fs.readdir as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'))
-      ;(fs.stat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'))
-      
+
+      // Both scans return empty (no recursion)
+      fsMock.readdir.mockResolvedValue([] as any)
+
       const response = await GET()
       const data = await response.json()
-      
+
       expect(response.status).toBe(200)
       expect(data.thumbnailStats).toBeDefined()
       expect(typeof data.thumbnailStats.count).toBe('number')
@@ -99,14 +85,12 @@ describe('Stats API - Thumbnail Stats', () => {
       mockPostCount.mockResolvedValue(0)
       mockPostFindMany.mockResolvedValue([])
       mockAccountFindMany.mockResolvedValue([])
-      
-      // Mock fs to return empty
-      ;(fs.readdir as ReturnType<typeof vi.fn>).mockResolvedValue([] as any)
-      ;(fs.stat as ReturnType<typeof vi.fn>).mockResolvedValue({ size: 0 } as any)
-      
+
+      fsMock.readdir.mockResolvedValue([] as any)
+
       const response = await GET()
       const data = await response.json()
-      
+
       expect(response.status).toBe(200)
       expect(data.thumbnailStats.count).toBe(0)
       expect(data.thumbnailStats.size).toBe(0)
@@ -114,9 +98,182 @@ describe('Stats API - Thumbnail Stats', () => {
 
     it('should return 401 when not authenticated', async () => {
       ;(auth as ReturnType<typeof vi.fn>).mockResolvedValue(null)
-      
+
       const response = await GET()
       expect(response.status).toBe(401)
+    })
+
+    it('should return 500 when an unexpected error occurs', async () => {
+      mockPostCount.mockRejectedValue(new Error('DB error'))
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(500)
+      expect(data.error).toBe('服务器错误')
+    })
+
+    it('should return account and post counts', async () => {
+      // 6 count calls: accounts, posts, draft, scheduled, published, failed
+      mockPostCount
+        .mockResolvedValueOnce(3) // accounts
+        .mockResolvedValueOnce(10) // posts
+        .mockResolvedValueOnce(2) // draft
+        .mockResolvedValueOnce(3) // scheduled
+        .mockResolvedValueOnce(4) // published
+        .mockResolvedValueOnce(1) // failed
+
+      mockPostFindMany.mockResolvedValue([])
+      mockAccountFindMany.mockResolvedValue([
+        { name: 'Twitter', _count: { posts: 5 } },
+        { name: 'Facebook', _count: { posts: 3 } },
+      ])
+
+      fsMock.readdir.mockResolvedValue([] as any)
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.accounts).toBe(3)
+      expect(data.posts).toBe(10)
+      expect(data.postsByStatus.draft).toBe(2)
+      expect(data.postsByStatus.scheduled).toBe(3)
+      expect(data.postsByStatus.published).toBe(4)
+      expect(data.postsByStatus.failed).toBe(1)
+      expect(data.categories).toHaveLength(2)
+    })
+
+    it('should count thumbnails and skip non-thumbnail files', async () => {
+      mockPostCount.mockResolvedValue(0)
+      mockPostFindMany.mockResolvedValue([])
+      mockAccountFindMany.mockResolvedValue([])
+
+      // Only files (no subdirs) to avoid infinite recursion in test
+      fsMock.readdir.mockResolvedValue([
+        { name: 'thumb1.thumb.webp', isDirectory: () => false },
+        { name: 'image1.jpg', isDirectory: () => false },
+      ] as any)
+
+      fsMock.stat.mockResolvedValue({ size: 1024 } as any)
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      // 1 thumbnail counted
+      expect(data.thumbnailStats.count).toBe(1)
+      expect(data.thumbnailStats.size).toBe(1024)
+    })
+
+    it('should count media files (images and videos) excluding thumbnails', async () => {
+      mockPostCount.mockResolvedValue(0)
+      mockPostFindMany.mockResolvedValue([])
+      mockAccountFindMany.mockResolvedValue([])
+
+      fsMock.readdir.mockResolvedValue([
+        { name: 'image.jpg', isDirectory: () => false },
+        { name: 'image2.png', isDirectory: () => false },
+        { name: 'image3.gif', isDirectory: () => false },
+        { name: 'video.mp4', isDirectory: () => false },
+        { name: 'video2.webm', isDirectory: () => false },
+        { name: 'thumb.thumb.webp', isDirectory: () => false },
+        { name: 'document.txt', isDirectory: () => false },
+      ] as any)
+
+      fsMock.stat.mockResolvedValue({ size: 1000 } as any)
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.media).toBe(5) // 3 images + 2 videos
+      expect(data.mediaStats.images.count).toBe(3)
+      expect(data.mediaStats.videos.count).toBe(2)
+      expect(data.mediaStats.images.size).toBe(3000)
+      expect(data.mediaStats.videos.size).toBe(2000)
+      expect(data.mediaStats.totalSize).toBe(5000)
+    })
+
+    it('should handle various image and video extensions', async () => {
+      mockPostCount.mockResolvedValue(0)
+      mockPostFindMany.mockResolvedValue([])
+      mockAccountFindMany.mockResolvedValue([])
+
+      fsMock.readdir.mockResolvedValue([
+        { name: 'a.jpg', isDirectory: () => false },
+        { name: 'b.jpeg', isDirectory: () => false },
+        { name: 'c.png', isDirectory: () => false },
+        { name: 'd.gif', isDirectory: () => false },
+        { name: 'e.webp', isDirectory: () => false },
+        { name: 'f.svg', isDirectory: () => false },
+        { name: 'g.bmp', isDirectory: () => false },
+        { name: 'h.ico', isDirectory: () => false },
+        { name: 'v1.mp4', isDirectory: () => false },
+        { name: 'v2.webm', isDirectory: () => false },
+        { name: 'v3.mov', isDirectory: () => false },
+        { name: 'v4.avi', isDirectory: () => false },
+        { name: 'v5.mkv', isDirectory: () => false },
+        { name: 'v6.flv', isDirectory: () => false },
+        { name: 'v7.wmv', isDirectory: () => false },
+      ] as any)
+
+      fsMock.stat.mockResolvedValue({ size: 100 } as any)
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.mediaStats.images.count).toBe(8)
+      expect(data.mediaStats.videos.count).toBe(7)
+    })
+
+    it('should recursively scan subdirectories (with depth limit)', async () => {
+      mockPostCount.mockResolvedValue(0)
+      mockPostFindMany.mockResolvedValue([])
+      mockAccountFindMany.mockResolvedValue([])
+
+      // To avoid infinite recursion, we use mockImplementation that
+      // returns different data based on call count:
+      // - 1st call (thumb scan root): file + subdir
+      // - 2nd call (thumb scan subdir): empty
+      // - 3rd call (media scan root): file + subdir
+      // - 4th call (media scan subdir): empty
+      let readdirCount = 0
+      fsMock.readdir.mockImplementation(() => {
+        readdirCount++
+        if (readdirCount === 1) {
+          return Promise.resolve([
+            { name: 'thumb1.thumb.webp', isDirectory: () => false },
+            { name: 'subdir', isDirectory: () => true },
+          ] as any)
+        }
+        if (readdirCount === 2) {
+          return Promise.resolve([
+            { name: 'thumb2.thumb.webp', isDirectory: () => false },
+          ] as any)
+        }
+        if (readdirCount === 3) {
+          return Promise.resolve([
+            { name: 'image.jpg', isDirectory: () => false },
+            { name: 'subdir', isDirectory: () => true },
+          ] as any)
+        }
+        // 4th+ call: empty (terminate recursion)
+        return Promise.resolve([] as any)
+      })
+
+      fsMock.stat.mockResolvedValue({ size: 512 } as any)
+
+      const response = await GET()
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      // 2 thumbnails total (1 root + 1 subdir)
+      expect(data.thumbnailStats.count).toBe(2)
+      expect(data.thumbnailStats.size).toBe(1024)
+      // 1 media file (image in root, subdir is empty)
+      expect(data.media).toBe(1)
     })
   })
 })

@@ -8,6 +8,7 @@
 | **v0.2** | 2026-06-01 | **MCP 集成测试用例**：API Key、发布回传、MCP 工具、软删除 |
 | **v0.3** | 2026-06-01 | **软删除 + 回收站测试用例**：软删除/恢复/永久删除/回收站页面/stats/settings/平台配置/认证补充 |
 | **v0.4** | **2026-06-02** | **外部 MCP 写能力测试用例**：`upload_media_from_url` / `create_post` / `update_post` / Scope 权限强制 / 字段白名单 / 状态锁 |
+| **v0.5** | **2026-06-03** | **覆盖率提升补充测试用例**：`MediaPreview` 组件、`MediaUploader` 组件、`Pagination` 组件、`/api/posts/[id]` PATCH 分支、`/api/accounts/[id]` PATCH/DELETE 401、`/api/accounts/[id]/config` 三层默认值回退、`/api/media/[path]` GET MIME 类型分支、`thumbnail.ts` 递归质量压缩。详见 [docs/TEST_COVERAGE_TODO.md](./TEST_COVERAGE_TODO.md) |
 
 
 ---
@@ -1678,9 +1679,442 @@ npm install -D prisma
 
 ---
 
-## 6. 性能与安全测试
+### 5.9 覆盖率补充测试用例（v0.5 新增）
 
-### 6.1 性能测试
+> **设计说明**：v0.5 主要为提升测试覆盖率（Branch 分支从 ~85% 提升到 92.21%），补充之前未覆盖的边界场景。本节详组补充的所有测试用例，与现有测试代码一一对应。
+
+#### 5.9.1 `MediaPreview` 组件
+
+##### TC-PREVIEW-001：`isVideoSource` 工具函数 - 显式 type 优先级
+
+| 用例ID | TC-PREVIEW-001 |
+|--------|------------|
+| **函数** | `isVideoSource(src, type?)` |
+| **验证点** | 显式传入的 `type` 参数优先级最高 |
+| **测试场景** | `type='video'` → 总是 true<br>`type='image'` → 总是 false<br>其他 type 仍根据 src 判断 |
+
+##### TC-PREVIEW-002：`isVideoSource` - data: URL MIME 判断
+
+| 用例ID | TC-PREVIEW-002 |
+|--------|------------|
+| **函数** | `isVideoSource` |
+| **验证点** | data: URL 根据 mime 识别 |
+| **测试场景** | `data:video/mp4;base64,...` → true<br>`data:image/png;base64,...` → false<br>`data:application/...` → false |
+
+##### TC-PREVIEW-003：`isVideoSource` - URL 后缀判断
+
+| 用例ID | TC-PREVIEW-003 |
+|--------|------------|
+| **函数** | `isVideoSource` |
+| **验证点** | 各种视频后缀名识别 |
+| **测试场景** | `.mp4` / `.webm` / `.ogg` / `.mov` 路径 → true<br>`.jpg` 路径 → false<br>空 src → false |
+
+##### TC-PREVIEW-004：`MediaPreview` 组件 - 空 src 渲染 Fallback
+
+| 用例ID | TC-PREVIEW-004 |
+|--------|------------|
+| **验证点** | 空 src（包含 undefined）渲染 default fallback 或自定义 fallback |
+| **测试场景** | `<MediaPreview src="" />` 渲染默认占位<br>`<MediaPreview src={undefined} fallback={...} />` 渲染自定义 fallback |
+
+##### TC-PREVIEW-005：`MediaPreview` - 强制类型覆盖
+
+| 用例ID | TC-PREVIEW-005 |
+|--------|------------|
+| **验证点** | 显式 `type` 覆盖自动判断 |
+| **测试场景** | `type='image'` 与 `.mp4` URL → 渲染 img 元素<br>`type='video'` 与 `.jpg` URL → 触发 VideoThumbnail |
+
+##### TC-PREVIEW-006：`MediaPreview` - data:image 直接透传
+
+| 用例ID | TC-PREVIEW-006 |
+|--------|------------|
+| **验证点** | `data:image/jpeg;base64,...` URL 直接作为缩略图显示，不进行视频抽帧 |
+| **验证点** | `data:image/svg+xml,...` 仍会触发视频抽帧逻辑 |
+
+##### TC-PREVIEW-007：`VideoThumbnail` - 抽帧错误处理
+
+| 用例ID | TC-PREVIEW-007 |
+|--------|------------|
+| **验证点** | 视频加载出错时调用 `onThumbnailError` 回调、显示错误状态（fallback + 播放图标） |
+| **测试场景** | 触发 `video.error` 事件 → onThumbnailError 被调用，错误状态下仍显示 play 图标 |
+
+##### TC-PREVIEW-008：`VideoThumbnail` - 抽帧成功
+
+| 用例ID | TC-PREVIEW-008 |
+|--------|------------|
+| **验证点** | `loadeddata` 后计算抽帧时间（`min(0.1, duration/2)`）→ `seeked` 后生成 dataURL 缩略图 |
+| **测试场景** | 触发 `loadeddata` 后 `currentTime=0.1`<br>触发 `seeked` 后 thumbnail 设置为 data:image/jpeg;base64,... |
+
+##### TC-PREVIEW-009：`VideoThumbnail` - 异常尺寸（0/正方形/纵高）处理
+
+| 用例ID | TC-PREVIEW-009 |
+|--------|------------|
+| **验证点** | videoWidth=0 或 videoHeight=0 时使用 maxSize 默认值 |
+| **测试场景** | 0x0、正方形、纵高 各种情况都能生成缩略图 |
+
+##### TC-PREVIEW-010：`VideoThumbnail` - 卸载清理
+
+| 用例ID | TC-PREVIEW-010 |
+|--------|------------|
+| **验证点** | 组件卸载时 video src 被清空、不报 error |
+| **测试场景** | unmount 后不报错 |
+
+---
+
+#### 5.9.2 `MediaUploader` 组件
+
+##### TC-UPLOADER-001：初始 URL 预览使用原图
+
+| 用例ID | TC-UPLOADER-001 |
+|--------|------------|
+| **验证点** | 编辑场景下预览 img 总是使用 original URL，不使用 thumbnail |
+| **测试场景** | initialUrls + initialThumbnails 传入，验证渲染的 img.src 是 original URL，不包含 `.thumb.webp` |
+
+##### TC-UPLOADER-002：视频识别
+
+| 用例ID | TC-UPLOADER-002 |
+|--------|------------|
+| **验证点** | 根据文件后缀识别 video（mp4/webm/mov/ogg） |
+| **测试场景** | 混合视频扩展名的 initialUrls 全部走 MediaPreview 视频分支 |
+
+##### TC-UPLOADER-003：图片/视频数量限制
+
+| 用例ID | TC-UPLOADER-003 |
+|--------|------------|
+| **验证点** | 超过 `maxImages`/`maxVideos` 时通过 `addToast` 提示，且不添加 |
+| **测试场景** | maxImages=2 时上传第 3 张图 → 错误 toast；类似地验证 video 限制 |
+
+##### TC-UPLOADER-004：文件大小限制
+
+| 用例ID | TC-UPLOADER-004 |
+|--------|------------|
+| **验证点** | 超过 `maxFileSize` 时通过 `addToast` 提示，不添加 |
+| **测试场景** | maxFileSize=1KB 上传 10KB 文件 → 错误 toast |
+
+##### TC-UPLOADER-005：不支持的格式
+
+| 用例ID | TC-UPLOADER-005 |
+|--------|------------|
+| **验证点** | 不属于 image/* 或 video/* 的文件被拒绝 |
+| **测试场景** | 上传 application/pdf → 错误 toast |
+
+##### TC-UPLOADER-006：混合媒体限制
+
+| 用例ID | TC-UPLOADER-006 |
+|--------|------------|
+| **验证点** | 当 `allowMixedMedia=false` 且已有图片时，上传视频被拒绝 |
+| **测试场景** | maxImages=0、maxVideos=1、allowMixedMedia=false 场景下上传 mp4 → 错误 toast |
+
+##### TC-UPLOADER-007：拖拽上传交互
+
+| 用例ID | TC-UPLOADER-007 |
+|--------|------------|
+| **验证点** | dragOver/dragLeave/drop 事件均能正确处理 |
+| **测试场景** | dragOver 切换 isDragging 状态，drop 触发文件处理，不报错 |
+
+##### TC-UPLOADER-008：点击上传区触发文件选择
+
+| 用例ID | TC-UPLOADER-008 |
+|--------|------------|
+| **验证点** | 点击上传区调用隐藏 input 的 click() |
+| **测试场景** | 点击后 vi.spyOn(input, 'click') 被调用 |
+
+##### TC-UPLOADER-009：文件输入变更触发处理
+
+| 用例ID | TC-UPLOADER-009 |
+|--------|------------|
+| **验证点** | input onChange 触发 handleFiles |
+| **测试场景** | 变更 input.files 后 onChange 被调用 |
+
+##### TC-UPLOADER-010：文件缩略图生成成功上传
+
+| 用例ID | TC-UPLOADER-010 |
+|--------|------------|
+| **验证点** | generateThumbnail 完成后 onChange 回调被调用，files 包含新文件 |
+| **测试场景** | 模拟上传 jpg/png/mp4 文件后 onChange 被调用 |
+
+---
+
+#### 5.9.3 `Pagination` 组件
+
+##### TC-PAGINATION-001：超过 5 页 - currentPage <= 3 显示首页 5 页
+
+| 用例ID | TC-PAGINATION-001 |
+|--------|------------|
+| **验证点** | totalPages=10、currentPage=2 时显示 1,2,3,4,5 |
+
+##### TC-PAGINATION-002：超过 5 页 - currentPage >= totalPages-2 显示末页 5 页
+
+| 用例ID | TC-PAGINATION-002 |
+|--------|------------|
+| **验证点** | totalPages=10、currentPage=9 时显示 6,7,8,9,10 |
+
+##### TC-PAGINATION-003：超过 5 页 - currentPage 中间页显示中间 5 页
+
+| 用例ID | TC-PAGINATION-003 |
+|--------|------------|
+| **验证点** | totalPages=10、currentPage=5 时显示 3,4,5,6,7 |
+
+##### TC-PAGINATION-004：点击页码调用 onPageChange
+
+| 用例ID | TC-PAGINATION-004 |
+|--------|------------|
+| **验证点** | 点击页码按钮调用 onPageChange(pageNum) |
+
+##### TC-PAGINATION-005：当前页高亮
+
+| 用例ID | TC-PAGINATION-005 |
+|--------|------------|
+| **验证点** | 当前页码按钮有 `bg-blue-600` class |
+
+##### TC-PAGINATION-006：每页条数选择器
+
+| 用例ID | TC-PAGINATION-006 |
+|--------|------------|
+| **验证点** | onPageSizeChange 被提供时显示 select，change 时调用回调 |
+
+---
+
+#### 5.9.4 `/api/posts/[id]` PATCH 分支
+
+##### TC-POSTID-PATCH-001：未认证返回 401
+
+| 用例ID | TC-POSTID-PATCH-001 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **测试** | session 为 null |
+| **预期** | 401 `{ error: "未授权" }` |
+
+##### TC-POSTID-PATCH-002：切换账号成功
+
+| 用例ID | TC-POSTID-PATCH-002 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **请求体** | `{ "accountId": "new-account" }` |
+| **预期** | 验证新账号归属，更新成功 |
+
+##### TC-POSTID-PATCH-003：修改 scheduledTime 为日期
+
+| 用例ID | TC-POSTID-PATCH-003 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **请求体** | `{ "scheduledTime": "2025-01-15T10:00:00Z" }` |
+| **预期** | scheduledTime 更新为 Date 对象 |
+
+##### TC-POSTID-PATCH-004：清空 scheduledTime
+
+| 用例ID | TC-POSTID-PATCH-004 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **请求体** | `{ "scheduledTime": "" }` |
+| **预期** | scheduledTime 更新为 null（`scheduledTime ? new Date : null`） |
+
+##### TC-POSTID-PATCH-005：更新 mediaUrls 和 mediaThumbnails
+
+| 用例ID | TC-POSTID-PATCH-005 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **请求体** | `{ "mediaUrls": [...], "mediaThumbnails": [...] }` |
+| **预期** | 两个字段都被 JSON.stringify 后保存 |
+
+##### TC-POSTID-PATCH-006：更新 externalPostUrl
+
+| 用例ID | TC-POSTID-PATCH-006 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **请求体** | `{ "externalPostUrl": "https://twitter.com/.../status/123" }` |
+| **预期** | externalPostUrl 被更新 |
+
+##### TC-POSTID-PATCH-007：切换到其他用户账号被拒
+
+| 用例ID | TC-POSTID-PATCH-007 |
+|--------|------------|
+| **路径** | PATCH /api/posts/:id |
+| **请求体** | `{ "accountId": "other-user-account" }` |
+| **预期** | 404 `{ error: "账号不存在" }` |
+
+##### TC-POSTID-DELETE-001：DELETE 未认证返回 401
+
+| 用例ID | TC-POSTID-DELETE-001 |
+|--------|------------|
+| **路径** | DELETE /api/posts/:id |
+| **测试** | session 为 null |
+| **预期** | 401 `{ error: "未授权" }` |
+
+---
+
+#### 5.9.5 `/api/accounts/[id]` PATCH/DELETE 401 + description 分支
+
+##### TC-ACCTID-PATCH-001：PATCH 未认证返回 401
+
+| 用例ID | TC-ACCTID-PATCH-001 |
+|--------|------------|
+| **路径** | PATCH /api/accounts/:id |
+| **测试** | session 为 null |
+| **预期** | 401 `{ error: "未授权" }` |
+
+##### TC-ACCTID-PATCH-002：保留 description（未提供时不修改）
+
+| 用例ID | TC-ACCTID-PATCH-002 |
+|--------|------------|
+| **路径** | PATCH /api/accounts/:id |
+| **请求体** | `{ "name": "新名称" }`（不传 description） |
+| **预期** | 验证 update.data.description 仍为原值（`description !== undefined ? description : existing.description` true 分支） |
+
+##### TC-ACCTID-PATCH-003：更新 description
+
+| 用例ID | TC-ACCTID-PATCH-003 |
+|--------|------------|
+| **路径** | PATCH /api/accounts/:id |
+| **请求体** | `{ "description": "新描述" }` |
+| **预期** | description 被更新 |
+
+##### TC-ACCTID-PATCH-004：清空 description 为 null
+
+| 用例ID | TC-ACCTID-PATCH-004 |
+|--------|------------|
+| **路径** | PATCH /api/accounts/:id |
+| **请求体** | `{ "description": null }` |
+| **预期** | description 显式设为 null（`description !== undefined` true 分支） |
+
+##### TC-ACCTID-DELETE-001：DELETE 未认证返回 401
+
+| 用例ID | TC-ACCTID-DELETE-001 |
+|--------|------------|
+| **路径** | DELETE /api/accounts/:id |
+| **测试** | session 为 null |
+| **预期** | 401 `{ error: "未授权" }` |
+
+---
+
+#### 5.9.6 `/api/accounts/[id]/config` 三层默认值回退
+
+##### TC-PLATFORM-CFG-001：自定义配置完全覆盖默认值
+
+| 用例ID | TC-PLATFORM-CFG-001 |
+|--------|------------|
+| **路径** | GET /api/accounts/:id/config |
+| **预置** | 平台 Twitter，dbConfig 提供 maxContentLength=1000/maxImages=10/maxVideos=2/allowMixedMedia=false |
+| **预期** | 所有字段采用 dbConfig 值（验证三层 `??` 表达式的 true 分支） |
+
+##### TC-PLATFORM-CFG-002：部分配置 + 默认回退
+
+| 用例ID | TC-PLATFORM-CFG-002 |
+|--------|------------|
+| **路径** | GET /api/accounts/:id/config |
+| **预置** | 平台 Twitter，dbConfig 只提供 maxContentLength=500 |
+| **预期** | maxContentLength=500（dbConfig），maxImages=4/maxVideos=1/allowMixedMedia=true（Twitter 默认） |
+
+##### TC-PLATFORM-CFG-003：未知平台 + 无配置 → 全局默认值
+
+| 用例ID | TC-PLATFORM-CFG-003 |
+|--------|------------|
+| **路径** | GET /api/accounts/:id/config |
+| **预置** | 平台 "UnknownPlatform"（不在 DEFAULT_PLATFORM_CONFIG），config=null |
+| **预期** | maxContentLength=280/maxImages=4/maxVideos=1/allowMixedMedia=true（全局默认） |
+
+---
+
+#### 5.9.7 `/api/media/[path]` GET MIME 分支
+
+##### TC-MEDIAPATH-001：jpep/jpg/png/gif/webp 图片 MIME
+
+| 用例ID | TC-MEDIAPATH-001 |
+|--------|------------|
+| **路径** | GET /api/media/:path |
+| **预置** | uploads 目录下存在各种扩展名文件 |
+| **预期** | Content-Type 正确：`image/jpeg` / `image/jpeg` / `image/png` / `image/gif` / `image/webp` |
+
+##### TC-MEDIAPATH-002：mp4/webm/ogg/mov 视频 MIME
+
+| 用例ID | TC-MEDIAPATH-002 |
+|--------|------------|
+| **路径** | GET /api/media/:path |
+| **预置** | uploads 目录下存在各种视频文件 |
+| **预期** | Content-Type 正确：`video/mp4` / `video/webm` / `video/ogg` / `video/quicktime` |
+
+##### TC-MEDIAPATH-003：未知扩展名 → application/octet-stream
+
+| 用例ID | TC-MEDIAPATH-003 |
+|--------|------------|
+| **路径** | GET /api/media/:path |
+| **预置** | uploads 目录下存在 `.xyz` 文件 |
+| **预期** | Content-Type 为 `application/octet-stream` |
+
+##### TC-MEDIAPATH-004：URL 编码路径解码
+
+| 用例ID | TC-MEDIAPATH-004 |
+|--------|------------|
+| **路径** | GET /api/media/:encodedPath |
+| **预置** | uploads/2024-01-01/test decode.jpg |
+| **预期** | decodeURIComponent 正确处理中文、空格、`%E6%B5%8B%E8%AF%95` 等 |
+
+##### TC-MEDIAPATH-005：缓存头
+
+| 用例ID | TC-MEDIAPATH-005 |
+|--------|------------|
+| **路径** | GET /api/media/:path |
+| **预期** | `Cache-Control: public, max-age=31536000` |
+
+---
+
+#### 5.9.8 `lib/storage/thumbnail.ts` 递归质量压缩
+
+##### TC-THUMB-001：`generateThumbnail` 默认参数
+
+| 用例ID | TC-THUMB-001 |
+|--------|------------|
+| **函数** | `generateThumbnail(buffer)` |
+| **验证点** | 不传 maxSize/quality 时使用默认 60/70 |
+| **测试场景** | 默认调用返回 WebP Buffer |
+
+##### TC-THUMB-002：`generateThumbnail` 递归压缩
+
+| 用例ID | TC-THUMB-002 |
+|--------|------------|
+| **函数** | `generateThumbnail` |
+| **验证点** | 当初始 webp 超过 30KB 且 quality>20 时递归 quality-10 直至达标 |
+| **测试场景** | 高墒噪点 800x800 图片能触发递归路径 |
+
+##### TC-THUMB-003：`needsThumbnail` > 30KB
+
+| 用例ID | TC-THUMB-003 |
+|--------|------------|
+| **函数** | `needsThumbnail(filePath)` |
+| **验证点** | 文件 > 30KB → true |
+
+##### TC-THUMB-004：`needsThumbnail` <= 30KB
+
+| 用例ID | TC-THUMB-004 |
+|--------|------------|
+| **函数** | `needsThumbnail(filePath)` |
+| **验证点** | 文件 <= 30KB → false |
+| **边界** | 30KB 整不触发缩略图生成 |
+
+##### TC-THUMB-005：`needsThumbnail` 文件不存在
+
+| 用例ID | TC-THUMB-005 |
+|--------|------------|
+| **函数** | `needsThumbnail(filePath)` |
+| **验证点** | 不存在路径 → false（不抛错） |
+
+---
+
+### 5.10 v0.5 测试覆盖快照
+
+| 文件 | 原始覆盖率（Branch） | 当前覆盖率（Branch） | 备注 |
+|------|---------------------|---------------------|------|
+| `MediaPreview.tsx` | 89.53% | 89.53% | v0.4 已达标，v0.5 补充边界用例 |
+| `MediaUploader.tsx` | 87.2% | 87.2% | v0.4 已达标，v0.5 补充错误提示分支 |
+| `Pagination.tsx` | 100% | 100% | 全部页码范围覆盖 |
+| `/api/posts/[id]/route.ts` | 72.22% | **100%** | v0.5 重点提升：401 + PATCH 全部分支 |
+| `/api/accounts/[id]/route.ts` | 78.57% | **100%** | v0.5 重点提升：401 + description 三态 |
+| `/api/accounts/[id]/config/route.ts` | 75% | **100%** | v0.5 重点提升：三层 ?? 三种状态 |
+| `/api/media/[path]/route.ts` | 50% | **100%** | v0.5 重点提升：所有 MIME 类型 |
+| `lib/storage/thumbnail.ts` | 66.66% | **100%** | v0.5 重点提升：递归路径 + needsThumbnail |
+| **总体 Branch 覆盖率** | ~85% | **92.21%** | 从 ~85% 提升到 92.21% |
+
+**v0.5 新增/补充的测试总数**：约 70+ 个独立测试用例
+
 
 | 用例ID | 测试场景 | 预期指标 |
 |--------|---------|----------|
@@ -1830,4 +2264,4 @@ VALUES ('post-test-001', 'user-test-001', 'acct-test-001', '测试内容', '2026
 ---
 
 *文档生成时间：2026-05-31*
-*最后更新：2026-05-31*
+*最后更新：2026-06-03（v0.5 覆盖率补充测试用例）*
