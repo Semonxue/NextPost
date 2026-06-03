@@ -170,6 +170,127 @@ describe('Posts API', () => {
       const response = await GET(new NextRequest('http://localhost/api/posts'))
       expect(response.status).toBe(401)
     })
+
+    it('should search by content keyword', async () => {
+      const mockPosts = [
+        { id: 'post-1', content: '测试内容关键字', status: 'draft', accountId: 'acct-1' },
+      ]
+      mockPostFindMany.mockResolvedValue(mockPosts)
+      mockPostCount.mockResolvedValue(1)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?search=关键字'))
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ content: { contains: '关键字' } }),
+            ]),
+          }),
+        })
+      )
+    })
+
+    it('should search by account name', async () => {
+      const mockPosts = [
+        { id: 'post-1', content: '内容', status: 'draft', accountId: 'acct-1' },
+      ]
+      mockPostFindMany.mockResolvedValue(mockPosts)
+      mockPostCount.mockResolvedValue(1)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?search=账号A'))
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ account: { name: { contains: '账号A' } } }),
+            ]),
+          }),
+        })
+      )
+    })
+
+    it('should sort by scheduledTime ascending', async () => {
+      mockPostFindMany.mockResolvedValue([])
+      mockPostCount.mockResolvedValue(0)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?sortField=scheduledTime&sortOrder=asc'))
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { scheduledTime: 'asc' },
+        })
+      )
+    })
+
+    it('should sort by createdAt descending', async () => {
+      mockPostFindMany.mockResolvedValue([])
+      mockPostCount.mockResolvedValue(0)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?sortField=createdAt&sortOrder=desc'))
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { createdAt: 'desc' },
+        })
+      )
+    })
+
+    it('should sort by updatedAt ascending', async () => {
+      mockPostFindMany.mockResolvedValue([])
+      mockPostCount.mockResolvedValue(0)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?sortField=updatedAt&sortOrder=asc'))
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { updatedAt: 'asc' },
+        })
+      )
+    })
+
+    it('should use default sort when invalid sortField provided', async () => {
+      mockPostFindMany.mockResolvedValue([])
+      mockPostCount.mockResolvedValue(0)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?sortField=invalid&sortOrder=asc'))
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { scheduledTime: 'asc' }, // 默认值
+        })
+      )
+    })
+
+    it('should combine search with other filters', async () => {
+      const mockPosts = [
+        { id: 'post-1', content: '测试', status: 'scheduled', accountId: 'acct-1' },
+      ]
+      mockPostFindMany.mockResolvedValue(mockPosts)
+      mockPostCount.mockResolvedValue(1)
+
+      const response = await GET(new NextRequest('http://localhost/api/posts?search=测试&status=scheduled&sortField=scheduledTime&sortOrder=asc'))
+
+      expect(response.status).toBe(200)
+      expect(mockPostFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: 'scheduled',
+            OR: expect.any(Array),
+          }),
+          orderBy: { scheduledTime: 'asc' },
+        })
+      )
+    })
   })
 
   describe('POST /api/posts', () => {
@@ -667,7 +788,6 @@ describe('Posts API', () => {
       expect(mockPostDelete).not.toHaveBeenCalled()
     })
 
-
     it('should return 404 when post not found', async () => {
       mockPostFindFirst.mockResolvedValue(null)
 
@@ -679,7 +799,7 @@ describe('Posts API', () => {
       expect(response.status).toBe(404)
     })
   })
-})
+
   describe('GET /api/posts - Error cases', () => {
     it('should return 500 on server error', async () => {
       mockPostFindMany.mockRejectedValue(new Error('Database error'))
@@ -777,3 +897,4 @@ describe('Posts API', () => {
       expect(response.status).toBe(500)
     })
   })
+})

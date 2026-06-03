@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
     const accountIds = searchParams.getAll("accountIds");
     const platformIds = searchParams.getAll("platformIds");
+    const search = searchParams.get("search");
+    const sortField = searchParams.get("sortField") || "scheduledTime";
+    const sortOrder = searchParams.get("sortOrder") || "desc";
     const limit = parseInt(searchParams.get("limit") || "500");
     const offset = parseInt(searchParams.get("offset") || "0");
 
@@ -34,11 +37,25 @@ export async function GET(request: NextRequest) {
       where.account = { platformId: { in: platformIds } };
     }
 
+    // 搜索筛选（内容或账号名）
+    if (search) {
+      where.OR = [
+        { content: { contains: search } },
+        { account: { name: { contains: search } } },
+        { account: { handle: { contains: search } } },
+      ];
+    }
+
+    // 排序字段映射
+    const validSortFields = ["scheduledTime", "createdAt", "updatedAt"];
+    const orderByField = validSortFields.includes(sortField) ? sortField : "scheduledTime";
+    const orderByOrder = sortOrder === "asc" ? "asc" : "desc";
+
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
         where,
         include: { account: { include: { platform: true } } },
-        orderBy: { scheduledTime: "desc" },
+        orderBy: { [orderByField]: orderByOrder },
         take: limit,
         skip: offset,
       }),

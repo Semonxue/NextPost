@@ -1112,7 +1112,7 @@ npm install -D prisma
 | **方法** | MCP 工具调用 |
 | **工具** | report_publish_result |
 | **认证** | API Key |
-| **请求参数** | `{ "postId": "xxx", "publishToken": "tok_xxx", "status": "success", "publishedAt": "2026-06-01T15:00:00Z", "externalPostId": "123456" }` |
+| **请求参数** | `{ "postId": "xxx", "publishToken": "tok_xxx", "status": "success", "publishedAt": "2026-06-01T15:00:00+08:00", "externalPostId": "123456" }` |
 | **预期响应** | `{ "received": true, "postStatus": "published" }` |
 | **验证点** | 数据库 Post.status 更新为 published，publishedAt 记录发布时间 |
 

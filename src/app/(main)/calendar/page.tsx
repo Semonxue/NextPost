@@ -5,15 +5,18 @@ import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, X, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useUIStore } from "@/stores/uiStore";
+import { useFilterStore } from "@/stores/filterStore";
 import { Button } from "@/components/ui/Button";
 import { MediaThumbnail } from "@/components/MediaThumbnail";
+
 interface Post {
   id: string;
   content: string;
   scheduledTime: string | null;
+  publishedAt: string | null;
   status: string;
   mediaUrls: string | null;
-  mediaThumbnails: string | null; // 缩略图 URL 数组
+  mediaThumbnails: string | null;
   externalPostUrl: string | null;
   account: { id: string; name: string; handle: string; platform: { id: string; name: string } };
 }
@@ -27,6 +30,7 @@ interface Platform {
   id: string;
   name: string;
 }
+
 export default function CalendarPage() {
   const { status } = useSession();
   const { addToast } = useUIStore();
@@ -36,24 +40,57 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [showAccountFilter, setShowAccountFilter] = useState(false);
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("all");
+  
+  // 使用 filterStore 管理筛选状态（自动同步到 cookie）
+  const { 
+    selectedAccounts, 
+    selectedPlatforms, 
+    statusFilter,
+    setStatusFilter,
+    toggleAccount, 
+    togglePlatform, 
+    clearAll,
+    rehydrate
+  } = useFilterStore();
+
+  // 组件挂载时从 cookie 恢复筛选状态
+  useEffect(() => {
+    rehydrate();
+  }, []);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
     }
+  }, [status]);
+  
+  useEffect(() => {
     if (status === "authenticated") {
       fetchData();
     }
   }, [status]);
+
   const fetchData = async () => {
     try {
-      const statusParam = statusFilter === "all" ? "" : `?status=${statusFilter}`;
+      // 构建查询参数，与 fetchPosts 保持一致
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
+      if (selectedAccounts.length > 0) {
+        selectedAccounts.forEach(id => params.append("accountIds", id));
+      }
+      if (selectedPlatforms.length > 0) {
+        selectedPlatforms.forEach(id => params.append("platformIds", id));
+      }
+      
+      const queryString = params.toString();
+      const postsUrl = queryString ? `/api/posts?${queryString}` : "/api/posts";
+      
       const [postsRes, accountsRes] = await Promise.all([
-        fetch(`/api/posts${statusParam}`),
+        fetch(postsUrl),
         fetch("/api/accounts")
       ]);
       
@@ -81,6 +118,7 @@ export default function CalendarPage() {
       setLoading(false);
     }
   };
+
   const fetchPosts = async () => {
     try {
       const params = new URLSearchParams();
@@ -106,30 +144,13 @@ export default function CalendarPage() {
       console.error("获取帖子失败:", error);
     }
   };
+
   useEffect(() => {
     if (status === "authenticated") {
       fetchPosts();
     }
   }, [selectedAccounts, selectedPlatforms, statusFilter, status]);
-  const toggleAccountFilter = (accountId: string) => {
-    setSelectedAccounts(prev => 
-      prev.includes(accountId)
-        ? prev.filter(id => id !== accountId)
-        : [...prev, accountId]
-    );
-  };
-  const togglePlatformFilter = (platformId: string) => {
-    setSelectedPlatforms(prev => 
-      prev.includes(platformId)
-        ? prev.filter(id => id !== platformId)
-        : [...prev, platformId]
-    );
-  };
-  const clearAllFilters = () => {
-    setSelectedAccounts([]);
-    setSelectedPlatforms([]);
-  };
-  const hasActiveFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0 || statusFilter !== "all";
+
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -150,40 +171,68 @@ export default function CalendarPage() {
     
     return days;
   };
+
+  // 获取帖子应该显示的日期
+  // - scheduled/draft 帖子使用 scheduledTime
+  // - published 帖子使用 publishedAt（如果存在），否则降级到 scheduledTime
+  const getDisplayTime = (post: Post): string | null => {
+    if (post.status === 'published' && post.publishedAt) {
+      return post.publishedAt;
+    }
+    return post.scheduledTime;
+  };
+
   const getPostsForDate = (day: number) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    return posts.filter((post) => {
-      if (!post.scheduledTime) return false;
-      const postDate = new Date(post.scheduledTime);
+    const dayPosts = posts.filter((post) => {
+      const displayTime = getDisplayTime(post);
+      if (!displayTime) return false;
+      const postDate = new Date(displayTime);
       return (
         postDate.getDate() === day &&
         postDate.getMonth() === month &&
         postDate.getFullYear() === year
       );
     });
+    // 按发布时间从早到晚排序（升序）
+    return dayPosts.sort((a, b) => {
+      const timeA = new Date(getDisplayTime(a)!).getTime();
+      const timeB = new Date(getDisplayTime(b)!).getTime();
+      return timeA - timeB;
+    });
   };
+
   const getPostsForSelectedDate = () => {
     if (!selectedDate) return [];
     const year = selectedDate.getFullYear();
     const month = selectedDate.getMonth();
     const day = selectedDate.getDate();
-    return posts.filter((post) => {
-      if (!post.scheduledTime) return false;
-      const postDate = new Date(post.scheduledTime);
+    const dayPosts = posts.filter((post) => {
+      const displayTime = getDisplayTime(post);
+      if (!displayTime) return false;
+      const postDate = new Date(displayTime);
       return (
         postDate.getDate() === day &&
         postDate.getMonth() === month &&
         postDate.getFullYear() === year
       );
     });
+    // 按发布时间从早到晚排序（升序）
+    return dayPosts.sort((a, b) => {
+      const timeA = new Date(getDisplayTime(a)!).getTime();
+      const timeB = new Date(getDisplayTime(b)!).getTime();
+      return timeA - timeB;
+    });
   };
+
   const navigateMonth = (direction: number) => {
     const newDate = new Date(currentDate);
     newDate.setMonth(currentDate.getMonth() + direction);
     setCurrentDate(newDate);
     setSelectedDate(null);
   };
+
   const monthNames = [
     "一月", "二月", "三月", "四月", "五月", "六月",
     "七月", "八月", "九月", "十月", "十一月", "十二月"
@@ -199,6 +248,7 @@ export default function CalendarPage() {
     scheduled: "已计划",
     published: "已发布",
   };
+
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -206,6 +256,7 @@ export default function CalendarPage() {
       </div>
     );
   }
+
   const days = getDaysInMonth(currentDate);
   const selectedDatePosts = getPostsForSelectedDate();
   const formatSelectedDate = () => {
@@ -215,12 +266,16 @@ export default function CalendarPage() {
     const day = String(selectedDate.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
+
   const statusFilters = [
     { value: "all", label: "全部" },
     { value: "draft", label: "草稿" },
     { value: "scheduled", label: "已计划" },
     { value: "published", label: "已发布" },
   ];
+
+  const hasActiveFilters = selectedAccounts.length > 0 || selectedPlatforms.length > 0 || statusFilter !== "all";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -271,7 +326,7 @@ export default function CalendarPage() {
                         <input
                           type="checkbox"
                           checked={selectedAccounts.includes(account.id)}
-                          onChange={() => toggleAccountFilter(account.id)}
+                          onChange={() => toggleAccount(account.id)}
                           className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
                         />
                         <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -322,7 +377,7 @@ export default function CalendarPage() {
                         <input
                           type="checkbox"
                           checked={selectedPlatforms.includes(platform.id)}
-                          onChange={() => togglePlatformFilter(platform.id)}
+                          onChange={() => togglePlatform(platform.id)}
                           className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
                         />
                         <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -353,10 +408,7 @@ export default function CalendarPage() {
           {/* 清除筛选 */}
           {hasActiveFilters && (
             <button
-              onClick={() => {
-                setStatusFilter("all");
-                clearAllFilters();
-              }}
+              onClick={() => clearAll()}
               className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               <X size={12} />
@@ -448,15 +500,16 @@ export default function CalendarPage() {
                           <MediaThumbnail
                             urls={mediaArr}
                             thumbnails={thumbnailsArr}
-                            size={20}
+                            size={30}
                             className="rounded flex-shrink-0"
                           />
                         )}
                             <div className="flex-1 min-w-0">
                               <div className="text-[9px] font-medium truncate">
-                                {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                                {new Date(getDisplayTime(post)!).toLocaleTimeString("zh-CN", {
                                   hour: "2-digit",
                                   minute: "2-digit",
+                                  timeZone: "Asia/Shanghai",
                                 })}
                               </div>
                               {post.content && (
@@ -547,9 +600,10 @@ export default function CalendarPage() {
                           </button>
                         )}
                         <span className="text-xs text-blue-600 dark:text-blue-400">
-                          {new Date(post.scheduledTime!).toLocaleTimeString("zh-CN", {
+                          {new Date(getDisplayTime(post)!).toLocaleTimeString("zh-CN", {
                             hour: "2-digit",
                             minute: "2-digit",
+                            timeZone: "Asia/Shanghai",
                           })}
                         </span>
                       </div>
@@ -559,7 +613,7 @@ export default function CalendarPage() {
                         <MediaThumbnail
                           urls={JSON.parse(post.mediaUrls)}
                           thumbnails={post.mediaThumbnails ? JSON.parse(post.mediaThumbnails) : undefined}
-                          size={40}
+                          size={60}
                           className="rounded"
                         />
                       )}

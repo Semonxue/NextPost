@@ -23,6 +23,7 @@ interface Post {
   content: string;
   accountId: string;
   scheduledTime: string | null;
+  publishedAt: string | null;
   timezone: string;
   status: string;
   mediaUrls: string | null;
@@ -386,6 +387,28 @@ export default function EditPostPage() {
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               输入发布后的外部链接，方便快速查看已发布的内容
+            </p>
+          </div>
+        )}
+        {/* 实际发布时间 - 已发布帖子显示 */}
+        {formData.status === "published" && post?.publishedAt && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              实际发布时间
+            </label>
+            <div className="px-3 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-sm">
+              {new Date(post.publishedAt).toLocaleString("zh-CN", {
+                timeZone: "Asia/Shanghai",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })} (北京时间)
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              这是帖子实际发布的时间，由 MCP 客户端报告
             </p>
           </div>
         )}

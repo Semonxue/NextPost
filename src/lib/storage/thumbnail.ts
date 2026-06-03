@@ -3,7 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 // 缩略图配置
-const THUMBNAIL_SIZE = 60; // 缩略图尺寸（最大边）
+const THUMBNAIL_SIZE = 90; // 缩略图尺寸（最大边）- 放大50%以提高显示清晰度
 const THUMBNAIL_QUALITY = 70; // JPEG 质量
 
 /**

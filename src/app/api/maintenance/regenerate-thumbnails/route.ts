@@ -5,14 +5,23 @@ import { promises as fs } from "fs";
 import path from "path";
 
 // 缩略图生成配置
-const THUMBNAIL_SIZE = 60;
+const THUMBNAIL_SIZE = 90; // 与 thumbnail.ts 保持一致
 const THUMBNAIL_QUALITY = 70;
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    // 解析请求体，支持 force 参数强制重新生成
+    let forceRegenerate = false;
+    try {
+      const body = await request.json();
+      forceRegenerate = body.force === true;
+    } catch {
+      // 如果没有请求体，使用默认值
     }
 
     // 获取所有有媒体的帖子
@@ -53,9 +62,9 @@ export async function POST() {
       const thumbnailMap = new Map<string, string>(); // 存储 mediaUrl -> thumbnailUrl 映射
 
       for (const mediaUrl of mediaUrls) {
-        // 检查是否已有缩略图文件（避免重复生成）
+        // 检查是否已有缩略图文件（避免重复生成，除非强制重新生成）
         const thumbPath = getThumbPath(mediaUrl);
-        if (thumbPath) {
+        if (!forceRegenerate && thumbPath) {
           try {
             await fs.access(thumbPath);
             // 缩略图已存在，记录路径
@@ -64,6 +73,15 @@ export async function POST() {
             continue;
           } catch {
             // 文件不存在，继续生成
+          }
+        }
+
+        // 如果强制重新生成，删除旧的缩略图
+        if (forceRegenerate && thumbPath) {
+          try {
+            await fs.unlink(thumbPath);
+          } catch {
+            // 忽略删除错误
           }
         }
 

@@ -105,6 +105,7 @@ export default function SettingsPage() {
   // 数据维护
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateProgress, setRegenerateProgress] = useState(0);
+  const [forceRegenerate, setForceRegenerate] = useState(false);
   
   // 统计
   const [stats, setStats] = useState<Stats | null>(null);
@@ -225,7 +226,11 @@ export default function SettingsPage() {
     setRegenerating(true);
     setRegenerateProgress(0);
     try {
-      const res = await fetch("/api/maintenance/regenerate-thumbnails", { method: "POST" });
+      const res = await fetch("/api/maintenance/regenerate-thumbnails", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: forceRegenerate })
+      });
       if (res.ok) {
         const data = await res.json();
         setRegenerateProgress(100);
@@ -535,6 +540,17 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     重新生成所有帖子的媒体缩略图，适用于图片更新后需要刷新缩略图的情况。
                   </p>
+                  <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={forceRegenerate}
+                      onChange={(e) => setForceRegenerate(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
+                    />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      强制重新生成（忽略已有缩略图，删除后重新生成）
+                    </span>
+                  </label>
                 </div>
                 <Button
                   onClick={handleRegenerateThumbnails}

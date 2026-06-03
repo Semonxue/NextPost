@@ -146,7 +146,7 @@ export const TOOLS: Tool[] = [
         },
         publishedAt: {
           type: 'string',
-          description: '实际发布时间 ISO 8601'
+          description: '实际发布时间，必须是带时区的 ISO 8601 格式（如 2026-06-03T19:40:00+08:00 或 2026-06-03T11:40:00Z）。NextPost 会自动解析时区并存储为 UTC'
         },
         externalPostId: {
           type: 'string',
@@ -457,6 +457,7 @@ async function reportPublishResult(
   switch (status) {
     case 'success':
       updateData.status = 'published';
+      // 使用传入的 publishedAt 或当前时间
       updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
       if (externalPostId) {
         updateData.externalPostId = externalPostId;
@@ -475,6 +476,7 @@ async function reportPublishResult(
       break;
     case 'partial':
       updateData.status = 'published';
+      // 使用传入的 publishedAt 或当前时间
       updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
       updateData.publishError = errorMessage || 'Partial success';
       break;

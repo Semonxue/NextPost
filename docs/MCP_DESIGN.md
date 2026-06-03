@@ -218,7 +218,7 @@
       },
       publishedAt: { 
         type: "string", 
-        description: "实际发布时间 ISO 8601" 
+        description: "实际发布时间，必须是带时区的 ISO 8601 格式（如 2026-06-03T19:40:00+08:00 或 2026-06-03T11:40:00Z）。NextPost 会自动解析时区并存储为 UTC" 
       },
       externalPostId: { 
         type: "string", 
