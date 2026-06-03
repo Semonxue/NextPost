@@ -272,7 +272,6 @@ test.describe('内容创作模块', () => {
       await expect(addButton).toBeVisible()
     })
   })
-})
 
   test.describe('TC-POST-017: 从帖子列表新建帖子后返回列表', () => {
     test('从帖子列表进入新建页面，保存后应返回帖子列表', async ({ page }) => {
@@ -289,19 +288,19 @@ test.describe('内容创作模块', () => {
     test('从日历进入新建页面带 from=calendar 参数，保存后应返回日历', async ({ page }) => {
       await page.goto('/calendar')
       await page.waitForLoadState('networkidle')
+      // 点击日历上一个非空日期（取有数字显示的格子）
       const dayCell = page.locator('.grid-cols-7 > div').nth(10)
       await dayCell.click()
-      await page.waitForTimeout(500)
-      const addButton = page.getByRole('button', { name: /添加/i }).first()
-      if (await addButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await addButton.click()
-        await expect(page).toHaveURL(/from=calendar/, { timeout: 5000 })
-        await page.waitForLoadState('networkidle')
-        await page.locator('textarea').fill('日历测试帖子')
-        await page.getByRole('button', { name: '保存草稿' }).click()
-        await expect(page.getByText('草稿已保存').first()).toBeVisible()
-        await expect(page).toHaveURL(/\/calendar/, { timeout: 5000 })
-      }
+      // 验证"添加"按钮真的出现（点日期后才渲染）
+      const addButton = page.getByRole('button', { name: '添加' }).first()
+      await expect(addButton).toBeVisible({ timeout: 5000 })
+      await addButton.click()
+      await expect(page).toHaveURL(/from=calendar/, { timeout: 5000 })
+      await page.waitForLoadState('networkidle')
+      await page.locator('textarea').fill('日历测试帖子')
+      await page.getByRole('button', { name: '保存草稿' }).click()
+      await expect(page.getByText('草稿已保存').first()).toBeVisible()
+      await expect(page).toHaveURL(/\/calendar/, { timeout: 5000 })
     })
   })
 
@@ -311,14 +310,14 @@ test.describe('内容创作模块', () => {
       await page.waitForLoadState('networkidle')
       const dayCell = page.locator('.grid-cols-7 > div').nth(10)
       await dayCell.click()
-      await page.waitForTimeout(500)
-      const addButton = page.getByRole('button', { name: /添加/i }).first()
-      if (await addButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await addButton.click()
-        await expect(page).toHaveURL(/from=calendar/, { timeout: 5000 })
-        await page.waitForLoadState('networkidle')
-        const backArrow = page.locator('a[href="/calendar"]').first()
-        await expect(backArrow).toBeVisible({ timeout: 3000 })
-      }
+      const addButton = page.getByRole('button', { name: '添加' }).first()
+      await expect(addButton).toBeVisible({ timeout: 5000 })
+      await addButton.click()
+      await expect(page).toHaveURL(/from=calendar/, { timeout: 5000 })
+      await page.waitForLoadState('networkidle')
+      // 返回箭头应指向日历（带 from=calendar 时）
+      const backArrow = page.locator('a[href="/calendar"]').first()
+      await expect(backArrow).toBeVisible({ timeout: 3000 })
     })
   })
+})

@@ -43,8 +43,14 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     }
   });
 
-  test('TC-SETTINGS-001: 页面渲染 + 2 个类型 card 默认选 读写', async ({ page }) => {
+  // 工具：切到 API Keys tab（默认在 profile）
+  async function gotoApiKeysTab(page: any) {
     await page.goto('/settings');
+    await page.getByRole('button', { name: 'API Keys' }).click();
+  }
+
+  test('TC-SETTINGS-001: 页面渲染 + 2 个类型 card 默认选 读写', async ({ page }) => {
+    await gotoApiKeysTab(page);
     await expect(page.getByRole('heading', { name: '外部 API Key（MCP）' })).toBeVisible();
     // 类型选择器 2 个 card
     await expect(page.getByTestId('new-key-type-read')).toBeVisible();
@@ -55,7 +61,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
   });
 
   test('TC-SETTINGS-002: UI 创建 读写 key → DB 真实写入 read_write', async ({ page }) => {
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
 
     // 填名称
     await page.getByPlaceholder(/输入 Key 名称/).fill('Claude Desktop Test');
@@ -78,7 +84,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
   });
 
   test('TC-SETTINGS-003: UI 创建 只读 key → DB 写入 read', async ({ page }) => {
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
     await page.getByPlaceholder(/输入 Key 名称/).fill('Read Only');
     // 切到 只读 card
     await page.getByTestId('new-key-type-read').click();
@@ -100,7 +106,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       data: { userId, name: 'Display Test', key: keyValue, permissions: 'read_write' },
     });
 
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
     // 列表里能看到 key 名称
     await expect(page.getByText('Display Test')).toBeVisible();
     // 类型大标显示"读写"（不是英文 read_write）
@@ -118,7 +124,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       data: { userId, name: 'Read Only Test', key: keyValue, permissions: 'read' },
     });
 
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
     const row = page.getByTestId('external-key-row').first();
     await expect(row.getByTestId('key-type-badge')).toHaveText('只读');
     await expect(row).toHaveAttribute('data-scope', 'read');
@@ -137,7 +143,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       ],
     });
 
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
 
     // 默认全部：看到 2 个
     await expect(page.getByTestId('external-key-row')).toHaveCount(2);
@@ -173,7 +179,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       ],
     });
 
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
     await expect(page.getByTestId('filter-all')).toContainText('3');
     await expect(page.getByTestId('filter-read')).toContainText('1');
     await expect(page.getByTestId('filter-read_write')).toContainText('2');
@@ -188,7 +194,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       data: { userId, name: 'Immutable', key: keyValue, permissions: 'read' },
     });
 
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
 
     const row = page.getByTestId('external-key-row').filter({ hasText: 'Immutable' });
     // 行内不再有 scope <select>
@@ -210,13 +216,13 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       data: { userId, name: 'Persist Me', key: keyValue, permissions: 'read_write' },
     });
 
-    await page.goto('/settings');
+    await gotoApiKeysTab(page);
     await expect(page.getByTestId('external-keys-list').getByText('Persist Me')).toBeVisible();
 
-    // 刷新
+    // 刷新后 tab 应保持 API Keys（activeTab 持久化到 cookie），key 列表 + scope 仍然正确
     await page.reload();
     const row = page.getByTestId('external-key-row').filter({ hasText: 'Persist Me' });
-    await expect(row).toBeVisible();
+    await expect(row).toBeVisible({ timeout: 5000 });
     await expect(row.getByTestId('key-type-badge')).toHaveText('读写');
   });
 });

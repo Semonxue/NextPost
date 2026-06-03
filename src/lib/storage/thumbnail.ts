@@ -1,10 +1,7 @@
 import sharp from 'sharp';
 import { promises as fs } from 'fs';
 import path from 'path';
-
-// 缩略图配置
-const THUMBNAIL_SIZE = 90; // 缩略图尺寸（最大边）- 放大50%以提高显示清晰度
-const THUMBNAIL_QUALITY = 70; // JPEG 质量
+import { THUMBNAIL_SIZE, THUMBNAIL_QUALITY, THUMBNAIL_MIN_SIZE, THUMBNAIL_MAX_SIZE } from '@/lib/config';
 
 /**
  * 生成缩略图
@@ -26,7 +23,7 @@ export async function generateThumbnail(
     .toBuffer();
 
   // 如果还是太大，递归降低质量
-  if (resized.length > 30 * 1024 && quality > 20) {
+  if (resized.length > THUMBNAIL_MAX_SIZE && quality > 20) {
     return generateThumbnail(imageBuffer, maxSize, quality - 10);
   }
 
@@ -41,8 +38,8 @@ export async function generateThumbnail(
 export async function needsThumbnail(filePath: string): Promise<boolean> {
   try {
     const stat = await fs.stat(filePath);
-    // 如果文件小于 30KB，不需要生成
-    return stat.size > 30 * 1024;
+  // 如果文件小于最小尺寸，不需要生成
+  return stat.size > THUMBNAIL_MIN_SIZE;
   } catch {
     return false;
   }

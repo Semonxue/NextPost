@@ -5,6 +5,24 @@ import { redirect } from "next/navigation";
 import { Key, User, Plus, Trash2, Copy, Eye, Pencil, Check, Filter, BarChart3, Settings2, RefreshCw, Database } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useUIStore } from "@/stores/uiStore";
+import { COOKIE_SETTINGS_TAB } from "@/lib/config";
+
+type TabType = "profile" | "apikeys" | "maintenance" | "stats";
+const VALID_TABS: TabType[] = ["profile", "apikeys", "maintenance", "stats"];
+
+function readSettingsTabCookie(): TabType {
+  if (typeof document === "undefined") return "profile";
+  const match = document.cookie.match(new RegExp("(^| )" + COOKIE_SETTINGS_TAB + "=([^;]+)"));
+  const v = match ? decodeURIComponent(match[2]) : null;
+  return VALID_TABS.includes(v as TabType) ? (v as TabType) : "profile";
+}
+
+function writeSettingsTabCookie(tab: TabType) {
+  if (typeof document === "undefined") return;
+  const expires = new Date();
+  expires.setTime(expires.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+  document.cookie = `${COOKIE_SETTINGS_TAB}=${encodeURIComponent(tab)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+}
 
 interface ExternalApiKey {
   id: string;
@@ -88,12 +106,19 @@ const SCOPE_META: Record<
 };
 
 type FilterMode = "all" | "read" | "read_write";
-type TabType = "profile" | "apikeys" | "maintenance" | "stats";
 
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const { addToast } = useUIStore();
   const [activeTab, setActiveTab] = useState<TabType>("profile");
+  // 客户端挂载后从 cookie 恢复 tab 状态（避免 SSR mismatch）
+  useEffect(() => {
+    setActiveTab(readSettingsTabCookie());
+  }, []);
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    writeSettingsTabCookie(tab);
+  };
   const [loading, setLoading] = useState(true);
   const [externalKeys, setExternalKeys] = useState<ExternalApiKey[]>([]);
   const [newKeyName, setNewKeyName] = useState("");
@@ -292,7 +317,7 @@ export default function SettingsPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? "border-blue-500 text-blue-600 dark:text-blue-400"

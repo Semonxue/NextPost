@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
+/**
+ * GET /api/posts/stats
+ * 
+ * 获取当前用户的帖子统计数据（只统计回收站外的数据）
+ * 排除：帖子本身在回收站 或 关联账号在回收站 的帖子
+ * 返回格式：{ totalPosts, scheduled, published, drafts }
+ */
 export async function GET() {
   try {
     const session = await auth();
@@ -14,19 +21,30 @@ export async function GET() {
     startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
 
+    // 只统计回收站外的数据：
+    // 1. 帖子本身的 deletedAt 为 null
+    // 2. 关联账号的 deletedAt 也为 null
+    const whereCondition = {
+      userId: session.user.id,
+      deletedAt: null,
+      account: {
+        deletedAt: null,
+      },
+    };
+
     const [total, scheduled, published, drafts] = await Promise.all([
-      prisma.post.count({ where: { userId: session.user.id } }),
+      prisma.post.count({ where: whereCondition }),
       prisma.post.count({
         where: {
-          userId: session.user.id,
+          ...whereCondition,
           status: "scheduled",
           scheduledTime: { gte: startOfWeek },
         },
       }),
       prisma.post.count({
-        where: { userId: session.user.id, status: "published" },
+        where: { ...whereCondition, status: "published" },
       }),
-      prisma.post.count({ where: { userId: session.user.id, status: "draft" } }),
+      prisma.post.count({ where: { ...whereCondition, status: "draft" } }),
     ]);
 
     return NextResponse.json({

@@ -3,10 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { promises as fs } from "fs";
 import path from "path";
-
-// 缩略图生成配置
-const THUMBNAIL_SIZE = 90; // 与 thumbnail.ts 保持一致
-const THUMBNAIL_QUALITY = 70;
+import { THUMBNAIL_SIZE, THUMBNAIL_QUALITY, THUMBNAIL_MAX_SIZE } from "@/lib/config";
 
 export async function POST(request: Request) {
   try {
@@ -203,7 +200,7 @@ async function generateThumbnailFromBuffer(
     .webp({ quality })
     .toBuffer();
 
-  if (resized.length > 30 * 1024 && quality > 20) {
+  if (resized.length > THUMBNAIL_MAX_SIZE && quality > 20) {
     return generateThumbnailFromBuffer(imageBuffer, maxSize, quality - 10);
   }
 

@@ -16,24 +16,28 @@ export async function GET() {
       where: { userId: session.user.id, deletedAt: null }
     });
 
-    // 获取帖子数量
+    // 获取帖子数量（排除回收站：帖子本身和关联账号都不在回收站）
     const posts = await prisma.post.count({
-      where: { userId: session.user.id, deletedAt: null }
+      where: { 
+        userId: session.user.id, 
+        deletedAt: null,
+        account: { deletedAt: null }
+      }
     });
 
     // 获取帖子状态分布
     const [draft, scheduled, published, failed] = await Promise.all([
       prisma.post.count({
-        where: { userId: session.user.id, status: "draft", deletedAt: null }
+        where: { userId: session.user.id, status: "draft", deletedAt: null, account: { deletedAt: null } }
       }),
       prisma.post.count({
-        where: { userId: session.user.id, status: "scheduled", deletedAt: null }
+        where: { userId: session.user.id, status: "scheduled", deletedAt: null, account: { deletedAt: null } }
       }),
       prisma.post.count({
-        where: { userId: session.user.id, status: "published", deletedAt: null }
+        where: { userId: session.user.id, status: "published", deletedAt: null, account: { deletedAt: null } }
       }),
       prisma.post.count({
-        where: { userId: session.user.id, status: "failed", deletedAt: null }
+        where: { userId: session.user.id, status: "failed", deletedAt: null, account: { deletedAt: null } }
       }),
     ]);
 
@@ -122,21 +126,23 @@ export async function GET() {
       // uploads 目录可能不存在
     }
 
-    // 按账号统计帖子
+    // 按账号统计帖子（排除回收站中的帖子）
     const accountStats = await prisma.account.findMany({
       where: { userId: session.user.id, deletedAt: null },
       select: {
+        id: true,
         name: true,
-        _count: {
-          select: { posts: true }
+        posts: {
+          where: { deletedAt: null },
+          select: { id: true }
         }
       },
-      orderBy: { posts: { _count: "desc" } }
+      orderBy: { name: "asc" }
     });
 
     const categories = accountStats.map(acc => ({
       name: acc.name,
-      count: acc._count.posts
+      count: acc.posts.length
     }));
 
     return NextResponse.json({
@@ -172,8 +178,7 @@ export async function GET() {
   }
 }
 
-// 格式化字节大小
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];

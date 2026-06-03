@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Video } from "lucide-react";
 import { isVideoMimeType, isVideoUrl } from "@/lib/platform";
+import { FRONTEND_THUMBNAIL_SIZE, FRONTEND_THUMBNAIL_QUALITY } from "@/lib/config";
 
 /**
  * 判断 src 是否指向视频
@@ -33,7 +34,7 @@ interface MediaPreviewProps {
   className?: string;
   /** img 元素的类名 */
   imgClassName?: string;
-  /** 缩略图最大尺寸（用于 canvas 抽帧），默认 240 */
+  /** 缩略图最大尺寸（用于 canvas 抽帧），默认使用 FRONTEND_THUMBNAIL_SIZE */
   thumbnailSize?: number;
   /** 是否覆盖整个容器（默认 true） */
   fill?: boolean;
@@ -62,7 +63,7 @@ export function MediaPreview({
   alt = "",
   className = "",
   imgClassName = "w-full h-full object-cover",
-  thumbnailSize = 240,
+  thumbnailSize = FRONTEND_THUMBNAIL_SIZE,
   fill = true,
   showPlayIcon = true,
   fallback,
@@ -133,7 +134,7 @@ function VideoThumbnail({
   alt = "",
   className = "",
   imgClassName = "w-full h-full object-cover",
-  thumbnailSize = 240,
+  thumbnailSize = FRONTEND_THUMBNAIL_SIZE,
   fill = true,
   showPlayIcon = true,
   fallback,
@@ -215,7 +216,7 @@ function VideoThumbnail({
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("无法获取 canvas 2D context");
         ctx.drawImage(video, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        const dataUrl = canvas.toDataURL("image/jpeg", FRONTEND_THUMBNAIL_QUALITY);
         generatedRef.current = true;
         setThumbnail(dataUrl);
         setLoading(false);

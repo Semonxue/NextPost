@@ -43,7 +43,7 @@ vi.mock('fs', () => ({
   promises: fsMock,
 }))
 
-import { GET } from '@/app/api/stats/route'
+import { GET, formatBytes } from '@/app/api/stats/route'
 import { auth } from '@/lib/auth'
 import { promises as fs } from 'fs'
 
@@ -60,11 +60,8 @@ describe('Stats API - Thumbnail Stats', () => {
   describe('GET /api/stats - Thumbnail Statistics', () => {
     it('should return thumbnailStats with valid structure', async () => {
       mockPostCount.mockResolvedValue(1)
-      mockPostFindMany.mockResolvedValue([
-        { id: 'post-1', mediaUrls: '[]', mediaThumbnails: '[]' },
-      ])
       mockAccountFindMany.mockResolvedValue([
-        { name: 'Test Account', _count: { posts: 5 } },
+        { id: 'acc-1', name: 'Test Account', posts: [{ id: 'p1' }, { id: 'p2' }] },
       ])
 
       // Both scans return empty (no recursion)
@@ -123,10 +120,9 @@ describe('Stats API - Thumbnail Stats', () => {
         .mockResolvedValueOnce(4) // published
         .mockResolvedValueOnce(1) // failed
 
-      mockPostFindMany.mockResolvedValue([])
       mockAccountFindMany.mockResolvedValue([
-        { name: 'Twitter', _count: { posts: 5 } },
-        { name: 'Facebook', _count: { posts: 3 } },
+        { id: 'acc-1', name: 'Twitter', posts: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }, { id: 'p4' }, { id: 'p5' }] },
+        { id: 'acc-2', name: 'Facebook', posts: [{ id: 'p6' }, { id: 'p7' }, { id: 'p8' }] },
       ])
 
       fsMock.readdir.mockResolvedValue([] as any)
@@ -142,6 +138,8 @@ describe('Stats API - Thumbnail Stats', () => {
       expect(data.postsByStatus.published).toBe(4)
       expect(data.postsByStatus.failed).toBe(1)
       expect(data.categories).toHaveLength(2)
+      expect(data.categories[0].count).toBe(5)
+      expect(data.categories[1].count).toBe(3)
     })
 
     it('should count thumbnails and skip non-thumbnail files', async () => {
@@ -274,6 +272,38 @@ describe('Stats API - Thumbnail Stats', () => {
       expect(data.thumbnailStats.size).toBe(1024)
       // 1 media file (image in root, subdir is empty)
       expect(data.media).toBe(1)
+    })
+  })
+
+  describe('formatBytes', () => {
+    it('should return "0 B" for 0 bytes', () => {
+      expect(formatBytes(0)).toBe('0 B')
+    })
+
+    it('should format bytes (< 1KB)', () => {
+      expect(formatBytes(500)).toBe('500 B')
+    })
+
+    it('should format kilobytes', () => {
+      expect(formatBytes(1024)).toBe('1 KB')
+    })
+
+    it('should format megabytes', () => {
+      expect(formatBytes(1024 * 1024)).toBe('1 MB')
+    })
+
+    it('should format gigabytes', () => {
+      expect(formatBytes(1024 * 1024 * 1024)).toBe('1 GB')
+    })
+
+    it('should format with decimal precision', () => {
+      const result = formatBytes(1536) // 1.5 KB
+      expect(result).toBe('1.5 KB')
+    })
+
+    it('should format larger kilobyte values', () => {
+      const result = formatBytes(1024 * 512) // 512 KB
+      expect(result).toBe('512 KB')
     })
   })
 })

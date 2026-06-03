@@ -37,6 +37,13 @@ import type {
 } from './types';
 import { uploadFile } from '@/lib/storage';
 import { hasScope } from './auth';
+import {
+  MAX_MEDIA_SIZE,
+  MAX_BASE64_SIZE,
+  ALLOWED_MIME_TYPES,
+  EXT_TO_MIME,
+  MIME_TO_EXT,
+} from '@/lib/config';
 
 const prisma = new PrismaClient();
 
@@ -53,18 +60,6 @@ upload_media_from_base64: 'write',
 create_post: 'write',
 update_post: 'write',
 };
-
-// 文件大小上限（与 /api/media/upload 保持一致）
-const MAX_MEDIA_SIZE = 10 * 1024 * 1024;
-// 允许的 mime 类型
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'video/mp4',
-  'video/webm',
-]);
 
 // 获取基础 URL（用于拼接完整的媒体文件 URL）
 function getBaseUrl(): string {
@@ -596,30 +591,6 @@ async function uploadMediaFromUrl(
   };
 }
 
-// MIME 类型推断：根据扩展名
-const EXT_TO_MIME: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-};
-
-// 根据 MIME 推断扩展名
-function mimeToExt(mimeType: string): string {
-  const map: Record<string, string> = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/gif': '.gif',
-    'image/webp': '.webp',
-    'video/mp4': '.mp4',
-    'video/webm': '.webm',
-  };
-  return map[mimeType] || '';
-}
-
 /**
  * 从本地文件路径读取媒体存到 NextPost
  */
@@ -677,9 +648,6 @@ async function uploadMediaFromPath(
   };
 }
 
-// base64 大小上限（5MB 原始文件 ≈ 6.7MB base64）
-const MAX_BASE64_SIZE = 5 * 1024 * 1024;
-
 /**
  * 从 base64 编码数据上传媒体存到 NextPost
  */
@@ -730,7 +698,7 @@ async function uploadMediaFromBase64(
   }
 
   // 文件名
-  const finalFilename = filename || `${Date.now()}${mimeToExt(effectiveMime)}`;
+  const finalFilename = filename || `${Date.now()}${MIME_TO_EXT[effectiveMime] || ''}`;
 
   const result = await uploadFile(buffer, finalFilename, effectiveMime);
   return {

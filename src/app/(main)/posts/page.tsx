@@ -123,15 +123,16 @@ export default function PostsPage() {
       
       if (accountsRes.ok) {
         const accountsData = await accountsRes.json();
-        setAccounts(Array.isArray(accountsData) ? accountsData : accountsData.accounts || []);
-        
-        // 提取所有平台
+        const accountsList: Account[] = Array.isArray(accountsData) ? accountsData : accountsData.accounts || [];
+        setAccounts(accountsList);
+
+        // 提取所有平台（兼容 accountsData 是数组的情况）
         const allPlatforms = new Map<string, Platform>();
-        accountsData.accounts?.forEach((account: Account) => {
+        for (const account of accountsList) {
           if (account.platform && !allPlatforms.has(account.platform.id)) {
             allPlatforms.set(account.platform.id, account.platform);
           }
-        });
+        }
         setPlatforms(Array.from(allPlatforms.values()));
       }
     } catch (error) {

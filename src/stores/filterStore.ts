@@ -1,4 +1,11 @@
 import { create } from "zustand";
+import {
+  COOKIE_FILTER_ACCOUNTS,
+  COOKIE_FILTER_PLATFORMS,
+  COOKIE_FILTER_STATUS,
+  COOKIE_FILTER_SORT_FIELD,
+  COOKIE_FILTER_SORT_ORDER,
+} from "@/lib/config";
 
 export type SortField = "scheduledTime" | "createdAt" | "updatedAt";
 export type SortOrder = "asc" | "desc";
@@ -46,11 +53,6 @@ function parseArrayCookie(value: string | null): string[] {
   }
 }
 
-const ACCOUNT_COOKIE = "np_filter_accounts";
-const PLATFORM_COOKIE = "np_filter_platforms";
-const STATUS_COOKIE = "np_filter_status";
-const SORT_FIELD_COOKIE = "np_filter_sort_field";
-const SORT_ORDER_COOKIE = "np_filter_sort_order";
 
 // 创建 store，使用 getter 函数延迟读取 cookie
 export const useFilterStore = create<FilterState>((set, get) => ({
@@ -63,36 +65,36 @@ export const useFilterStore = create<FilterState>((set, get) => ({
 
   rehydrate: () => {
     set({
-      selectedAccounts: parseArrayCookie(getCookieValue(ACCOUNT_COOKIE)),
-      selectedPlatforms: parseArrayCookie(getCookieValue(PLATFORM_COOKIE)),
-      statusFilter: getCookieValue(STATUS_COOKIE) || "all",
-      sortField: (getCookieValue(SORT_FIELD_COOKIE) as SortField) || "scheduledTime",
-      sortOrder: (getCookieValue(SORT_ORDER_COOKIE) as SortOrder) || "desc",
+      selectedAccounts: parseArrayCookie(getCookieValue(COOKIE_FILTER_ACCOUNTS)),
+      selectedPlatforms: parseArrayCookie(getCookieValue(COOKIE_FILTER_PLATFORMS)),
+      statusFilter: getCookieValue(COOKIE_FILTER_STATUS) || "all",
+      sortField: (getCookieValue(COOKIE_FILTER_SORT_FIELD) as SortField) || "scheduledTime",
+      sortOrder: (getCookieValue(COOKIE_FILTER_SORT_ORDER) as SortOrder) || "desc",
     });
   },
 
   setSelectedAccounts: (accounts) => {
-    setCookie(ACCOUNT_COOKIE, JSON.stringify(accounts));
+    setCookie(COOKIE_FILTER_ACCOUNTS, JSON.stringify(accounts));
     set({ selectedAccounts: accounts });
   },
 
   setSelectedPlatforms: (platforms) => {
-    setCookie(PLATFORM_COOKIE, JSON.stringify(platforms));
+    setCookie(COOKIE_FILTER_PLATFORMS, JSON.stringify(platforms));
     set({ selectedPlatforms: platforms });
   },
 
   setStatusFilter: (status) => {
-    setCookie(STATUS_COOKIE, status);
+    setCookie(COOKIE_FILTER_STATUS, status);
     set({ statusFilter: status });
   },
 
   setSortField: (field) => {
-    setCookie(SORT_FIELD_COOKIE, field);
+    setCookie(COOKIE_FILTER_SORT_FIELD, field);
     set({ sortField: field });
   },
 
   setSortOrder: (order) => {
-    setCookie(SORT_ORDER_COOKIE, order);
+    setCookie(COOKIE_FILTER_SORT_ORDER, order);
     set({ sortOrder: order });
   },
 
@@ -101,12 +103,12 @@ export const useFilterStore = create<FilterState>((set, get) => ({
     if (sortField === field) {
       // 同一字段，切换排序方向
       const newOrder = sortOrder === "asc" ? "desc" : "asc";
-      setCookie(SORT_ORDER_COOKIE, newOrder);
+      setCookie(COOKIE_FILTER_SORT_ORDER, newOrder);
       set({ sortOrder: newOrder });
     } else {
       // 新字段，默认降序
-      setCookie(SORT_FIELD_COOKIE, field);
-      setCookie(SORT_ORDER_COOKIE, "desc");
+      setCookie(COOKIE_FILTER_SORT_FIELD, field);
+      setCookie(COOKIE_FILTER_SORT_ORDER, "desc");
       set({ sortField: field, sortOrder: "desc" });
     }
   },
@@ -116,7 +118,7 @@ export const useFilterStore = create<FilterState>((set, get) => ({
     const newAccounts = selectedAccounts.includes(accountId)
       ? selectedAccounts.filter(id => id !== accountId)
       : [...selectedAccounts, accountId];
-    setCookie(ACCOUNT_COOKIE, JSON.stringify(newAccounts));
+    setCookie(COOKIE_FILTER_ACCOUNTS, JSON.stringify(newAccounts));
     set({ selectedAccounts: newAccounts });
   },
 
@@ -125,14 +127,14 @@ export const useFilterStore = create<FilterState>((set, get) => ({
     const newPlatforms = selectedPlatforms.includes(platformId)
       ? selectedPlatforms.filter(id => id !== platformId)
       : [...selectedPlatforms, platformId];
-    setCookie(PLATFORM_COOKIE, JSON.stringify(newPlatforms));
+    setCookie(COOKIE_FILTER_PLATFORMS, JSON.stringify(newPlatforms));
     set({ selectedPlatforms: newPlatforms });
   },
 
   clearAll: () => {
-    setCookie(ACCOUNT_COOKIE, "[]");
-    setCookie(PLATFORM_COOKIE, "[]");
-    setCookie(STATUS_COOKIE, "all");
+    setCookie(COOKIE_FILTER_ACCOUNTS, "[]");
+    setCookie(COOKIE_FILTER_PLATFORMS, "[]");
+    setCookie(COOKIE_FILTER_STATUS, "all");
     set({
       selectedAccounts: [],
       selectedPlatforms: [],

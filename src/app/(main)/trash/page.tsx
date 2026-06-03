@@ -2,11 +2,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
-import { Trash2, RotateCcw, AlertTriangle, FileText, User, Inbox } from "lucide-react";
+import { Trash2, RotateCcw, AlertTriangle, FileText, User, Inbox, Trash } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { useUIStore } from "@/stores/uiStore";
+
 type TabKey = "posts" | "accounts";
+
 interface TrashPost {
   id: string;
   content: string;
@@ -19,6 +21,7 @@ interface TrashPost {
   deleteNote: string | null;
   createdAt: string;
 }
+
 interface TrashAccount {
   id: string;
   name: string;
@@ -30,6 +33,7 @@ interface TrashAccount {
   deleteNote: string | null;
   createdAt: string;
 }
+
 export default function TrashPage() {
   const { status } = useSession();
   const { addToast } = useUIStore();
@@ -42,6 +46,7 @@ export default function TrashPage() {
   const [totalAccounts, setTotalAccounts] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
   const fetchTrash = useCallback(async () => {
     try {
       setLoading(true);
@@ -66,6 +71,7 @@ export default function TrashPage() {
       setLoading(false);
     }
   }, [addToast, currentPage, pageSize]);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/login");
@@ -74,6 +80,7 @@ export default function TrashPage() {
       fetchTrash();
     }
   }, [status, fetchTrash]);
+
   const handleRestore = async (id: string, type: TabKey) => {
     setActing(id);
     try {
@@ -95,6 +102,7 @@ export default function TrashPage() {
       setActing(null);
     }
   };
+
   const handlePermanentDelete = async (id: string, type: TabKey) => {
     if (!confirm("确定要永久删除吗？此操作无法撤销。")) return;
     setActing(id);
@@ -117,6 +125,33 @@ export default function TrashPage() {
       setActing(null);
     }
   };
+
+  const handleEmptyTrash = async () => {
+    const total = totalPosts + totalAccounts;
+    if (!confirm(`确定要清空回收站吗？这将永久删除 ${total} 条记录（${totalPosts} 条帖子，${totalAccounts} 个账号），此操作无法撤销。`)) {
+      return;
+    }
+    setActing("empty-trash");
+    try {
+      const res = await fetch("/api/trash", { method: "DELETE" });
+      if (res.ok) {
+        const data = await res.json();
+        addToast({ 
+          type: "success", 
+          message: `已清空回收站，删除了 ${data.deletedPosts} 条帖子和 ${data.deletedAccounts} 个账号` 
+        });
+        fetchTrash();
+      } else {
+        const data = await res.json();
+        addToast({ type: "error", message: data.error || "清空失败" });
+      }
+    } catch {
+      addToast({ type: "error", message: "网络错误" });
+    } finally {
+      setActing(null);
+    }
+  };
+
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -124,14 +159,33 @@ export default function TrashPage() {
       </div>
     );
   }
+
+  const hasTrashItems = posts.length > 0 || accounts.length > 0;
+  const totalItems = totalPosts + totalAccounts;
+
   return (
     <div className="max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">回收站</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          已删除的帖子和账号可以在此恢复或永久删除
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">回收站</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            已删除的帖子和账号可以在此恢复或永久删除
+          </p>
+        </div>
+        {hasTrashItems && (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={handleEmptyTrash}
+            loading={acting === "empty-trash"}
+            data-testid="empty-trash-button"
+          >
+            <Trash size={14} className="mr-1" />
+            清空回收站 ({totalItems})
+          </Button>
+        )}
       </div>
+
       {/* Tab 切换 */}
       <div className="border-b border-gray-200 dark:border-gray-700">
         <nav className="flex gap-4">
@@ -161,6 +215,7 @@ export default function TrashPage() {
           </button>
         </nav>
       </div>
+
       {/* 列表 */}
       {tab === "posts" ? (
         posts.length === 0 ? (
@@ -276,6 +331,7 @@ export default function TrashPage() {
           ))}
         </div>
       )}
+
       {/* 分页 */}
       {tab === "posts" && totalPosts > 0 && (
         <Pagination
@@ -297,8 +353,9 @@ export default function TrashPage() {
           pageSizeOptions={[10, 20, 50, 100]}
         />
       )}
+
       {/* 提示 */}
-      {(posts.length > 0 || accounts.length > 0) && (
+      {hasTrashItems && (
         <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-700 dark:text-amber-300">
           <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
           <div>
@@ -312,6 +369,7 @@ export default function TrashPage() {
     </div>
   );
 }
+
 function EmptyState({ message, hint }: { message: string; hint: string }) {
   return (
     <div

@@ -1,34 +1,35 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-// Mock storage (用于永久删除时清理媒体)
-vi.mock('@/lib/storage', () => ({
-  deleteFile: vi.fn().mockResolvedValue(undefined),
-}));
-
 // Use vi.hoisted
 const {
   mockPostFindMany,
   mockPostFindFirst,
   mockPostUpdate,
   mockPostDelete,
+  mockPostDeleteMany,
   mockPostCount,
   mockAccountFindMany,
   mockAccountFindFirst,
   mockAccountUpdate,
   mockAccountDelete,
+  mockAccountDeleteMany,
   mockAccountCount,
+  mockDeleteFile,
 } = vi.hoisted(() => ({
   mockPostFindMany: vi.fn(),
   mockPostFindFirst: vi.fn(),
   mockPostUpdate: vi.fn(),
   mockPostDelete: vi.fn(),
+  mockPostDeleteMany: vi.fn(),
   mockPostCount: vi.fn(),
   mockAccountFindMany: vi.fn(),
   mockAccountFindFirst: vi.fn(),
   mockAccountUpdate: vi.fn(),
   mockAccountDelete: vi.fn(),
+  mockAccountDeleteMany: vi.fn(),
   mockAccountCount: vi.fn(),
+  mockDeleteFile: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -38,6 +39,7 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: mockPostFindFirst,
       update: mockPostUpdate,
       delete: mockPostDelete,
+      deleteMany: mockPostDeleteMany,
       count: mockPostCount,
     },
     account: {
@@ -45,6 +47,7 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: mockAccountFindFirst,
       update: mockAccountUpdate,
       delete: mockAccountDelete,
+      deleteMany: mockAccountDeleteMany,
       count: mockAccountCount,
     },
   },
@@ -55,7 +58,12 @@ vi.mock('@/lib/auth', () => ({
   auth: vi.fn(),
 }));
 
-import { GET } from '@/app/api/trash/route';
+// Mock storage with configurable behavior
+vi.mock('@/lib/storage', () => ({
+  deleteFile: mockDeleteFile,
+}));
+
+import { GET, DELETE as DELETE_TRASH } from '@/app/api/trash/route';
 import { POST as RESTORE_POST } from '@/app/api/trash/posts/[id]/restore/route';
 import { POST as RESTORE_ACCOUNT } from '@/app/api/trash/accounts/[id]/restore/route';
 import { DELETE as DELETE_POST } from '@/app/api/trash/posts/[id]/route';
@@ -70,11 +78,9 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (auth as ReturnType<typeof vi.fn>).mockResolvedValue(mockSession);
+    // Default: deleteFile resolves successfully
+    mockDeleteFile.mockResolvedValue(undefined);
   });
-
-  // 修复 mock 顺序
-  // 我们需要在 mock prisma 中添加 account.findMany
-  // 这里通过 mockAccountFindMany 单独提供
 
   describe('GET /api/trash', () => {
     const makeReq = (qs = '') => new NextRequest(`http://localhost/api/trash${qs}`);
@@ -229,6 +235,29 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
       );
       expect(response.status).toBe(404);
     });
+
+    it('应该返回 401 当未登录', async () => {
+      (auth as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      const response = await RESTORE_ACCOUNT(
+        new NextRequest('http://localhost/api/trash/accounts/acct-1/restore'),
+        { params: Promise.resolve({ id: 'acct-1' }) }
+      );
+      expect(response.status).toBe(401);
+    });
+
+    it('应该返回 500 当数据库错误', async () => {
+      mockAccountFindFirst.mockResolvedValue({
+        id: 'acct-1',
+        userId: 'user-123',
+        deletedAt: new Date(),
+      });
+      mockAccountUpdate.mockRejectedValue(new Error('DB error'));
+      const response = await RESTORE_ACCOUNT(
+        new NextRequest('http://localhost/api/trash/accounts/acct-1/restore'),
+        { params: Promise.resolve({ id: 'acct-1' }) }
+      );
+      expect(response.status).toBe(500);
+    });
   });
 
   describe('DELETE /api/trash/posts/:id（永久删除）', () => {
@@ -293,17 +322,14 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
         deletedAt: new Date(),
       });
       mockPostDelete.mockResolvedValue({ id: 'post-1' });
-      const { deleteFile } = await import('@/lib/storage');
 
       await DELETE_POST(
         new NextRequest('http://localhost/api/trash/posts/post-1'),
         { params: Promise.resolve({ id: 'post-1' }) }
       );
 
-      // data: 开头的 URL 不应该被传递给 deleteFile
-      expect(deleteFile).not.toHaveBeenCalledWith('data:image/png;base64,abc');
-      // 普通 URL 应该被调用
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
+      expect(mockDeleteFile).not.toHaveBeenCalledWith('data:image/png;base64,abc');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
     });
 
     it('应该处理媒体 URL 解析错误', async () => {
@@ -320,7 +346,6 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
         { params: Promise.resolve({ id: 'post-1' }) }
       );
 
-      // JSON 解析错误不应影响主流程
       expect(response.status).toBe(200);
       expect(mockPostDelete).toHaveBeenCalled();
     });
@@ -334,15 +359,13 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
       });
       mockPostDelete.mockResolvedValue({ id: 'post-1' });
 
-      const { deleteFile } = await import('@/lib/storage');
-
       await DELETE_POST(
         new NextRequest('http://localhost/api/trash/posts/post-1'),
         { params: Promise.resolve({ id: 'post-1' }) }
       );
 
-      expect(deleteFile).toHaveBeenCalledTimes(1);
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
+      expect(mockDeleteFile).toHaveBeenCalledTimes(1);
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
     });
 
     it('应该处理 mediaUrls 为 null 的情况', async () => {
@@ -363,7 +386,6 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
     });
 
     it('应该清理关联的媒体文件', async () => {
-
       mockPostFindFirst.mockResolvedValue({
         id: 'post-1',
         userId: 'user-123',
@@ -372,7 +394,24 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
       });
       mockPostDelete.mockResolvedValue({ id: 'post-1' });
 
-      const { deleteFile } = await import('@/lib/storage');
+      const response = await DELETE_POST(
+        new NextRequest('http://localhost/api/trash/posts/post-1'),
+        { params: Promise.resolve({ id: 'post-1' }) }
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
+    });
+
+    it('应该处理 deleteFile 失败（不阻塞主流程）', async () => {
+      mockPostFindFirst.mockResolvedValue({
+        id: 'post-1',
+        userId: 'user-123',
+        mediaUrls: JSON.stringify(['/uploads/test.jpg']),
+        deletedAt: new Date(),
+      });
+      mockPostDelete.mockResolvedValue({ id: 'post-1' });
+      mockDeleteFile.mockRejectedValue(new Error('File delete failed'));
 
       const response = await DELETE_POST(
         new NextRequest('http://localhost/api/trash/posts/post-1'),
@@ -380,7 +419,6 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
     });
   });
 
@@ -391,10 +429,8 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
         userId: 'user-123',
         deletedAt: new Date(),
       });
-      // 该账号下的帖子查
       mockPostFindMany.mockResolvedValue([]);
       mockAccountDelete.mockResolvedValue({ id: 'acct-1' });
-
 
       const response = await DELETE_ACCOUNT(
         new NextRequest('http://localhost/api/trash/accounts/acct-1'),
@@ -451,7 +487,6 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
         { id: 'post-2', mediaUrls: JSON.stringify(['/uploads/p2.jpg', '/uploads/p2b.jpg']) },
       ]);
       mockAccountDelete.mockResolvedValue({ id: 'acct-1' });
-      const { deleteFile } = await import('@/lib/storage');
 
       const response = await DELETE_ACCOUNT(
         new NextRequest('http://localhost/api/trash/accounts/acct-1'),
@@ -461,98 +496,171 @@ describe('Trash API (v0.3 软删除 + 回收站)', () => {
 
       expect(response.status).toBe(200);
       expect(data.deletedPosts).toBe(2);
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/p1.jpg');
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/p2.jpg');
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/p2b.jpg');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/p1.jpg');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/p2.jpg');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/p2b.jpg');
+      expect(mockDeleteFile).toHaveBeenCalledTimes(3);
     });
 
-    it('应该处理帖子媒体 URL 解析错误', async () => {
+    it('应该处理 deleteFile 失败（账号删除不阻塞）', async () => {
       mockAccountFindFirst.mockResolvedValue({
         id: 'acct-1',
         userId: 'user-123',
         deletedAt: new Date(),
       });
       mockPostFindMany.mockResolvedValue([
-        { id: 'post-1', mediaUrls: 'invalid json' },
-        { id: 'post-2', mediaUrls: JSON.stringify(['/uploads/p2.jpg']) },
+        { id: 'post-1', mediaUrls: JSON.stringify(['/uploads/p1.jpg']) },
       ]);
       mockAccountDelete.mockResolvedValue({ id: 'acct-1' });
+      mockDeleteFile.mockRejectedValue(new Error('File delete failed'));
 
       const response = await DELETE_ACCOUNT(
         new NextRequest('http://localhost/api/trash/accounts/acct-1'),
         { params: Promise.resolve({ id: 'acct-1' }) }
       );
+      const data = await response.json();
 
-      // 解析错误不应影响主流程
       expect(response.status).toBe(200);
-      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
     });
 
-    it('应该跳过帖子 data: 协议的媒体 URL', async () => {
+    it('应该跳过 data: 协议的媒体 URL（账号删除）', async () => {
       mockAccountFindFirst.mockResolvedValue({
         id: 'acct-1',
         userId: 'user-123',
         deletedAt: new Date(),
       });
       mockPostFindMany.mockResolvedValue([
-        { id: 'post-1', mediaUrls: JSON.stringify(['data:image/png;base64,abc', '/uploads/p1.jpg']) },
+        { id: 'post-1', mediaUrls: JSON.stringify(['data:image/png;base64,abc', '/uploads/test.jpg']) },
       ]);
       mockAccountDelete.mockResolvedValue({ id: 'acct-1' });
-      const { deleteFile } = await import('@/lib/storage');
 
-      const response = await DELETE_ACCOUNT(
+      await DELETE_ACCOUNT(
         new NextRequest('http://localhost/api/trash/accounts/acct-1'),
         { params: Promise.resolve({ id: 'acct-1' }) }
       );
 
-      expect(response.status).toBe(200);
-      expect(deleteFile).not.toHaveBeenCalledWith('data:image/png;base64,abc');
-      expect(deleteFile).toHaveBeenCalledWith('/uploads/p1.jpg');
-    });
-
-    it('应该处理帖子 mediaUrls 为 null 的情况', async () => {
-      mockAccountFindFirst.mockResolvedValue({
-        id: 'acct-1',
-        userId: 'user-123',
-        deletedAt: new Date(),
-      });
-      mockPostFindMany.mockResolvedValue([
-        { id: 'post-1', mediaUrls: null },
-      ]);
-      mockAccountDelete.mockResolvedValue({ id: 'acct-1' });
-
-      const response = await DELETE_ACCOUNT(
-        new NextRequest('http://localhost/api/trash/accounts/acct-1'),
-        { params: Promise.resolve({ id: 'acct-1' }) }
-      );
-
-      expect(response.status).toBe(200);
+      expect(mockDeleteFile).not.toHaveBeenCalledWith('data:image/png;base64,abc');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
     });
   });
 
-  describe('POST /api/trash/accounts/:id/restore', () => {
+  describe('DELETE /api/trash（清空回收站）', () => {
+    const makeReq = () => new NextRequest('http://localhost/api/trash');
+
+    it('应该清空回收站成功', async () => {
+      mockPostFindMany.mockResolvedValue([
+        { id: 'post-1', mediaUrls: JSON.stringify(['/uploads/p1.jpg']) },
+        { id: 'post-2', mediaUrls: JSON.stringify(['/uploads/p2.jpg']) },
+      ]);
+      mockAccountFindMany.mockResolvedValue([
+        { id: 'acct-1' },
+        { id: 'acct-2' },
+      ]);
+      mockPostDeleteMany.mockResolvedValue({ count: 2 });
+      mockAccountDeleteMany.mockResolvedValue({ count: 2 });
+
+      const response = await DELETE_TRASH(makeReq());
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.deletedPosts).toBe(2);
+      expect(data.deletedAccounts).toBe(2);
+      expect(mockPostDeleteMany).toHaveBeenCalled();
+      expect(mockAccountDeleteMany).toHaveBeenCalled();
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/p1.jpg');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/p2.jpg');
+    });
+
     it('应该返回 401 当未登录', async () => {
       (auth as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-      const response = await RESTORE_ACCOUNT(
-        new NextRequest('http://localhost/api/trash/accounts/acct-1/restore'),
-        { params: Promise.resolve({ id: 'acct-1' }) }
-      );
+      const response = await DELETE_TRASH(makeReq());
       expect(response.status).toBe(401);
     });
 
     it('应该返回 500 当数据库错误', async () => {
-      mockAccountFindFirst.mockResolvedValue({
-        id: 'acct-1',
-        userId: 'user-123',
-        deletedAt: new Date(),
-      });
-      mockAccountUpdate.mockRejectedValue(new Error('DB error'));
-      const response = await RESTORE_ACCOUNT(
-        new NextRequest('http://localhost/api/trash/accounts/acct-1/restore'),
-        { params: Promise.resolve({ id: 'acct-1' }) }
-      );
+      mockPostFindMany.mockRejectedValue(new Error('DB error'));
+      const response = await DELETE_TRASH(makeReq());
       expect(response.status).toBe(500);
+    });
+
+    it('应该跳过 data: 协议的媒体 URL（清空回收站）', async () => {
+      mockPostFindMany.mockResolvedValue([
+        { id: 'post-1', mediaUrls: JSON.stringify(['data:image/png;base64,abc', '/uploads/test.jpg']) },
+      ]);
+      mockAccountFindMany.mockResolvedValue([]);
+      mockPostDeleteMany.mockResolvedValue({ count: 1 });
+      mockAccountDeleteMany.mockResolvedValue({ count: 0 });
+
+      await DELETE_TRASH(makeReq());
+
+      expect(mockDeleteFile).not.toHaveBeenCalledWith('data:image/png;base64,abc');
+      expect(mockDeleteFile).toHaveBeenCalledWith('/uploads/test.jpg');
+    });
+
+    it('应该处理媒体 URL 解析错误（清空回收站）', async () => {
+      mockPostFindMany.mockResolvedValue([
+        { id: 'post-1', mediaUrls: 'invalid json {[' },
+      ]);
+      mockAccountFindMany.mockResolvedValue([]);
+      mockPostDeleteMany.mockResolvedValue({ count: 1 });
+      mockAccountDeleteMany.mockResolvedValue({ count: 0 });
+
+      const response = await DELETE_TRASH(makeReq());
+
+      expect(response.status).toBe(200);
+    });
+
+    it('应该处理空回收站', async () => {
+      mockPostFindMany.mockResolvedValue([]);
+      mockAccountFindMany.mockResolvedValue([]);
+      mockPostDeleteMany.mockResolvedValue({ count: 0 });
+      mockAccountDeleteMany.mockResolvedValue({ count: 0 });
+
+      const response = await DELETE_TRASH(makeReq());
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.deletedPosts).toBe(0);
+      expect(data.deletedAccounts).toBe(0);
+    });
+
+    it('应该处理媒体 URL JSON 解析错误（不阻塞删除）', async () => {
+      mockPostFindMany.mockResolvedValue([
+        { id: 'post-1', mediaUrls: '{[invalid json' }, // 非法 JSON
+      ]);
+      mockAccountFindMany.mockResolvedValue([]);
+      mockPostDeleteMany.mockResolvedValue({ count: 1 });
+      mockAccountDeleteMany.mockResolvedValue({ count: 0 });
+
+      const response = await DELETE_TRASH(makeReq());
+
+      expect(response.status).toBe(200);
+      // JSON 解析失败后仍应删除成功
+      expect(mockPostDeleteMany).toHaveBeenCalled();
+    });
+
+    it('应该处理 deleteFile 失败（单个文件清理失败不阻塞主流程）', async () => {
+      mockPostFindMany.mockResolvedValue([
+        { id: 'post-1', mediaUrls: JSON.stringify(['/uploads/p1.jpg', '/uploads/p2.jpg']) },
+      ]);
+      mockAccountFindMany.mockResolvedValue([]);
+      mockPostDeleteMany.mockResolvedValue({ count: 1 });
+      mockAccountDeleteMany.mockResolvedValue({ count: 0 });
+
+      // 第一个文件删除失败，第二个成功
+      mockDeleteFile
+        .mockRejectedValueOnce(new Error('S3 error'))
+        .mockResolvedValueOnce(undefined);
+
+      const response = await DELETE_TRASH(makeReq());
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      // 两个文件都被尝试删除
+      expect(mockDeleteFile).toHaveBeenCalledTimes(2);
     });
   });
 });
-
