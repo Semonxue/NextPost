@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// 默认 APP_URL（vitest 不会启动 dev server，需给个兜底；
+// 真实环境由 dev.mjs 注入 process.env.APP_URL）
+if (!process.env.APP_URL) {
+  process.env.APP_URL = 'http://localhost:3456'
+}
+
 // Mock NextAuth
 vi.mock('@/lib/auth', () => ({
   auth: vi.fn(),

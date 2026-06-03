@@ -15,7 +15,8 @@ import { test, expect, request as pwRequest } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const BASE = 'http://localhost:3000';
+// 单一 source of truth：与 src/lib/config.ts 的 getAppUrl() 保持一致
+const BASE = process.env.APP_URL || 'http://localhost:3456';
 
 // 辅助：拼 API Key
 function makeKey(): string {

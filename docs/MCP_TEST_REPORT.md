@@ -161,7 +161,7 @@ import { validateApiKey } from './auth.js'; // ← 问题 4
      run: |
        pnpm dev &
        sleep 5
-       curl -sS -X POST http://localhost:3000/api/mcp \
+       curl -sS -X POST http://localhost:3456/api/mcp \
          -H "Content-Type: application/json" \
          -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
          | grep -q "nextpost-external" || exit 1

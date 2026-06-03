@@ -64,7 +64,7 @@ describe('LocalStorageEngine', () => {
     });
 
     it('should return null for http URL', () => {
-      expect(engine.getRelativePath('http://localhost:3000/uploads/test.jpg')).toBeNull();
+      expect(engine.getRelativePath('http://localhost:3456/uploads/test.jpg')).toBeNull();
     });
 
     it('should handle paths with special characters', () => {

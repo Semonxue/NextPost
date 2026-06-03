@@ -19,6 +19,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { TOOLS, TOOL_SCOPE } from "@/mcp/external/tools";
 import prisma from "@/lib/prisma";
+import { getMcpEndpointUrl } from "@/lib/config";
 import { ShieldAlert, Wrench, Plug, KeyRound, ScrollText } from "lucide-react";
 import { CopyButton } from "./CopyButton";
 
@@ -27,6 +28,9 @@ export const dynamic = "force-dynamic";
 // ---- 工具分类 ----
 const READ_TOOLS = TOOLS.filter((t) => TOOL_SCOPE[t.name] === "read");
 const WRITE_TOOLS = TOOLS.filter((t) => TOOL_SCOPE[t.name] === "write");
+
+// ---- MCP 端点 URL（server-side 渲染时从 APP_URL 派生） ----
+const MCP_ENDPOINT = getMcpEndpointUrl();
 
 // ---- 各客户端配置模板（key 用占位符，实际渲染时替换） ----
 const CONFIG_TEMPLATES: Array<{
@@ -38,7 +42,7 @@ const CONFIG_TEMPLATES: Array<{
     config: {
       mcpServers: {
         nextpost: {
-          url: "http://localhost:3000/api/mcp",
+          url: MCP_ENDPOINT,
           headers: {
             Authorization: "Bearer __API_KEY__",
             "Content-Type": "application/json",
@@ -52,7 +56,7 @@ const CONFIG_TEMPLATES: Array<{
     config: {
       mcpServers: {
         nextpost: {
-          url: "http://localhost:3000/api/mcp",
+          url: MCP_ENDPOINT,
           headers: { Authorization: "Bearer __API_KEY__" },
         },
       },
@@ -62,7 +66,7 @@ const CONFIG_TEMPLATES: Array<{
     client: "Cherry Studio",
     config: {
       name: "NextPost",
-      url: "http://localhost:3000/api/mcp",
+      url: MCP_ENDPOINT,
       headers: {
         Authorization: "Bearer __API_KEY__",
         "Content-Type": "application/json",
@@ -74,7 +78,7 @@ const CONFIG_TEMPLATES: Array<{
     config: {
       servers: {
         nextpost: {
-          url: "http://localhost:3000/api/mcp",
+          url: MCP_ENDPOINT,
           headers: { Authorization: "Bearer __API_KEY__" },
         },
       },
@@ -155,7 +159,7 @@ export default async function AIToolsPage() {
           <div>
             <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">MCP 端点</h3>
             <code className="block bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg font-mono text-sm">
-              POST http://localhost:3000/api/mcp
+              POST {MCP_ENDPOINT}
             </code>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               启动 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">pnpm dev</code> 后即可用。

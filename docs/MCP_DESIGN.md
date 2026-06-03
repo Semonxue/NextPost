@@ -984,10 +984,10 @@ NextPost 提供两种 MCP 端点方式，推荐使用集成端点：
 
 #### 方式一：集成端点（推荐）
 
-只需要运行 `pnpm dev`，NextPost 会自动在端口 3000 提供 MCP 端点：
+只需要运行 `pnpm dev`，NextPost 会自动在端口 3456 提供 MCP 端点：
 
 ```
-http://localhost:3000/api/mcp
+http://localhost:3456/api/mcp
 ```
 
 **配置示例**：
@@ -995,7 +995,7 @@ http://localhost:3000/api/mcp
 {
   "mcpServers": {
     "nextpost": {
-      "url": "http://localhost:3000/api/mcp",
+      "url": "http://localhost:3456/api/mcp",
       "headers": {
         "Authorization": "Bearer npk_你的APIKey"
       }
@@ -1026,8 +1026,8 @@ MCP_API_KEY=npk_xxx npx tsx src/mcp/external/server.ts
 ```json
 {
   "mediaUrls": [
-    "http://localhost:3000/uploads/2026-06-01/video.mp4",
-    "http://localhost:3000/uploads/2026-06-01/image.jpg"
+    "http://localhost:3456/uploads/2026-06-01/video.mp4",
+    "http://localhost:3456/uploads/2026-06-01/image.jpg"
   ]
 }
 ```
@@ -1035,7 +1035,7 @@ MCP_API_KEY=npk_xxx npx tsx src/mcp/external/server.ts
 **URL 拼接规则**：
 - 相对路径（如 `/uploads/xxx.mp4`）自动拼接基础 URL
 - 完整 URL（以 `http://` 或 `https://` 开头）保持不变
-- 基础 URL 默认从 `NEXT_PUBLIC_BASE_URL` 环境变量获取，未设置时默认为 `http://localhost:3000`
+- 基础 URL 从 `APP_URL` 环境变量获取（dev.mjs 启动时自动注入 `NEXT_PUBLIC_BASE_URL`），默认 `http://localhost:3456`
 
 ### 11.7 客户端缓存说明
 
@@ -1049,7 +1049,7 @@ MCP_API_KEY=npk_xxx npx tsx src/mcp/external/server.ts
 
 验证工具定义是否生效：
 ```bash
-curl -s http://localhost:3000/api/mcp -X POST -H "Content-Type: application/json" \
+curl -s http://localhost:3456/api/mcp -X POST -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
   jq '.result.tools[] | select(.name == "get_pending_posts") | .description'
 ```

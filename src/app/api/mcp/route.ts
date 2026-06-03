@@ -1,7 +1,7 @@
 /**
  * NextPost MCP HTTP 端点
- * 
- * 提供与主服务 (3000 端口) 集成的 MCP 接口
+ *
+ * 提供与主服务集成的 MCP 接口（端点 URL 由 APP_URL 派生，见 src/lib/config.ts）
  * 支持通过 Authorization header 传递 API Key 进行认证
  */
 

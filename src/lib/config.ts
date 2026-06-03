@@ -91,3 +91,42 @@ export const TRASH_PAGE_SIZE = 50;
 export const PUBLISH_TOKEN_PREFIX = "tok_";
 /** API Key 前缀 */
 export const API_KEY_PREFIX = "npk_";
+
+// ============ 应用 URL 配置（单一 source of truth）============
+/** 默认应用 URL（仅本地开发用，生产环境由部署平台注入 APP_URL） */
+const DEFAULT_APP_URL = "http://localhost:3456";
+
+/**
+ * 获取应用对外 URL（含 scheme + host + port）
+ * 单一 source of truth：所有需要拼完整 URL 的地方都从这里读
+ *
+ * 优先级：process.env.APP_URL > 默认值（仅 dev）
+ *
+ * 生产部署：必须通过部署平台设置 APP_URL（如 https://nextpost.example.com），
+ *          dev.mjs 会自动派生 NEXTAUTH_URL / NEXT_PUBLIC_BASE_URL。
+ */
+export function getAppUrl(): string {
+  return process.env.APP_URL || DEFAULT_APP_URL;
+}
+
+/**
+ * 解析 APP_URL 拿端口号
+ * - 默认 URL 默认端口是 3456
+ * - 用户配的 APP_URL 解析失败时回退到 3456
+ */
+export function getPort(): number {
+  try {
+    const port = new URL(getAppUrl()).port;
+    if (port) return parseInt(port, 10);
+    // 80/443 等默认端口 URL 里可能省略
+    const protocol = new URL(getAppUrl()).protocol;
+    return protocol === "https:" ? 443 : 80;
+  } catch {
+    return 3456;
+  }
+}
+
+/** MCP HTTP 端点完整 URL（用于 UI 展示、curl 示例、客户端配置模板） */
+export function getMcpEndpointUrl(): string {
+  return `${getAppUrl()}/api/mcp`;
+}

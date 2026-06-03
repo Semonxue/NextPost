@@ -139,7 +139,7 @@ describe('MCP Tools - get_pending_posts (executeTool)', () => {
     const data = JSON.parse(result.content[0].text)
 
     expect(data.posts).toHaveLength(1)
-    expect(data.posts[0].mediaUrls[0]).toMatch(/^http:\/\/localhost:3000\/uploads\/test\.jpg$/)
+    expect(data.posts[0].mediaUrls[0]).toMatch(new RegExp(`^${(process.env.APP_URL || 'http://localhost:3456').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/test\\.jpg$`))
   })
 
   it('https 绝对 URL 保持原样不拼接', async () => {
@@ -240,7 +240,7 @@ describe('MCP Tools - get_post_detail (executeTool)', () => {
     expect(data.post.accountDisplayName).toBe('My Twitter')
     expect(data.post.publishToken).toBe('tok_xyz')
     expect(data.post.externalPostUrl).toBe('https://x.com/1')
-    expect(data.post.mediaUrls[0]).toMatch(/^http:\/\/localhost:3000/)
+    expect(data.post.mediaUrls[0]).toMatch(new RegExp(`^${(process.env.APP_URL || 'http://localhost:3456').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/uploads/`))
   })
 
   it('未找到时返回 error 标记', async () => {
@@ -502,9 +502,9 @@ describe('MCP Tools - getBaseUrl 环境变量', () => {
     accountMock.findMany = vi.fn()
   })
 
-  it('当 NEXT_PUBLIC_BASE_URL 设置时使用它拼接', async () => {
-    const original = process.env.NEXT_PUBLIC_BASE_URL
-    process.env.NEXT_PUBLIC_BASE_URL = 'https://prod.example.com'
+  it('当 APP_URL 设置时使用它拼接（单一 source of truth）', async () => {
+    const original = process.env.APP_URL
+    process.env.APP_URL = 'https://prod.example.com'
     try {
       postMock.findMany.mockResolvedValue([
         {
@@ -519,8 +519,8 @@ describe('MCP Tools - getBaseUrl 环境变量', () => {
       const data = JSON.parse(result.content[0].text)
       expect(data.posts[0].mediaUrls[0]).toBe('https://prod.example.com/uploads/x.jpg')
     } finally {
-      if (original === undefined) delete process.env.NEXT_PUBLIC_BASE_URL
-      else process.env.NEXT_PUBLIC_BASE_URL = original
+      if (original === undefined) delete process.env.APP_URL
+      else process.env.APP_URL = original
     }
   })
 })

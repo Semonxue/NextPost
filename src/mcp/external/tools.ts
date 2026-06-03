@@ -43,6 +43,7 @@ import {
   ALLOWED_MIME_TYPES,
   EXT_TO_MIME,
   MIME_TO_EXT,
+  getAppUrl,
 } from '@/lib/config';
 
 const prisma = new PrismaClient();
@@ -62,13 +63,9 @@ update_post: 'write',
 };
 
 // 获取基础 URL（用于拼接完整的媒体文件 URL）
+// 单一 source of truth: APP_URL（dev.mjs 启动时会注入到子进程）
 function getBaseUrl(): string {
-  // 在服务端使用 process.env.NEXT_PUBLIC_BASE_URL 或默认值
-  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_BASE_URL) {
-    return process.env.NEXT_PUBLIC_BASE_URL;
-  }
-  // 开发环境默认
-  return 'http://localhost:3000';
+  return getAppUrl();
 }
 
 // 将相对路径转换为完整 URL

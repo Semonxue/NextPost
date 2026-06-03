@@ -557,7 +557,7 @@ return NextResponse.json(accounts); // 需要前端兼容处理
 ```bash
 # .env.local (NextAuth.js)
 AUTH_SECRET=your-secret-key-change-in-production
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3456
 
 # 数据库（Prisma）
 DATABASE_URL="file:./prisma/dev.db"
