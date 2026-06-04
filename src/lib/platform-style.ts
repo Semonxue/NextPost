@@ -66,5 +66,5 @@ export function getPlatformStyle(name?: string | null): PlatformStyle {
 /** 紧凑的"平台徽章" React 元素 className（用于行内标签） */
 export function getPlatformBadgeClasses(name?: string | null): string {
   const s = getPlatformStyle(name);
-  return `inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded ${s.bgClass} ${s.textClass}`;
+  return `inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${s.bgClass} ${s.textClass}`;
 }
