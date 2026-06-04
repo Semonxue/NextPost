@@ -25,4 +25,5 @@ export default defineConfig({
     url: APP_URL,
     reuseExistingServer: !process.env.CI,
   },
+  globalSetup: './tests/e2e/global-setup.ts',
 })
