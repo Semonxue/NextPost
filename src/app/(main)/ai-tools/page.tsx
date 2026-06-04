@@ -1,5 +1,5 @@
 /**
- * AI tools 页面（v0.3）
+ * AI tools 页面
  *
  * 数据来源：
  * - 工具列表：`src/mcp/external/tools.ts` 里的 `TOOLS` 常量 —— 跟 /api/mcp 接口
@@ -163,7 +163,7 @@ export default async function AIToolsPage() {
             </code>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               启动 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">pnpm dev</code> 后即可用。
-              通信走标准 JSON-RPC 2.0，认证用 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Authorization: Bearer &lt;API Key&gt;</code>。
+              通信走标准 JSON-RPC 2.0，认证用 <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">Authorization: Bearer {'<API Key>'}</code>。
             </p>
           </div>
 
@@ -297,13 +297,16 @@ export default async function AIToolsPage() {
         <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6 space-y-4 text-sm text-gray-800 dark:text-gray-200">
           <div>
             <strong className="text-orange-700 dark:text-orange-300">不提供 delete</strong>：
-            外部 MCP 没有任何删除工具。所有删除必须走 Web UI（v0.3 软删除 → 回收站 → 永久删除）。
+            外部 MCP 没有任何删除工具。所有删除必须走 Web UI（软删除 → 回收站 → 永久删除）。
           </div>
           <div>
             <strong className="text-orange-700 dark:text-orange-300">update_post 字段白名单</strong>：
-            服务端只接受 <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">scheduledTime</code> 和{" "}
+            服务端只接受以下字段，其他字段（accountId / status）<strong>静默忽略</strong>：
+            <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">content</code>、
+            <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">title</code>、
+            <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">mediaUrls</code>、
+            <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">scheduledTime</code>、
             <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">timezone</code>。
-            其它字段（content / mediaUrls / accountId / status）<strong>静默忽略</strong>，不写库。
           </div>
           <div>
             <strong className="text-orange-700 dark:text-orange-300">update_post 状态锁</strong>：
@@ -312,10 +315,34 @@ export default async function AIToolsPage() {
             publishing / published / failed 全部锁死（避免与第三方发布竞态）。
           </div>
           <div>
-            <strong className="text-orange-700 dark:text-orange-300">upload_media_from_url 限制</strong>：
-            仅允许 <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">http://</code> /{" "}
-            <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">https://</code>，文件大小 ≤ 10MB，
-            仅支持 6 种图片/视频 mime。
+            <strong className="text-orange-700 dark:text-orange-300">upload_media 限制</strong>：
+            <ul className="mt-1 ml-4 space-y-1">
+              <li>
+                <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">upload_media_from_url</code>：
+                仅允许 http/https，文件大小 ≤ 10MB
+              </li>
+              <li>
+                <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">upload_media_from_path</code>：
+                从本地文件读取，文件大小 ≤ 10MB
+              </li>
+              <li>
+                <code className="bg-white dark:bg-gray-800 px-1 rounded text-xs">upload_media_from_base64</code>：
+                base64 编码数据，原始文件 ≤ 5MB（base64 后约 6.7MB）
+              </li>
+            </ul>
+            仅支持图片/视频：jpeg, png, gif, webp, mp4, webm
+          </div>
+          <div>
+            <strong className="text-orange-700 dark:text-orange-300">content + mediaUrls 至少有一个非空</strong>：
+            create_post 和 update_post 都要求正文或媒体至少有一个非空，否则返回错误。
+          </div>
+          <div>
+            <strong className="text-orange-700 dark:text-orange-300">scheduledTime 必须是未来时间</strong>：
+            create_post 和 update_post 都会校验计划发布时间晚于当前时间。
+          </div>
+          <div>
+            <strong className="text-orange-700 dark:text-orange-300">extractedTopics 仅计算不存储</strong>：
+            系统会自动从 content 中提取 #hashtag 作为 computed 字段返回，不写入数据库。
           </div>
         </div>
       </section>
