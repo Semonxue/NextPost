@@ -6,6 +6,7 @@
 export interface ExternalAccount {
   id: string;
   platform: string;
+  platformId: string;        // v0.5.1 新增：Platform.id，调试 / 反查方便
   displayName: string;
 }
 
@@ -14,8 +15,9 @@ export interface ExternalPost {
   id: string;
   accountId: string;
   accountDisplayName: string;
+  platform: string;            // v0.5.1 新增：平台名（"Twitter" / "Xiaohongshu" / ...）
   content: string;
-  title?: string;          // v0.5 新增（小红书等平台必需）
+  title?: string;              // v0.5 新增（小红书等平台必需）
   mediaUrls: string[];
   scheduledTime: string;
   timezone: string;
@@ -107,6 +109,7 @@ export interface WriteResult {
     id: string;
     accountId: string;
     accountDisplayName: string;
+    platform: string;        // v0.5.1 新增
     content: string;
     title?: string;
     mediaUrls: string[];

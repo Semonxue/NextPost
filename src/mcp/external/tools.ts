@@ -332,6 +332,7 @@ async function listAccounts(userId: string): Promise<ExternalAccount[]> {
   return accounts.map(acc => ({
     id: acc.id,
     platform: acc.platform.name,
+    platformId: acc.platform.id,
     displayName: acc.name
   }));
 }
@@ -372,7 +373,7 @@ async function getPendingPosts(
   });
 
   return posts.map(post => {
-    const account = post.account as { name: string };
+    const account = post.account as { name: string; platform?: { name: string } | null };
     // 将 mediaUrls 中的相对路径转换为完整 URL
     const rawMediaUrls = JSON.parse(post.mediaUrls || '[]') as string[];
     const mediaUrls = rawMediaUrls.map(url => toAbsoluteUrl(url));
@@ -380,6 +381,8 @@ async function getPendingPosts(
       id: post.id,
       accountId: post.accountId,
       accountDisplayName: account.name,
+      // v0.5.1 新增：透出 platform 字段，AI 客户端无需再 list_accounts 反查
+      platform: account.platform?.name || '',
       content: post.content,
       title: post.title || '',
       mediaUrls,
@@ -427,6 +430,8 @@ async function getPostDetail(userId: string, postId: string): Promise<ExternalPo
     id: post.id,
     accountId: post.accountId,
     accountDisplayName: postData.account.name,
+    // v0.5.1 新增：透出 platform 字段
+    platform: (postData.account as { platform?: { name: string } | null })?.platform?.name || '',
     content: post.content,
     title: post.title || '',
     mediaUrls,
@@ -755,6 +760,8 @@ function formatPostForWrite(post: {
     id: post.id,
     accountId: post.accountId,
     accountDisplayName: post.account?.name || '',
+    // v0.5.1 新增：透出 platform
+    platform: (post.account as { platform?: { name: string } | null })?.platform?.name || '',
     content: post.content,
     title: post.title || '',
     mediaUrls: JSON.parse(post.mediaUrls || '[]') as string[],
