@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useFilterStore } from "@/stores/filterStore";
 import { Button } from "@/components/ui/Button";
 import { MediaThumbnail } from "@/components/MediaThumbnail";
+import { getPlatformStyle } from "@/lib/platform-style";
 
 interface Post {
   id: string;
@@ -331,20 +332,22 @@ export default function CalendarPage() {
                     accounts.map(account => (
                       <label
                         key={account.id}
-                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
+                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"
                       >
                         <input
                           type="checkbox"
                           checked={selectedAccounts.includes(account.id)}
                           onChange={() => toggleAccount(account.id)}
-                          className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600 flex-shrink-0"
                         />
-                        <span className="text-sm text-gray-700 dark:text-gray-300">
-                          {account.name}
-                        </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          @{account.handle}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm text-gray-700 dark:text-gray-300 font-medium truncate">
+                            {account.name}
+                          </span>
+                          <span className={`px-1 py-0.5 text-[10px] rounded flex-shrink-0 ${getPlatformStyle(account.platform.name).bgClass} ${getPlatformStyle(account.platform.name).textClass}`}>
+                            {getPlatformStyle(account.platform.name).label}
+                          </span>
+                        </div>
                       </label>
                     ))
                   )}
@@ -391,7 +394,7 @@ export default function CalendarPage() {
                           className="w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-gray-600"
                         />
                         <span className="text-sm text-gray-700 dark:text-gray-300">
-                          {platform.name}
+                          {getPlatformStyle(platform.name).label}
                         </span>
                       </label>
                     ))
@@ -588,6 +591,11 @@ export default function CalendarPage() {
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           @{post.account?.handle}
                         </span>
+                        {post.account?.platform && (
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${getPlatformStyle(post.account.platform.name).bgClass} ${getPlatformStyle(post.account.platform.name).textClass}`}>
+                            {getPlatformStyle(post.account.platform.name).label}
+                          </span>
+                        )}
                         <span className={`px-1.5 py-0.5 text-xs rounded-full ${statusColors[post.status] || statusColors.draft}`}>
                           {statusLabels[post.status] || "未知"}
                         </span>

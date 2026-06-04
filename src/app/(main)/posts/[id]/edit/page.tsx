@@ -9,7 +9,7 @@ import { MediaUploader } from "@/components/MediaUploader";
 import { ContentEditor } from "@/components/ContentEditor";
 import { useUIStore } from "@/stores/uiStore";
 import { PlatformConfig, DEFAULT_PLATFORM_CONFIG } from "@/lib/platform";
-import { getPlatformBadgeClasses } from "@/lib/platform-style";
+import { getPlatformBadgeClasses, getPlatformStyle } from "@/lib/platform-style";
 interface Account {
   id: string;
   name: string;
@@ -287,7 +287,7 @@ export default function EditPostPage() {
           if (!acc?.platform) return null;
           return (
             <span className={getPlatformBadgeClasses(acc.platform.name)}>
-              <span aria-hidden>{acc.platform.name}</span>
+              <span aria-hidden>{getPlatformStyle(acc.platform.name).label}</span>
             </span>
           );
         })()}
@@ -330,7 +330,7 @@ export default function EditPostPage() {
           >
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                @{account.handle} ({account.name})
+                @{account.handle} ({account.name}) - {getPlatformStyle(account.platform?.name).label}
               </option>
             ))}
           </select>

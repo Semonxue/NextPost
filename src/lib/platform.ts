@@ -2,6 +2,15 @@
  * 平台配置类型定义
  */
 
+export interface PlatformDefinition {
+  /** 平台标识键（唯一，用于数据库存储和查找） */
+  key: string;
+  /** 显示名称 */
+  label: string;
+  /** 图标路径 */
+  icon: string;
+}
+
 /**
  * 已注册平台列表（单一来源）
  *
@@ -10,47 +19,38 @@
  *
  * 注：icon 路径对应 /public/icons/<file>.svg
  */
-export const REGISTERED_PLATFORMS = [
-  { name: "Twitter", icon: "/icons/twitter.svg" },
-  { name: "Instagram", icon: "/icons/instagram.svg" },
-  { name: "LinkedIn", icon: "/icons/linkedin.svg" },
-  { name: "Facebook", icon: "/icons/facebook.svg" },
-  { name: "Xiaohongshu", icon: "/icons/xiaohongshu.svg" },
-] as const;
+export const REGISTERED_PLATFORMS: PlatformDefinition[] = [
+  { key: "twitter", label: "Twitter / X", icon: "/icons/twitter.svg" },
+  { key: "xiaohongshu", label: "小红书", icon: "/icons/xiaohongshu.svg" },
+  { key: "instagram", label: "Instagram", icon: "/icons/instagram.svg" },
+];
 
-// 默认配置常量
-export const DEFAULT_PLATFORM_CONFIG = {
-  Twitter: {
+// 默认配置常量（key 使用小写）
+export const DEFAULT_PLATFORM_CONFIG: Record<string, {
+  maxContentLength: number;
+  maxImages: number;
+  maxVideos: number;
+  allowMixedMedia: boolean;
+}> = {
+  twitter: {
     maxContentLength: 280,
     maxImages: 4,
     maxVideos: 1,
     allowMixedMedia: true,
   },
-  Instagram: {
-    maxContentLength: 2200,
-    maxImages: 10,
-    maxVideos: 1,
-    allowMixedMedia: true,
-  },
-  LinkedIn: {
-    maxContentLength: 3000,
-    maxImages: 9,
-    maxVideos: 1,
-    allowMixedMedia: true,
-  },
-  Facebook: {
-    maxContentLength: 63206,
-    maxImages: 10,
-    maxVideos: 1,
-    allowMixedMedia: true,
-  },
-  Xiaohongshu: {
+  xiaohongshu: {
     maxContentLength: 1000,
     maxImages: 18,
     maxVideos: 1,
     allowMixedMedia: false,
   },
-} as const;
+  instagram: {
+    maxContentLength: 2200,
+    maxImages: 10,
+    maxVideos: 1,
+    allowMixedMedia: true,
+  },
+};
 
 // 平台配置接口
 export interface PlatformConfig {

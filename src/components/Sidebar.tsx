@@ -111,6 +111,10 @@ export function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { data: session } = useSession();
 
+  const handleItemClick = () => {
+    if (window.innerWidth < 1024) toggleSidebar();
+  };
+
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/login" });
   };

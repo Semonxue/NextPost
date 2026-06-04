@@ -7,14 +7,14 @@ async function main() {
   // 从 REGISTERED_PLATFORMS 派生（单一来源）
   for (const platform of REGISTERED_PLATFORMS) {
     const existing = await prisma.platform.findUnique({
-      where: { name: platform.name },
+      where: { name: platform.key },
     });
 
     if (!existing) {
       await prisma.platform.create({
-        data: { name: platform.name, icon: platform.icon },
+        data: { name: platform.key, icon: platform.icon },
       });
-      console.log(`Created platform: ${platform.name}`);
+      console.log(`Created platform: ${platform.key} (${platform.label})`);
     }
   }
 
@@ -26,11 +26,9 @@ async function main() {
     maxVideos: number;
     allowMixedMedia: boolean;
   }> = [
-    { name: "Twitter", maxContentLength: 280, maxImages: 4, maxVideos: 1, allowMixedMedia: true },
-    { name: "Instagram", maxContentLength: 2200, maxImages: 10, maxVideos: 1, allowMixedMedia: true },
-    { name: "LinkedIn", maxContentLength: 3000, maxImages: 9, maxVideos: 1, allowMixedMedia: true },
-    { name: "Facebook", maxContentLength: 63206, maxImages: 10, maxVideos: 1, allowMixedMedia: true },
-    { name: "Xiaohongshu", maxContentLength: 1000, maxImages: 18, maxVideos: 1, allowMixedMedia: false },
+    { name: "twitter", maxContentLength: 280, maxImages: 4, maxVideos: 1, allowMixedMedia: true },
+    { name: "xiaohongshu", maxContentLength: 1000, maxImages: 18, maxVideos: 1, allowMixedMedia: false },
+    { name: "instagram", maxContentLength: 2200, maxImages: 10, maxVideos: 1, allowMixedMedia: true },
   ];
 
   for (const config of configs) {

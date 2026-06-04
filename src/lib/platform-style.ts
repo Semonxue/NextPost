@@ -24,35 +24,23 @@ const FALLBACK_STYLE: PlatformStyle = {
 };
 
 const STYLES: Record<string, PlatformStyle> = {
-  Twitter: {
+  twitter: {
     bgClass: 'bg-gray-900 dark:bg-gray-200',
     textClass: 'text-white dark:text-gray-900',
     icon: '𝕏',
     label: 'Twitter / X',
   },
-  Xiaohongshu: {
+  xiaohongshu: {
     bgClass: 'bg-red-500',
     textClass: 'text-white',
     icon: '📕',
     label: '小红书',
   },
-  Instagram: {
+  instagram: {
     bgClass: 'bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400',
     textClass: 'text-white',
     icon: '📷',
     label: 'Instagram',
-  },
-  LinkedIn: {
-    bgClass: 'bg-blue-700',
-    textClass: 'text-white',
-    icon: '💼',
-    label: 'LinkedIn',
-  },
-  Facebook: {
-    bgClass: 'bg-blue-600',
-    textClass: 'text-white',
-    icon: 'f',
-    label: 'Facebook',
   },
 };
 

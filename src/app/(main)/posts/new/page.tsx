@@ -9,7 +9,7 @@ import { MediaUploader } from "@/components/MediaUploader";
 import { ContentEditor } from "@/components/ContentEditor";
 import { useUIStore } from "@/stores/uiStore";
 import { PlatformConfig, DEFAULT_PLATFORM_CONFIG } from "@/lib/platform";
-import { getPlatformBadgeClasses } from "@/lib/platform-style";
+import { getPlatformBadgeClasses, getPlatformStyle } from "@/lib/platform-style";
 // 禁用静态生成
 export const dynamic = "force-dynamic";
 interface Account {
@@ -44,11 +44,11 @@ function NewPostContent() {
   const fromCalendar = searchParams.get("from") === "calendar";
   const backUrl = fromCalendar ? "/calendar" : "/posts";
   
-  // 默认平台配置
+  // 默认平台配置（key 使用小写）
   const defaultConfig: PlatformConfig = {
     platformId: "",
-    platformName: "Twitter",
-    ...DEFAULT_PLATFORM_CONFIG.Twitter,
+    platformName: "twitter",
+    ...DEFAULT_PLATFORM_CONFIG.twitter,
   };
   // 设置默认发布时间为24小时后，或使用URL参数中的日期
   useEffect(() => {
@@ -110,11 +110,11 @@ function NewPostContent() {
       } else {
         // 使用默认配置
         const account = accounts.find((a) => a.id === accountId);
-        const platformName = account?.platform?.name || "Twitter";
+        const platformName = account?.platform?.name?.toLowerCase() || "twitter";
         setPlatformConfig({
           platformId: account?.platform?.id || "",
           platformName,
-          ...DEFAULT_PLATFORM_CONFIG[platformName as keyof typeof DEFAULT_PLATFORM_CONFIG] || DEFAULT_PLATFORM_CONFIG.Twitter,
+          ...DEFAULT_PLATFORM_CONFIG[platformName] || DEFAULT_PLATFORM_CONFIG.twitter,
         });
       }
     } catch (error) {
@@ -233,7 +233,7 @@ function NewPostContent() {
         {/* 选完账号后展示平台标签（让用户确认发到哪） */}
         {platformConfig?.platformName && (
           <span className={getPlatformBadgeClasses(platformConfig.platformName)}>
-            <span aria-hidden>{platformConfig.platformName}</span>
+            <span aria-hidden>{getPlatformStyle(platformConfig.platformName).label}</span>
           </span>
         )}
       </div>
@@ -249,7 +249,7 @@ function NewPostContent() {
           >
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                @{account.handle} ({account.name})
+                @{account.handle} ({account.name}) - {getPlatformStyle(account.platform?.name).label}
               </option>
             ))}
           </select>
