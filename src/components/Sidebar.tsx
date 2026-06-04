@@ -7,6 +7,8 @@ import { LayoutDashboard, Calendar, FileText, Users, Wrench, Settings, Menu, X, 
 import { useUIStore } from "@/stores/uiStore";
 import { useState, useEffect } from "react";
 
+import { APP_VERSION } from "@/lib/version";
+
 /**
  * 可折叠的导航项组件
  */
@@ -145,6 +147,7 @@ export function Sidebar() {
       >
         <div className="p-6">
           <h1 className="text-2xl font-bold text-blue-600">NextPost</h1>
+          <p className="text-[10px] text-gray-400 mt-0.5">v{APP_VERSION}</p>
         </div>
 
         <nav className="px-4 flex-1 overflow-y-auto">
