@@ -9,6 +9,7 @@ import { MediaUploader } from "@/components/MediaUploader";
 import { ContentEditor } from "@/components/ContentEditor";
 import { useUIStore } from "@/stores/uiStore";
 import { PlatformConfig, DEFAULT_PLATFORM_CONFIG } from "@/lib/platform";
+import { getPlatformBadgeClasses } from "@/lib/platform-style";
 interface Account {
   id: string;
   name: string;
@@ -279,6 +280,17 @@ export default function EditPostPage() {
           <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">编辑帖子</h1>
+        {/* 平台标签：让用户一眼看到这个帖子发到哪个平台 */}
+        {(() => {
+          // 从账号列表反查当前 post 的平台
+          const acc = accounts.find((a) => a.id === post?.accountId);
+          if (!acc?.platform) return null;
+          return (
+            <span className={getPlatformBadgeClasses(acc.platform.name)}>
+              <span aria-hidden>{acc.platform.name}</span>
+            </span>
+          );
+        })()}
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 space-y-6">
         {/* 状态切换 */}

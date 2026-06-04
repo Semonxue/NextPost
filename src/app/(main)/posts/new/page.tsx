@@ -9,6 +9,7 @@ import { MediaUploader } from "@/components/MediaUploader";
 import { ContentEditor } from "@/components/ContentEditor";
 import { useUIStore } from "@/stores/uiStore";
 import { PlatformConfig, DEFAULT_PLATFORM_CONFIG } from "@/lib/platform";
+import { getPlatformBadgeClasses } from "@/lib/platform-style";
 // 禁用静态生成
 export const dynamic = "force-dynamic";
 interface Account {
@@ -229,6 +230,12 @@ function NewPostContent() {
           <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
         </Link>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">新建帖子</h1>
+        {/* 选完账号后展示平台标签（让用户确认发到哪） */}
+        {platformConfig?.platformName && (
+          <span className={getPlatformBadgeClasses(platformConfig.platformName)}>
+            <span aria-hidden>{platformConfig.platformName}</span>
+          </span>
+        )}
       </div>
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 space-y-6">
         <div>

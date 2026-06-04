@@ -10,6 +10,7 @@ import { MediaThumbnail } from "@/components/MediaThumbnail";
 import { Pagination } from "@/components/ui/Pagination";
 import { useUIStore } from "@/stores/uiStore";
 import { useFilterStore, SortField, SortOrder } from "@/stores/filterStore";
+import { getPlatformBadgeClasses } from "@/lib/platform-style";
 
 interface Post {
   id: string;
@@ -453,11 +454,11 @@ export default function PostsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex flex-col">
+                      <div className="flex flex-col gap-1">
                         <span className="text-sm text-gray-600 dark:text-gray-400">@{post.account?.handle || "未知"}</span>
                         {post.account?.platform && (
-                          <span className="text-xs text-gray-400 dark:text-gray-500">
-                            {post.account.platform.name}
+                          <span className={getPlatformBadgeClasses(post.account.platform.name)}>
+                            <span aria-hidden>{post.account.platform.name}</span>
                           </span>
                         )}
                       </div>
