@@ -33,8 +33,9 @@ vi.mock('next-auth/react', () => ({
 
 // Mock ui store
 const mockToggleSidebar = vi.fn()
+const mockSidebarOpen = { value: true }
 vi.mock('@/stores/uiStore', () => ({
-  useUIStore: () => ({ sidebarOpen: true, toggleSidebar: mockToggleSidebar }),
+  useUIStore: () => ({ sidebarOpen: mockSidebarOpen.value, toggleSidebar: mockToggleSidebar }),
 }))
 
 import { Sidebar } from '@/components/Sidebar'
@@ -94,6 +95,24 @@ describe('Sidebar', () => {
     const toggleBtn = screen.getAllByRole('button')[0] // 第一个 button 是移动端 toggle
     await userEvent.click(toggleBtn)
     expect(mockToggleSidebar).toHaveBeenCalledTimes(1)
+  })
+
+  it('sidebarOpen=false 时：移动端 toggle 显示 Menu 图标，sidebar 用 -translate-x-full', () => {
+    mockSidebarOpen.value = false
+    render(<Sidebar />)
+    const toggleBtn = screen.getAllByRole('button')[0]
+    expect(toggleBtn.querySelector('svg')).toHaveClass('lucide-menu')
+    const aside = document.querySelector('aside')
+    expect(aside?.className).toMatch(/-translate-x-full/)
+    mockSidebarOpen.value = true
+  })
+
+  it('点击导航项时 window.innerWidth >= 1024 不触发 toggleSidebar', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, value: 1280 })
+    render(<Sidebar />)
+    await userEvent.click(screen.getByText('帖子列表'))
+    expect(mockToggleSidebar).not.toHaveBeenCalled()
+    Object.defineProperty(window, 'innerWidth', { writable: true, value: 1280 })
   })
 
   it('点击退出按钮触发 signOut', async () => {
