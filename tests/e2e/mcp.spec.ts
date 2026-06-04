@@ -26,8 +26,11 @@ test.describe('外部 MCP Server E2E', () => {
       }
     });
 
-    testPlatform = await prisma.platform.create({
-      data: { name: `twitter_${Date.now()}` }
+    // 用 upsert 而非 create，避免 dev.db 残留带 timestamp 的 Platform 行
+    testPlatform = await prisma.platform.upsert({
+      where: { name: 'Twitter' },
+      update: {},
+      create: { name: 'Twitter', icon: '/icons/twitter.svg' }
     });
 
     testAccount = await prisma.account.create({
