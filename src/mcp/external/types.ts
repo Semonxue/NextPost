@@ -15,10 +15,12 @@ export interface ExternalPost {
   accountId: string;
   accountDisplayName: string;
   content: string;
+  title?: string;          // v0.5 新增（小红书等平台必需）
   mediaUrls: string[];
   scheduledTime: string;
   timezone: string;
   publishToken: string;
+  extractedTopics?: string[];  // v0.5 新增：从 content 提取的 #hashtag（computed）
 }
 
 // 帖子详情
@@ -78,15 +80,17 @@ export interface UploadMediaResult {
 export interface CreatePostArgs {
   accountId: string;
   content: string;
+  title?: string;          // v0.5 新增
   mediaUrls?: string[];
   scheduledTime: string; // ISO 8601
   timezone?: string;     // 默认 Asia/Shanghai
 }
 
-// 更新帖子参数（v0.3.2 扩展：支持 content 和 mediaUrls）
+// 更新帖子参数（v0.3.2 扩展：支持 content 和 mediaUrls；v0.5 新增 title）
 export interface UpdatePostArgs {
   postId: string;
   content?: string;
+  title?: string;
   mediaUrls?: string[];
   scheduledTime?: string;
   timezone?: string;
@@ -104,6 +108,7 @@ export interface WriteResult {
     accountId: string;
     accountDisplayName: string;
     content: string;
+    title?: string;
     mediaUrls: string[];
     scheduledTime: string;
     timezone: string;

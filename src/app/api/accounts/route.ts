@@ -29,15 +29,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
-    const { name, handle, description } = await request.json();
+    const { name, handle, description, platformId } = await request.json();
 
     if (!name || !handle) {
       return NextResponse.json({ error: "名称和handle不能为空" }, { status: 400 });
     }
 
-    // 获取 Twitter 平台
+    if (!platformId) {
+      return NextResponse.json({ error: "请选择平台" }, { status: 400 });
+    }
+
+    // 校验 platform 存在性
     const platform = await prisma.platform.findUnique({
-      where: { name: "Twitter" },
+      where: { id: platformId },
     });
 
     if (!platform) {
