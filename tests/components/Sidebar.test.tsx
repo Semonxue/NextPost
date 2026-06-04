@@ -57,10 +57,27 @@ describe('Sidebar', () => {
     expect(screen.getByText('仪表盘')).toBeInTheDocument()
     expect(screen.getByText('日历视图')).toBeInTheDocument()
     expect(screen.getByText('帖子列表')).toBeInTheDocument()
-    expect(screen.getByText('账号管理')).toBeInTheDocument()
     expect(screen.getByText('AI tools')).toBeInTheDocument()
     expect(screen.getByText('设置')).toBeInTheDocument()
     expect(screen.getByText('回收站')).toBeInTheDocument()
+  })
+
+  it('点击设置菜单展开子菜单，显示账号管理', async () => {
+    render(<Sidebar />)
+    // 默认子菜单是折叠的
+    expect(screen.queryByText('账号管理')).not.toBeInTheDocument()
+    // 点击设置菜单
+    await userEvent.click(screen.getByText('设置'))
+    // 子菜单应该展开
+    expect(screen.getByText('账号管理')).toBeInTheDocument()
+    expect(screen.getByText('常规设置')).toBeInTheDocument()
+  })
+
+  it('访问账号管理页面时自动展开设置菜单', () => {
+    mockPathname.mockReturnValue('/accounts')
+    render(<Sidebar />)
+    expect(screen.getByText('账号管理')).toBeInTheDocument()
+    expect(screen.getByText('常规设置')).toBeInTheDocument()
   })
 
   it('未登录时显示"登录"链接', () => {
