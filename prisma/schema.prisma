@@ -79,6 +79,7 @@ model Post {
   userId        String
   accountId     String
   content String
+  title  String?             // 可选标题（小红书等平台必需，其他平台可选）
   mediaUrls     String   @default("[]")   // JSON 数组：["url1", "url2"]
   mediaThumbnails String @default("[]")   // JSON 数组：["thumb1", "thumb2"]，与服务端缩略图一一对应
   scheduledTime DateTime?

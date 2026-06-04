@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
+import { REGISTERED_PLATFORMS } from "@/lib/platform";
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,15 +38,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 创建默认平台（Twitter）
-    await prisma.platform.upsert({
-      where: { name: "Twitter" },
-      update: {},
-      create: {
-        name: "Twitter",
-        icon: "/icons/twitter.svg",
-      },
-    });
+    // 确保所有已注册平台存在（从 REGISTERED_PLATFORMS 派生）
+    for (const platform of REGISTERED_PLATFORMS) {
+      await prisma.platform.upsert({
+        where: { name: platform.name },
+        update: { icon: platform.icon },
+        create: { name: platform.name, icon: platform.icon },
+      });
+    }
 
     return NextResponse.json({
       id: user.id,
