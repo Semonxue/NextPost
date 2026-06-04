@@ -21,6 +21,7 @@ interface Account {
 interface Post {
   id: string;
   content: string;
+  title?: string | null;
   accountId: string;
   scheduledTime: string | null;
   publishedAt: string | null;
@@ -47,6 +48,7 @@ export default function EditPostPage() {
   const [formData, setFormData] = useState({
     accountId: "",
     content: "",
+    title: "",
     scheduledTime: "",
     timezone: "Asia/Shanghai",
     status: "draft",
@@ -112,6 +114,7 @@ export default function EditPostPage() {
         setFormData({
           accountId: postData.accountId,
           content: postData.content,
+          title: postData.title || "",
           scheduledTime: postData.scheduledTime ? formatDateTimeLocal(new Date(postData.scheduledTime), postData.timezone) : "",
           timezone: postData.timezone,
           status: postData.status,
@@ -319,6 +322,22 @@ export default function EditPostPage() {
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            标题（可选，小红书等平台必需）
+          </label>
+          <input
+            type="text"
+            value={formData.title}
+            onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+            placeholder="例如：周末探店分享"
+            maxLength={20}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            小红书标题最多 20 字；其他平台可留空
+          </p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
