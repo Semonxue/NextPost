@@ -103,14 +103,24 @@ export default function CalendarPage() {
         const accountsData = await accountsRes.json();
         setAccounts(Array.isArray(accountsData) ? accountsData : accountsData.accounts || []);
         
-        // 提取所有平台
-        const allPlatforms = new Map<string, Platform>();
-        accountsData.accounts?.forEach((account: Account) => {
-          if (account.platform && !allPlatforms.has(account.platform.id)) {
-            allPlatforms.set(account.platform.id, account.platform);
+        // 提取所有平台（从 /api/platforms 拿全量，不依赖账号）
+        // 注意：accountsData 可能是数组或 {accounts: []} 包装，accountsData.accounts?.forEach 永远空
+        try {
+          const platformsRes = await fetch('/api/platforms')
+          if (platformsRes.ok) {
+            const platformsData = await platformsRes.json()
+            setPlatforms(platformsData.platforms || [])
           }
-        });
-        setPlatforms(Array.from(allPlatforms.values()));
+        } catch {
+          // fallback：从账号派生（保底）
+          const allPlatforms = new Map<string, Platform>();
+          (Array.isArray(accountsData) ? accountsData : (accountsData.accounts || [])).forEach((account: Account) => {
+            if (account.platform && !allPlatforms.has(account.platform.id)) {
+              allPlatforms.set(account.platform.id, account.platform);
+            }
+          });
+          setPlatforms(Array.from(allPlatforms.values()));
+        }
       }
     } catch (error) {
       console.error("获取数据失败:", error);

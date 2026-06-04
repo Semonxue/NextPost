@@ -73,8 +73,11 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
     testUser = await prisma.user.create({
       data: { username: `mcp_http_${ts}`, password: '$2a$10$test' },
     });
-    testPlatform = await prisma.platform.create({
-      data: { name: `mcp_http_platform_${ts}` },
+    // 用 upsert 而非 create，避免 dev.db 残留带 timestamp 的 Platform 行
+    testPlatform = await prisma.platform.upsert({
+      where: { name: 'Twitter' },
+      update: {},
+      create: { name: 'Twitter', icon: '/icons/twitter.svg' }
     });
     testAccount = await prisma.account.create({
       data: {

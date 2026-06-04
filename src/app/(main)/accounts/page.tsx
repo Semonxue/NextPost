@@ -198,7 +198,16 @@ export default function AccountsPage() {
       </div>
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingAccount ? "编辑账号" : "添加账号"}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!editingAccount && (
+          {editingAccount ? (
+            // 编辑时显示当前平台（不可改）
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">平台</label>
+              <div className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-sm">
+                {editingAccount.platform?.name || "—"}
+                <span className="ml-2 text-xs text-gray-400">（平台不可修改）</span>
+              </div>
+            </div>
+          ) : (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">平台</label>
               <select
