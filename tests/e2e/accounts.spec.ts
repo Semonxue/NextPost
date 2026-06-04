@@ -28,7 +28,7 @@ test.describe('账号管理模块', () => {
       await page.getByText('添加账号').first().click()
 
       await page.getByLabel('账号名称').fill('我的小号')
-      await page.getByLabel('Twitter Handle').fill('myaccount')
+      await page.getByLabel('账号 ID').fill('myaccount')
 
       await page.getByRole('button', { name: '创建' }).click()
 
@@ -55,7 +55,7 @@ test.describe('账号管理模块', () => {
 
       await page.getByText('添加账号').first().click()
       await page.getByLabel('账号名称').fill('待编辑账号')
-      await page.getByLabel('Twitter Handle').fill('toedit')
+      await page.getByLabel('账号 ID').fill('toedit')
       await page.getByRole('button', { name: '创建' }).click()
       await expect(page.getByText('账号已创建').first()).toBeVisible()
 
@@ -85,7 +85,7 @@ test.describe('账号管理模块', () => {
 
       await page.getByText('添加账号').first().click()
       await page.getByLabel('账号名称').fill('待删除账号')
-      await page.getByLabel('Twitter Handle').fill('todelete')
+      await page.getByLabel('账号 ID').fill('todelete')
       await page.getByRole('button', { name: '创建' }).click()
       await expect(page.getByText('账号已创建').first()).toBeVisible()
 

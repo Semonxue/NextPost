@@ -30,7 +30,7 @@ test.describe('软删除 + 回收站模块', () => {
     await page.getByText('添加账号').first().click()
     await page.waitForTimeout(300)
     await page.getByLabel('账号名称').fill(name)
-    await page.getByLabel('Twitter Handle').fill(handle)
+    await page.getByLabel('账号 ID').fill(handle)
     await page.getByRole('button', { name: '创建' }).click()
     await expect(page.getByText('账号已创建').first()).toBeVisible({ timeout: 10000 })
   }

@@ -137,4 +137,33 @@ describe('POST /api/auth/register', () => {
       expect(response.status).toBe(500)
       expect(data.error).toBe('服务器错误')
     })
+
+    // v0.5: 新用户注册时循环注册所有 REGISTERED_PLATFORMS
+    it('should upsert all REGISTERED_PLATFORMS (not just Twitter) on register', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null)
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'user-new',
+        username: 'newuser',
+        email: null,
+      })
+      mockPrisma.platform.upsert.mockResolvedValue({ id: 'p-x' })
+
+      const request = new NextRequest('http://localhost/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'newuser', password: 'Test123456' }),
+      })
+
+      const response = await POST(request)
+      expect(response.status).toBe(200)
+
+      // 验证 upsert 被调用多次（5 个平台：Twitter/Instagram/LinkedIn/Facebook/Xiaohongshu）
+      expect(mockPrisma.platform.upsert).toHaveBeenCalledTimes(5)
+      // 验证每个平台都参与了 upsert
+      const calledNames = mockPrisma.platform.upsert.mock.calls.map(
+        (call) => (call[0] as { where: { name: string } }).where.name
+      )
+      expect(calledNames).toEqual(
+        expect.arrayContaining(['Twitter', 'Instagram', 'LinkedIn', 'Facebook', 'Xiaohongshu'])
+      )
+    })
   })

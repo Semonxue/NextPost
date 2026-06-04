@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateContentLength,
+  countCharsFor,
   getContentStatus,
   getRemainingChars,
   formatFileSize,
@@ -241,12 +242,132 @@ describe("platform utilities", () => {
       expect(DEFAULT_PLATFORM_CONFIG.Facebook).toBeDefined();
     });
 
-    it("should have Instagram with higher limits", () => {
+    it("should have Instagram with higher limits than Twitter", () => {
       const twitter = DEFAULT_PLATFORM_CONFIG.Twitter;
       const instagram = DEFAULT_PLATFORM_CONFIG.Instagram;
-      
       expect(instagram.maxContentLength).toBeGreaterThan(twitter.maxContentLength);
       expect(instagram.maxImages).toBeGreaterThan(twitter.maxImages);
     });
+  });
+});
+
+// v0.5: 按平台分派的字符计数
+describe("countCharsFor (v0.5 per-platform char count)", () => {
+  it("Twitter 走 23字符URL 规则", () => {
+    expect(countCharsFor("Twitter", "https://example.com/very/long/url")).toBe(23);
+    expect(countCharsFor("Twitter", "hello world")).toBe(11);
+  });
+
+  it("Xiaohongshu 走真实字符数（UTF-16 code units）", () => {
+    expect(countCharsFor("Xiaohongshu", "hello world")).toBe(11);
+    expect(countCharsFor("Xiaohongshu", "今天去了 #三里屯")).toBe(9); // 9 个字符
+  });
+
+  it("Instagram/LinkedIn/Facebook 走真实字符数", () => {
+    const content = "https://example.com/very/long/url";
+    expect(countCharsFor("Instagram", content)).toBe(content.length);
+    expect(countCharsFor("LinkedIn", content)).toBe(content.length);
+    expect(countCharsFor("Facebook", content)).toBe(content.length);
+  });
+
+  it("Xiaohongshu 1000 字不报错（之前是按 Twitter 280 规则会报超）", () => {
+    const content = "中".repeat(1000);
+    expect(countCharsFor("Xiaohongshu", content)).toBe(1000);
+    // Twitter 会用 URL 规则，但这里没 URL 仍算 1000（不是 23 字符规则的范围）
+    expect(countCharsFor("Twitter", content)).toBe(1000);
+  });
+
+  it("未知平台 fallback 到真实字符数", () => {
+    expect(countCharsFor("Unknown", "abc")).toBe(3);
+  });
+});
+
+describe("getContentStatus / getRemainingChars (v0.5 platform-aware)", () => {
+  it("getContentStatus 接受 platformName 参数", () => {
+    const longContent = "中".repeat(500);
+    // 小红书限 1000 字 → 500 字 = normal
+    expect(getContentStatus(longContent, 1000, "Xiaohongshu")).toBe("normal");
+    // Twitter 限 280 字 → 500 字 = error
+    expect(getContentStatus(longContent, 280, "Twitter")).toBe("error");
+  });
+
+  it("getRemainingChars 接受 platformName 参数", () => {
+    expect(getRemainingChars("hello", 100, "Twitter")).toBe(95);
+    expect(getRemainingChars("hello", 100, "Xiaohongshu")).toBe(95);
+  });
+
+  it("platformName 可选，默认 Twitter 行为", () => {
+    const content = "https://x.com";
+    // 不传 → 走 23 字符 URL 规则
+    expect(getContentStatus(content, 30)).toBe("normal");
+  });
+});
+
+// Xiaohongshu 配置（v0.5 顶层 describe，避免嵌套过深）
+describe("DEFAULT_PLATFORM_CONFIG.Xiaohongshu (v0.5)", () => {
+  describe("Xiaohongshu 配置 (v0.5)", () => {
+    it("Xiaohongshu 限 1000 字", () => {
+      expect(DEFAULT_PLATFORM_CONFIG.Xiaohongshu.maxContentLength).toBe(1000);
+    });
+
+    it("Xiaohongshu 限 18 图 1 视频", () => {
+      expect(DEFAULT_PLATFORM_CONFIG.Xiaohongshu.maxImages).toBe(18);
+      expect(DEFAULT_PLATFORM_CONFIG.Xiaohongshu.maxVideos).toBe(1);
+    });
+
+    it("Xiaohongshu 不允许图文混排", () => {
+      expect(DEFAULT_PLATFORM_CONFIG.Xiaohongshu.allowMixedMedia).toBe(false);
+    });
+  });
+});
+
+// v0.5: 按平台分派的字符计数
+describe("countCharsFor (v0.5 per-platform char count)", () => {
+  it("Twitter 走 23字符URL 规则", () => {
+    expect(countCharsFor("Twitter", "https://example.com/very/long/url")).toBe(23);
+    expect(countCharsFor("Twitter", "hello world")).toBe(11);
+  });
+
+  it("Xiaohongshu 走真实字符数（UTF-16 code units）", () => {
+    expect(countCharsFor("Xiaohongshu", "hello world")).toBe(11);
+    expect(countCharsFor("Xiaohongshu", "今天去了 #三里屯")).toBe(9);
+  });
+
+  it("Instagram/LinkedIn/Facebook 走真实字符数", () => {
+    const content = "https://example.com/very/long/url";
+    expect(countCharsFor("Instagram", content)).toBe(content.length);
+    expect(countCharsFor("LinkedIn", content)).toBe(content.length);
+    expect(countCharsFor("Facebook", content)).toBe(content.length);
+  });
+
+  it("Xiaohongshu 1000 字不报错（之前按 Twitter 280 规则会报超）", () => {
+    const content = "中".repeat(1000);
+    expect(countCharsFor("Xiaohongshu", content)).toBe(1000);
+    expect(countCharsFor("Twitter", content)).toBe(1000);
+  });
+
+  it("未知平台 fallback 到真实字符数", () => {
+    expect(countCharsFor("Unknown", "abc")).toBe(3);
+  });
+});
+
+describe("getContentStatus / getRemainingChars (v0.5 platform-aware)", () => {
+  it("getContentStatus 接受 platformName 参数", () => {
+    const longContent = "中".repeat(500);
+    // 小红书限 1000 字 → 500 字 = normal
+    expect(getContentStatus(longContent, 1000, "Xiaohongshu")).toBe("normal");
+    // Twitter 限 280 字 → 500 字 = error
+    expect(getContentStatus(longContent, 280, "Twitter")).toBe("error");
+  });
+
+  it("getRemainingChars 接受 platformName 参数", () => {
+    expect(getRemainingChars("hello", 100, "Twitter")).toBe(95);
+    expect(getRemainingChars("hello", 100, "Xiaohongshu")).toBe(95);
+  });
+
+  it("platformName 可选，默认 Twitter 行为", () => {
+    const content = "https://x.com";
+    // 不传 → 走 23 字符 URL 规则
+    expect(getContentStatus(content, 30)).toBe("normal");
   });
 });
