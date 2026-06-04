@@ -130,12 +130,39 @@ pnpm test:coverage # 覆盖率报告
 nextpost/
 ├── app/           # 页面和 API
 ├── components/    # 组件
-├── lib/           # 工具库
-├── stores/        # 状态管理
+├── lib/           # 工具库（含统一 config.ts 集中常量）
+├── mcp/           # 外部 MCP 工具实现
+├── stores/        # Zustand 状态管理
+├── scripts/       # 启动脚本（dev.mjs：env 解析 + 启动 next dev）
 ├── prisma/        # 数据库配置
-├── tests/         # 测试
+├── tests/         # 测试（vitest + playwright）
 └── docs/          # 文档
 ```
+
+## 🛠 命令
+
+```bash
+pnpm dev           # 开发服务器（脚本解析 APP_URL 后启动 next dev）
+pnpm build         # 构建生产版本
+pnpm start         # 启动生产服务器
+pnpm test          # vitest 单元测试
+pnpm test:watch    # vitest watch 模式
+pnpm test:coverage # vitest 覆盖率报告
+pnpm test:e2e      # Playwright e2e 测试
+pnpm test:e2e:ui   # Playwright UI 模式
+pnpm test:e2e:debug # Playwright 调试模式
+pnpm mcp:external  # 启动独立外部 MCP Server
+```
+
+## 🧪 测试
+
+| 层级 | 命令 | 数量 | 说明 |
+|---|---|---|---|
+| 单元 | `pnpm test` | 671 tests | vitest 覆盖 stores / middleware / components / page / API |
+| 覆盖率 | `pnpm test:coverage` | — | 40 个被覆盖源文件全部 ≥ 80% |
+| E2E | `pnpm test:e2e` | 96 passed, 0 skipped | Playwright 真实浏览器 |
+
+E2E 通过 `tests/e2e/global-setup.ts` 自动 seed `testuser/password123` 账号 + 默认 Twitter 平台 + Twitter 账号，保证 4 个曾因账号缺失被 skip 的测试可执行。
 
 ## 📝 开发文档
 
@@ -144,7 +171,7 @@ nextpost/
 - [项目计划](./docs/PROJECT_PLAN.md)
 - [测试计划](./docs/TEST_PLAN.md)
 - [UI 设计](./docs/UI_DESIGN.md)
-- [平台配置](./docs/PLATFORM_CONFIG.md)
+- [MCP 设计](./docs/MCP_DESIGN.md)
 
 ## 📄 许可证
 
@@ -152,4 +179,4 @@ MIT License
 
 ---
 
-*Last updated: 2026-06-03*
+*Last updated: 2026-06-04 (v0.4.8)*

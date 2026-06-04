@@ -8,7 +8,10 @@
 | **v0.2** | 2026-06-01 | **MCP 集成测试用例**：API Key、发布回传、MCP 工具、软删除 |
 | **v0.3** | 2026-06-01 | **软删除 + 回收站测试用例**：软删除/恢复/永久删除/回收站页面/stats/settings/平台配置/认证补充 |
 | **v0.4** | **2026-06-02** | **外部 MCP 写能力测试用例**：`upload_media_from_url` / `create_post` / `update_post` / Scope 权限强制 / 字段白名单 / 状态锁 |
-| **v0.5** | **2026-06-03** | **覆盖率提升补充测试用例**：`MediaPreview` 组件、`MediaUploader` 组件、`Pagination` 组件、`/api/posts/[id]` PATCH 分支、`/api/accounts/[id]` PATCH/DELETE 401、`/api/accounts/[id]/config` 三层默认值回退、`/api/media/[path]` GET MIME 类型分支、`thumbnail.ts` 递归质量压缩。详见 [docs/TEST_COVERAGE_TODO.md](./TEST_COVERAGE_TODO.md) |
+| **v0.4.5** | **2026-06-03** | **覆盖率提升补充测试用例**：`MediaPreview` 组件、`MediaUploader` 组件、`Pagination` 组件、`/api/posts/[id]` PATCH 分支、`/api/accounts/[id]` PATCH/DELETE 401、`/api/accounts/[id]/config` 三层默认值回退、`/api/media/[path]` GET MIME 类型分支、`thumbnail.ts` 递归质量压缩。详见 [docs/TEST_COVERAGE_TODO.md](./TEST_COVERAGE_TODO.md) |
+| **v0.4.6** | **2026-06-03** | **配置重构单测**：`src/lib/config.ts` 的常量和 helper 单测化（thumbnail / media upload / cookie 名等） |
+| **v0.4.7** | **2026-06-04** | **TS 错误修复**：`tests/api/regenerate-thumbnails.test.ts` 15 处 `await POST()` 缺 Request 参数 → 全部补 `new Request(...)` |
+| **v0.4.8** | **2026-06-04** | **端口单一源 + e2e 修复 + 核心覆盖**：<br>• **e2e 4 skipped 修复**：新增 `tests/e2e/global-setup.ts` 幂等 seed `testuser` + Twitter 平台 + Twitter 账号；`playwright.config.ts` 接入 `globalSetup`；`posts-platform-config.spec.ts` 4 个 test 从 skip → 真跑（**e2e: 92+4 skipped → 96 passed, 0 skipped**）<br>• **核心覆盖补充**（14 个新测试文件）：stores（authStore / uiStore）、middleware、4 个 components（Sidebar / ContentEditor / 2 个 ai-tools 客户端组件）、5 个 ui 组件（Button / Input / Modal / Pagination / Toast）、2 个 page.tsx（login / register）<br>• **APP_URL helper 单测**：`tests/lib/config.test.ts` 12 个 case 覆盖 `getAppUrl()` / `getPort()` / `getMcpEndpointUrl()` 三种环境、URL 解析失败回退、默认端口（80/443）等分支<br>• **vitest 状态**：577 → **671 tests**（+94），`lib/` 目录 100% statements / 100% functions / 100% lines<br>• **覆盖率**：33 → **40 个被覆盖源文件**，全部 ≥ 80% |
 
 
 ---
@@ -2264,4 +2267,4 @@ VALUES ('post-test-001', 'user-test-001', 'acct-test-001', '测试内容', '2026
 ---
 
 *文档生成时间：2026-05-31*
-*最后更新：2026-06-03（v0.5 覆盖率补充测试用例）*
+*最后更新：2026-06-04（v0.4.8 端口单一源 + e2e 4 skipped 修复 + 核心覆盖补充；vitest 671 通过 / e2e 96 通过 0 skipped）*

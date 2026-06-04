@@ -11,6 +11,7 @@
 | **v0.4** | **2026-06-02** | **MCP 写能力 MVP**：新增 `upload_media_from_url` / `create_post` / `update_post` 三个写工具（v0.4 初版 update_post 仅支持 scheduledTime / timezone）；引入 Scope 权限系统（`read` / `write` / `read_write` 三档）；写工具受字段白名单 + 状态锁双重保护 |
 | **v0.4.1** | **2026-06-02** | **本地媒体上传**：新增 `upload_media_from_path`（本地文件路径直接读取）和 `upload_media_from_base64`（base64 编码数据，上限 5MB）两个写工具 |
 | **v0.4.2** | **2026-06-02** | **扩展 update_post**：支持通过外部 MCP 修改 content 和 mediaUrls，方便 AI 辅助编辑内容 |
+| **v0.4.8** | **2026-06-04** | **端口单一源（APP_URL）**：所有 URL 概念（基础 URL / MCP 端点 / 媒体 URL 拼接）从 `APP_URL` env 派生（`src/lib/config.ts` 中 `getAppUrl()` / `getMcpEndpointUrl()` helper）；`dev.mjs` 启动时自动注入；默认端口 3000 → 3456。**`NEXT_PUBLIC_BASE_URL` 不再是用户可配覆盖项**——它是 `dev.mjs` 派生的 env。 |
 
 ## 概述
 
@@ -1089,4 +1090,4 @@ curl -s http://localhost:3456/api/mcp -X POST -H "Content-Type: application/json
 ---
 
 *文档生成时间：2026-06-01*
-*最后更新：2026-06-01 - v0.2.3 mediaUrls 返回完整 URL，集成端点替代独立服务*
+*最后更新：2026-06-04 - v0.4.8 端口单一源（APP_URL 派生所有 URL）*
