@@ -2,6 +2,22 @@
  * 平台配置类型定义
  */
 
+/**
+ * 已注册平台列表（单一来源）
+ *
+ * 用途：seed.ts、register/route.ts、/api/platforms 都从这里派生。
+ * 未来加新平台只改这一处。
+ *
+ * 注：icon 路径对应 /public/icons/<file>.svg
+ */
+export const REGISTERED_PLATFORMS = [
+  { name: "Twitter", icon: "/icons/twitter.svg" },
+  { name: "Instagram", icon: "/icons/instagram.svg" },
+  { name: "LinkedIn", icon: "/icons/linkedin.svg" },
+  { name: "Facebook", icon: "/icons/facebook.svg" },
+  { name: "Xiaohongshu", icon: "/icons/xiaohongshu.svg" },
+] as const;
+
 // 默认配置常量
 export const DEFAULT_PLATFORM_CONFIG = {
   Twitter: {
@@ -27,6 +43,12 @@ export const DEFAULT_PLATFORM_CONFIG = {
     maxImages: 10,
     maxVideos: 1,
     allowMixedMedia: true,
+  },
+  Xiaohongshu: {
+    maxContentLength: 1000,
+    maxImages: 18,
+    maxVideos: 1,
+    allowMixedMedia: false,
   },
 } as const;
 
@@ -56,10 +78,28 @@ export interface MediaItem {
 const VIDEO_EXTENSIONS = ["mp4", "webm", "ogg", "mov", "m4v", "avi", "mkv"];
 
 /**
+ * 计算文字长度（按平台算法分派，v0.5 新增）
+ *
+ * - Twitter：URL 固定 23 字符
+ * - 其他平台（Xiaohongshu/Instagram/LinkedIn/Facebook）：UTF-16 code units
+ *
+ * @param platformName 平台名（如 "Twitter" / "Xiaohongshu"），默认 Twitter
+ * @param content 帖子正文
+ */
+export function countCharsFor(platformName: string, content: string): number {
+  if (platformName === "Twitter") {
+    return calculateContentLength(content);
+  }
+  return [...content].length;
+}
+
+/**
  * 计算文字长度（用于 Twitter 等平台的字符计数）
  * Twitter 使用特殊的计数方式：
  * - 普通字符：1
  * - URL：23 字符（无论实际长度）
+ *
+ * @deprecated 建议用 countCharsFor(platformName, content) 按平台分派
  */
 export function calculateContentLength(content: string): number {
   // 检测 URL 模式
@@ -87,9 +127,10 @@ export function calculateContentLength(content: string): number {
  */
 export function getContentStatus(
   content: string,
-  maxLength: number
+  maxLength: number,
+  platformName: string = "Twitter"
 ): "normal" | "warning" | "error" {
-  const length = calculateContentLength(content);
+  const length = countCharsFor(platformName, content);
   if (length > maxLength) return "error";
   if (length > maxLength * 0.9) return "warning";
   return "normal";
@@ -98,8 +139,12 @@ export function getContentStatus(
 /**
  * 获取剩余字符数
  */
-export function getRemainingChars(content: string, maxLength: number): number {
-  return maxLength - calculateContentLength(content);
+export function getRemainingChars(
+  content: string,
+  maxLength: number,
+  platformName: string = "Twitter"
+): number {
+  return maxLength - countCharsFor(platformName, content);
 }
 
 /**

@@ -25,7 +25,7 @@ test.describe('内容创作模块', () => {
     await page.getByText('添加账号').first().click()
     await page.waitForTimeout(500)
     await page.getByLabel('账号名称').fill('测试账号')
-    await page.getByLabel('Twitter Handle').fill('testacc')
+    await page.getByLabel('账号 ID').fill('testacc')
     await page.getByRole('button', { name: '创建' }).click()
     await expect(page.getByText('账号已创建').first()).toBeVisible()
   })

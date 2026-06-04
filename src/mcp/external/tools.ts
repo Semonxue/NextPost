@@ -48,6 +48,22 @@ import {
 
 const prisma = new PrismaClient();
 
+/**
+ * 从帖子正文提取 #hashtag（v0.5 新增）
+ * 规则：以 # 开头，匹配中文/英文/数字/下划线
+ * 不入库，调用时计算
+ */
+export function extractHashtags(content: string): string[] {
+  if (!content) return [];
+  const re = /#([\p{L}\p{N}_]+)/gu;
+  const tags: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    tags.push(m[1]);
+  }
+  return tags;
+}
+
 // 单个工具需要的最低 scope
 export const TOOL_SCOPE: Record<string, ToolRequiredScope> = {
   list_accounts: 'read',
@@ -119,7 +135,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'report_publish_result',
-    description: '报告发布结果。必须提供正确的 publishToken 才能更新帖子状态。成功时 status="success"，失败时 status="failed" 并提供错误码。【关键】成功时必须回传 externalPostUrl（可点击的完整链接，格式如 https://x.com/user/status/123），不能只传 externalPostId，否则 NextPost 界面无法显示跳转按钮。',
+    description: '报告发布结果。必须提供正确的 publishToken 才能更新帖子状态。成功时 status="success"，失败时 status="failed" 并提供错误码。【关键】成功时必须回传 externalPostUrl（可点击的完整链接，平台 URL 格式请参考 docs/MCP_CLIENT_GUIDE.md），不能只传 externalPostId，否则 NextPost 界面无法显示跳转按钮。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -142,11 +158,11 @@ export const TOOLS: Tool[] = [
         },
         externalPostId: {
           type: 'string',
-          description: '外部平台帖子 ID（如 Twitter tweet ID），可选'
+          description: '外部平台帖子 ID（如 Twitter tweet ID、小红书 note id），可选'
         },
         externalPostUrl: {
           type: 'string',
-          description: '【必须】外部帖子完整 URL，用于在浏览器打开，如 https://x.com/user/status/123。必须提供此字段才能在 NextPost 界面显示跳转按钮'
+          description: '【必须】外部帖子完整 URL，用于在浏览器打开。各平台 URL 模板见 docs/MCP_CLIENT_GUIDE.md。必须提供此字段才能在 NextPost 界面显示跳转按钮'
         },
         errorCode: {
           type: 'string',
@@ -229,7 +245,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'create_post',
-    description: '创建一个新的 scheduled 帖子。需要 write 或 read_write 权限。content 与 mediaUrls 至少要有一个非空；scheduledTime 必须是未来时间的 ISO 8601 字符串（如 2026-06-02T10:00:00+08:00）。返回的 publishToken 是后续发布结果回传的关键。',
+    description: '创建一个新的 scheduled 帖子。需要 write 或 read_write 权限。content 与 mediaUrls 至少要有一个非空；scheduledTime 必须是未来时间的 ISO 8601 字符串（如 2026-06-02T10:00:00+08:00）。可选 title 字段（小红书等平台必需）。返回的 publishToken 是后续发布结果回传的关键。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -240,6 +256,10 @@ export const TOOLS: Tool[] = [
         content: {
           type: 'string',
           description: '帖子正文'
+        },
+        title: {
+          type: 'string',
+          description: '帖子标题（可选；小红书等平台必需，最多 20 字）'
         },
         mediaUrls: {
           type: 'array',
@@ -260,7 +280,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'update_post',
-    description: '更新一个 draft 或 scheduled 帖子的内容、媒体或发布时间。需要 write 或 read_write 权限。可修改 content、mediaUrls、scheduledTime、timezone；accountId 和 status 不可改。已进入 publishing/published/failed 状态的帖子不可修改。',
+    description: '更新一个 draft 或 scheduled 帖子的内容、媒体或发布时间。需要 write 或 read_write 权限。可修改 content、title、mediaUrls、scheduledTime、timezone；accountId 和 status 不可改。已进入 publishing/published/failed 状态的帖子不可修改。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -271,6 +291,10 @@ export const TOOLS: Tool[] = [
         content: {
           type: 'string',
           description: '帖子正文'
+        },
+        title: {
+          type: 'string',
+          description: '帖子标题（可选）'
         },
         mediaUrls: {
           type: 'array',
@@ -357,10 +381,13 @@ async function getPendingPosts(
       accountId: post.accountId,
       accountDisplayName: account.name,
       content: post.content,
+      title: post.title || '',
       mediaUrls,
       scheduledTime: post.scheduledTime?.toISOString() || '',
       timezone: post.timezone,
-      publishToken: (post as { publishToken?: string }).publishToken || ''
+      publishToken: (post as { publishToken?: string }).publishToken || '',
+      // v0.5 新增：computed 字段（不入库），从 content 提取 #hashtag
+      extractedTopics: extractHashtags(post.content),
     };
   });
 }
@@ -388,7 +415,7 @@ async function getPostDetail(userId: string, postId: string): Promise<ExternalPo
     return null;
   }
 
-  const postData = post as { 
+  const postData = post as {
     publishToken?: string;
     externalPostUrl?: string;
     account: { name: string };
@@ -401,12 +428,15 @@ async function getPostDetail(userId: string, postId: string): Promise<ExternalPo
     accountId: post.accountId,
     accountDisplayName: postData.account.name,
     content: post.content,
+    title: post.title || '',
     mediaUrls,
     scheduledTime: post.scheduledTime?.toISOString() || '',
     timezone: post.timezone,
     publishToken: postData.publishToken || '',
     externalPostUrl: postData.externalPostUrl || '',
-    status: post.status
+    status: post.status,
+    // v0.5 新增：computed 字段，从 content 提取 #hashtag
+    extractedTopics: extractHashtags(post.content),
   };
 };
 
@@ -713,6 +743,7 @@ function formatPostForWrite(post: {
   id: string;
   accountId: string;
   content: string;
+  title?: string | null;
   mediaUrls: string;
   scheduledTime: Date | null;
   timezone: string;
@@ -725,6 +756,7 @@ function formatPostForWrite(post: {
     accountId: post.accountId,
     accountDisplayName: post.account?.name || '',
     content: post.content,
+    title: post.title || '',
     mediaUrls: JSON.parse(post.mediaUrls || '[]') as string[],
     scheduledTime: post.scheduledTime?.toISOString() || '',
     timezone: post.timezone,
@@ -742,7 +774,8 @@ async function createPost(
   content: string,
   mediaUrls: string[],
   scheduledTime: string,
-  timezone?: string
+  timezone?: string,
+  title?: string
 ): Promise<WriteResult> {
   // 校验账号归属
   const account = await prisma.account.findFirst({
@@ -776,6 +809,7 @@ async function createPost(
       userId,
       accountId,
       content: content || '',
+      title: title || null,
       mediaUrls: JSON.stringify(mediaUrls || []),
       scheduledTime: scheduledDate,
       timezone: timezone || 'Asia/Shanghai',
@@ -789,7 +823,7 @@ async function createPost(
 }
 
 /**
- * 限制性更新帖子（v0.3.2：支持 content 和 mediaUrls）
+ * 限制性更新帖子（v0.3.2：支持 content 和 mediaUrls；v0.5：支持 title）
  */
 async function updatePost(
   userId: string,
@@ -797,7 +831,8 @@ async function updatePost(
   content?: string,
   mediaUrls?: string[],
   scheduledTime?: string,
-  timezone?: string
+  timezone?: string,
+  title?: string
 ): Promise<WriteResult> {
   // 找帖子（必须在 draft/scheduled 状态，未软删）
   const existing = await prisma.post.findFirst({
@@ -816,12 +851,16 @@ async function updatePost(
     };
   }
 
-  // 字段白名单：content / mediaUrls / scheduledTime / timezone 可改
+  // 字段白名单：content / title / mediaUrls / scheduledTime / timezone 可改
   // accountId / status 不在白名单中，传了也静默忽略
   const data: Record<string, unknown> = {};
 
   if (content !== undefined) {
     data.content = content;
+  }
+
+  if (title !== undefined) {
+    data.title = title;
   }
 
   if (mediaUrls !== undefined) {
@@ -1047,9 +1086,10 @@ export async function executeTool(
       }
 
       case 'create_post': {
-        const { accountId, content, mediaUrls, scheduledTime, timezone } = args as {
+        const { accountId, content, mediaUrls, scheduledTime, timezone, title } = args as {
           accountId: string;
           content?: string;
+          title?: string;
           mediaUrls?: string[];
           scheduledTime: string;
           timezone?: string;
@@ -1060,7 +1100,8 @@ export async function executeTool(
           content || '',
           mediaUrls || [],
           scheduledTime,
-          timezone
+          timezone,
+          title
         );
         return {
           content: [{
@@ -1071,14 +1112,15 @@ export async function executeTool(
       }
 
       case 'update_post': {
-        const { postId, content, mediaUrls, scheduledTime, timezone } = args as {
+        const { postId, content, mediaUrls, scheduledTime, timezone, title } = args as {
           postId: string;
           content?: string;
+          title?: string;
           mediaUrls?: string[];
           scheduledTime?: string;
           timezone?: string;
         };
-        const result = await updatePost(ctx.userId, postId, content, mediaUrls, scheduledTime, timezone);
+        const result = await updatePost(ctx.userId, postId, content, mediaUrls, scheduledTime, timezone, title);
         return {
           content: [{
             type: 'text',

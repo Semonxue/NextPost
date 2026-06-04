@@ -235,7 +235,7 @@ export default function TrashPage() {
                         {post.status}
                       </span>
                       <span>
-                        @{post.account.handle} · {post.account.platform?.name || "Twitter"}
+                        @{post.account.handle} · {post.account.platform?.name || "—"}
                       </span>
                       <span>
                         删除于 {new Date(post.deletedAt).toLocaleString("zh-CN")}
@@ -285,8 +285,8 @@ export default function TrashPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 text-sm text-gray-500 dark:text-gray-400">
-                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-xs">
-                      {account.platform?.name || "Twitter"}
+                      <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-xs">
+                        {account.platform?.name || "—"}
                     </span>
                     <span>
                       删除于 {new Date(account.deletedAt).toLocaleString("zh-CN")}

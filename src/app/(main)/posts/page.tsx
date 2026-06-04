@@ -110,9 +110,10 @@ export default function PostsPage() {
       const queryString = params.toString();
       const postsUrl = `/api/posts?${queryString}`;
       
-      const [postsRes, accountsRes] = await Promise.all([
+      const [postsRes, accountsRes, platformsRes] = await Promise.all([
         fetch(postsUrl),
-        fetch("/api/accounts")
+        fetch("/api/accounts"),
+        fetch("/api/platforms")
       ]);
       
       if (postsRes.ok) {
@@ -134,6 +135,13 @@ export default function PostsPage() {
           }
         }
         setPlatforms(Array.from(allPlatforms.values()));
+      }
+
+      // 平台列表（v0.5 新增：从 /api/platforms 拉全量，覆盖仅从账号派生的旧逻辑）
+      if (platformsRes.ok) {
+        const platformsData = await platformsRes.json();
+        const platformsList: Platform[] = platformsData.platforms || [];
+        setPlatforms(platformsList);
       }
     } catch (error) {
       console.error("获取数据失败:", error);

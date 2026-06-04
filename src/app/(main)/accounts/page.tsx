@@ -14,14 +14,20 @@ interface Account {
   description?: string;
   platform: { name: string; icon?: string };
 }
+interface Platform {
+  id: string;
+  name: string;
+  icon?: string;
+}
 export default function AccountsPage() {
   const { data: session, status } = useSession();
   const { addToast } = useUIStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [formData, setFormData] = useState({ name: "", handle: "", description: "" });
+  const [formData, setFormData] = useState({ name: "", handle: "", description: "", platformId: "" });
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -29,6 +35,7 @@ export default function AccountsPage() {
     }
     if (status === "authenticated") {
       fetchAccounts();
+      fetchPlatforms();
     }
   }, [status]);
   const fetchAccounts = async () => {
@@ -44,30 +51,51 @@ export default function AccountsPage() {
       setLoading(false);
     }
   };
+  const fetchPlatforms = async () => {
+    try {
+      const res = await fetch("/api/platforms");
+      if (res.ok) {
+        const data = await res.json();
+        setPlatforms(data.platforms || []);
+        // 默认选第一个平台（创建账号时）
+        setFormData((prev) => prev.platformId ? prev : { ...prev, platformId: data.platforms?.[0]?.id || "" });
+      }
+    } catch (error) {
+      console.error("获取平台列表失败:", error);
+    }
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // 客户端验证
     if (!formData.name.trim() || !formData.handle.trim()) {
       addToast({ type: "error", message: "名称和handle不能为空" });
       return;
     }
-    
+    if (!editingAccount && !formData.platformId) {
+      addToast({ type: "error", message: "请选择平台" });
+      return;
+    }
+
     setSaving(true);
     try {
       const url = editingAccount ? `/api/accounts/${editingAccount.id}` : "/api/accounts";
       const method = editingAccount ? "PATCH" : "POST";
+      // 编辑时不传 platformId（平台绑定后不允许改）
+      const body = editingAccount
+        ? { name: formData.name, handle: formData.handle, description: formData.description }
+        : { ...formData };
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         addToast({ type: "success", message: editingAccount ? "账号已更新" : "账号已创建" });
         fetchAccounts();
         setModalOpen(false);
         setEditingAccount(null);
-        setFormData({ name: "", handle: "", description: "" });
+        setFormData({ name: "", handle: "", description: "", platformId: platforms[0]?.id || "" });
       } else {
         const data = await res.json();
         addToast({ type: "error", message: data.error || "操作失败" });
@@ -92,7 +120,7 @@ export default function AccountsPage() {
   };
   const openEditModal = (account: Account) => {
     setEditingAccount(account);
-    setFormData({ name: account.name, handle: account.handle, description: account.description || "" });
+    setFormData({ name: account.name, handle: account.handle, description: account.description || "", platformId: "" });
     setModalOpen(true);
   };
   if (status === "loading" || loading) {
@@ -109,7 +137,7 @@ export default function AccountsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">账号管理</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">管理你的社交媒体账号</p>
         </div>
-        <Button onClick={() => { setEditingAccount(null); setFormData({ name: "", handle: "", description: "" }); setModalOpen(true); }}>
+        <Button onClick={() => { setEditingAccount(null); setFormData({ name: "", handle: "", description: "", platformId: platforms[0]?.id || "" }); setModalOpen(true); }}>
           <Plus size={20} className="mr-2" />
           添加账号
         </Button>
@@ -162,7 +190,7 @@ export default function AccountsPage() {
                 <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">{account.description}</p>
               )}
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                <span className="text-xs text-gray-500 dark:text-gray-400">{account.platform?.name || "Twitter"}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{account.platform?.name || "—"}</span>
               </div>
             </div>
           ))
@@ -170,6 +198,21 @@ export default function AccountsPage() {
       </div>
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingAccount ? "编辑账号" : "添加账号"}>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!editingAccount && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">平台</label>
+              <select
+                value={formData.platformId}
+                onChange={(e) => setFormData({ ...formData, platformId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              >
+                <option value="">请选择平台</option>
+                {platforms.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <Input
             label="账号名称"
             value={formData.name}
@@ -177,10 +220,10 @@ export default function AccountsPage() {
             placeholder="例如：我的小号"
           />
           <Input
-            label="Twitter Handle"
+            label="账号 ID"
             value={formData.handle}
             onChange={(e) => setFormData({ ...formData, handle: e.target.value })}
-            placeholder="例如：username"
+            placeholder="各平台的用户名 / 用户ID / 小红书号 等"
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">描述（可选）</label>

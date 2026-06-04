@@ -88,7 +88,7 @@ describe('Accounts API', () => {
 
       const request = new NextRequest('http://localhost/api/accounts', {
         method: 'POST',
-        body: JSON.stringify({ name: '新账号', handle: '@newacc' }),
+        body: JSON.stringify({ name: '新账号', handle: '@newacc', platformId: 'platform-twitter' }),
       })
 
       const response = await POST(request)
@@ -383,7 +383,7 @@ describe('Accounts API', () => {
 
       const req = new NextRequest('http://localhost/api/accounts', {
         method: 'POST',
-        body: JSON.stringify({ name: '测试', handle: 'test' }),
+        body: JSON.stringify({ name: '测试', handle: 'test', platformId: 'platform-bad' }),
       })
       req.headers.set('content-type', 'application/json')
 
@@ -399,7 +399,7 @@ describe('Accounts API', () => {
 
       const req = new NextRequest('http://localhost/api/accounts', {
         method: 'POST',
-        body: JSON.stringify({ name: '测试', handle: 'test' }),
+        body: JSON.stringify({ name: '测试', handle: 'test', platformId: 'platform-1' }),
       })
       req.headers.set('content-type', 'application/json')
 

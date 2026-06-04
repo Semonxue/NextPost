@@ -28,7 +28,7 @@ test.describe('筛选状态持久化', () => {
     await page.getByText('添加账号').first().click()
     await page.waitForTimeout(500)
     await page.getByLabel('账号名称').fill('账号A')
-    await page.getByLabel('Twitter Handle').fill('accounta')
+    await page.getByLabel('账号 ID').fill('accounta')
     await page.getByRole('button', { name: '创建' }).click()
     await expect(page.getByText('账号已创建').first()).toBeVisible()
 
@@ -36,7 +36,7 @@ test.describe('筛选状态持久化', () => {
     await page.getByText('添加账号').first().click()
     await page.waitForTimeout(500)
     await page.getByLabel('账号名称').fill('账号B')
-    await page.getByLabel('Twitter Handle').fill('accountb')
+    await page.getByLabel('账号 ID').fill('accountb')
     await page.getByRole('button', { name: '创建' }).click()
     await expect(page.getByText('账号已创建').first()).toBeVisible()
   })

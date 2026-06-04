@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
-    const { accountId, content, mediaUrls, mediaThumbnails, scheduledTime, timezone, status } = await request.json();
+    const { accountId, content, title, mediaUrls, mediaThumbnails, scheduledTime, timezone, status } = await request.json();
 
     if (!accountId) {
       return NextResponse.json({ error: "请选择账号" }, { status: 400 });
@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
         userId: session.user.id,
         accountId,
         content: content || "",
+        title: title || null,
         mediaUrls: JSON.stringify(mediaUrls || []),
         mediaThumbnails: JSON.stringify(mediaThumbnails || []), // 缩略图 URL 数组
         scheduledTime: scheduledTimeFinal,
