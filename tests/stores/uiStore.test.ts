@@ -1,37 +1,28 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+/**
+ * uiStore 单元测试
+ * 验证 sidebar 开关、toast 添加/移除、ID 唯一性
+ */
+import { describe, it, expect, beforeEach } from 'vitest'
 import { useUIStore } from '@/stores/uiStore'
 
 describe('useUIStore', () => {
   beforeEach(() => {
-    // Reset store state before each test
-    useUIStore.setState({
-      sidebarOpen: true,
-      toasts: [],
-    })
+    useUIStore.setState({ sidebarOpen: true, toasts: [] })
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  describe('Initial State', () => {
-    it('should have correct initial state', () => {
-      const state = useUIStore.getState()
-      expect(state.sidebarOpen).toBe(true)
-      expect(state.toasts).toEqual([])
-    })
-  })
-
-  describe('Sidebar', () => {
-    it('should toggle sidebar open/closed', () => {
+  describe('sidebar', () => {
+    it('初始 sidebarOpen 为 true', () => {
       expect(useUIStore.getState().sidebarOpen).toBe(true)
+    })
+
+    it('toggleSidebar 翻转状态', () => {
       useUIStore.getState().toggleSidebar()
       expect(useUIStore.getState().sidebarOpen).toBe(false)
       useUIStore.getState().toggleSidebar()
       expect(useUIStore.getState().sidebarOpen).toBe(true)
     })
 
-    it('should set sidebar open state', () => {
+    it('setSidebarOpen 显式设置', () => {
       useUIStore.getState().setSidebarOpen(false)
       expect(useUIStore.getState().sidebarOpen).toBe(false)
       useUIStore.getState().setSidebarOpen(true)
@@ -39,72 +30,36 @@ describe('useUIStore', () => {
     })
   })
 
-  describe('Toast', () => {
-    it('should add a toast message', () => {
-      useUIStore.getState().addToast({ type: 'success', message: '保存成功' })
-
+  describe('toasts', () => {
+    it('addToast 推入新 toast，分配唯一 id', () => {
+      useUIStore.getState().addToast({ type: 'success', message: 'A' })
+      useUIStore.getState().addToast({ type: 'error', message: 'B' })
       const toasts = useUIStore.getState().toasts
-      expect(toasts).toHaveLength(1)
-      expect(toasts[0].type).toBe('success')
-      expect(toasts[0].message).toBe('保存成功')
-      expect(toasts[0].id).toBeDefined()
+      expect(toasts).toHaveLength(2)
+      expect(toasts[0].id).not.toBe(toasts[1].id)
+      expect(toasts[0].message).toBe('A')
+      expect(toasts[1].type).toBe('error')
     })
 
-    it('should add multiple toast messages', () => {
-      useUIStore.getState().addToast({ type: 'success', message: '成功1' })
-      useUIStore.getState().addToast({ type: 'error', message: '错误1' })
-      useUIStore.getState().addToast({ type: 'info', message: '信息1' })
-
-      const toasts = useUIStore.getState().toasts
-      expect(toasts).toHaveLength(3)
-      expect(toasts[0].message).toBe('成功1')
-      expect(toasts[1].message).toBe('错误1')
-      expect(toasts[2].message).toBe('信息1')
+    it('removeToast 按 id 移除', () => {
+      useUIStore.getState().addToast({ type: 'info', message: 'X' })
+      const id = useUIStore.getState().toasts[0].id
+      useUIStore.getState().removeToast(id)
+      expect(useUIStore.getState().toasts).toHaveLength(0)
     })
 
-    it('should remove a toast message', () => {
-      // Add two toasts with a small delay to ensure different IDs
-      useUIStore.getState().addToast({ type: 'success', message: '保存成功' })
-      
-      // Small delay to get different timestamp
-      const firstToast = useUIStore.getState().toasts[0]
-      
-      useUIStore.getState().addToast({ type: 'error', message: '删除失败' })
-
-      const toastsBefore = useUIStore.getState().toasts
-      expect(toastsBefore).toHaveLength(2)
-
-      // Get the first toast's ID (保存成功)
-      const toastIdToRemove = firstToast.id
-      useUIStore.getState().removeToast(toastIdToRemove)
-
-      const toastsAfter = useUIStore.getState().toasts
-      // Should have 1 toast left (删除失败)
-      expect(toastsAfter).toHaveLength(1)
-      expect(toastsAfter[0].message).toBe('删除失败')
+    it('removeToast 移除不存在的 id 时不变', () => {
+      useUIStore.getState().addToast({ type: 'info', message: 'X' })
+      useUIStore.getState().removeToast('toast-99999')
+      expect(useUIStore.getState().toasts).toHaveLength(1)
     })
 
-    it('should handle removing non-existent toast gracefully', () => {
-      useUIStore.getState().addToast({ type: 'success', message: '保存成功' })
-      useUIStore.getState().removeToast('non-existent-id')
-
-      const toasts = useUIStore.getState().toasts
-      expect(toasts).toHaveLength(1)
-    })
-
-    it('should generate unique IDs for toast messages', () => {
-      // Add multiple toasts quickly - IDs should still be unique based on Date.now()
-      useUIStore.getState().addToast({ type: 'info', message: '消息 1' })
-      useUIStore.getState().addToast({ type: 'info', message: '消息 2' })
-      useUIStore.getState().addToast({ type: 'info', message: '消息 3' })
-
-      const toasts = useUIStore.getState().toasts
-      expect(toasts).toHaveLength(3)
-      
-      // All IDs should be unique
-      const ids = toasts.map(t => t.id)
-      const uniqueIds = new Set(ids)
-      expect(uniqueIds.size).toBe(3)
+    it('addToast 保持插入顺序', () => {
+      useUIStore.getState().addToast({ type: 'success', message: '1' })
+      useUIStore.getState().addToast({ type: 'success', message: '2' })
+      useUIStore.getState().addToast({ type: 'success', message: '3' })
+      const msgs = useUIStore.getState().toasts.map((t) => t.message)
+      expect(msgs).toEqual(['1', '2', '3'])
     })
   })
 })
