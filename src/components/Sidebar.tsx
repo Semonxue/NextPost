@@ -3,21 +3,111 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { LayoutDashboard, Calendar, FileText, Users, Wrench, Settings, Menu, X, LogOut, Trash2 } from "lucide-react";
+import { LayoutDashboard, Calendar, FileText, Users, Wrench, Settings, Menu, X, LogOut, Trash2, ChevronDown } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
+import { useState, useEffect } from "react";
+
+/**
+ * 可折叠的导航项组件
+ */
+function NavItem({ item, onItemClick }: { item: typeof navItems[0]; onItemClick?: () => void }) {
+  const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+  const Icon = item.icon;
+
+  // 检查当前路径是否在子菜单中
+  const hasActiveChild = item.children?.some((child) => pathname === child.href);
+
+  // 如果是设置菜单且当前路径匹配，打开菜单
+  useEffect(() => {
+    if (item.children && hasActiveChild) {
+      setIsOpen(true);
+    }
+  }, [hasActiveChild, item.children]);
+
+  if (item.children) {
+    // 可折叠的父级菜单
+    return (
+      <div>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+            hasActiveChild
+              ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <Icon size={20} />
+            <span className="font-medium">{item.label}</span>
+          </div>
+          <ChevronDown
+            size={16}
+            className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {isOpen && (
+          <div className="ml-4 pl-4 border-l border-gray-200 dark:border-gray-700">
+            {item.children.map((child) => {
+              const ChildIcon = child.icon;
+              const isChildActive = pathname === child.href;
+              return (
+                <Link
+                  key={child.href}
+                  href={child.href}
+                  onClick={onItemClick}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg mb-1 transition-colors text-sm ${
+                    isChildActive
+                      ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <ChildIcon size={18} />
+                  <span className="font-medium">{child.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 普通导航项
+  const isActive = pathname === item.href;
+  return (
+    <Link
+      href={item.href!}
+      onClick={onItemClick}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
+        isActive
+          ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+          : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+      }`}
+    >
+      <Icon size={20} />
+      <span className="font-medium">{item.label}</span>
+    </Link>
+  );
+}
 
 const navItems = [
   { href: "/", label: "仪表盘", icon: LayoutDashboard },
   { href: "/calendar", label: "日历视图", icon: Calendar },
   { href: "/posts", label: "帖子列表", icon: FileText },
-  { href: "/accounts", label: "账号管理", icon: Users },
   { href: "/ai-tools", label: "AI tools", icon: Wrench },
-  { href: "/settings", label: "设置", icon: Settings },
+  {
+    label: "设置",
+    icon: Settings,
+    children: [
+      { href: "/accounts", label: "账号管理", icon: Users },
+      { href: "/settings", label: "常规设置", icon: Settings },
+    ],
+  },
   { href: "/trash", label: "回收站", icon: Trash2 },
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { data: session } = useSession();
 
@@ -54,28 +144,15 @@ export function Sidebar() {
         </div>
 
         <nav className="px-4 flex-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => {
-                  if (window.innerWidth < 1024) toggleSidebar();
-                }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
-                  isActive
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
-              >
-                <Icon size={20} />
-                <span className="font-medium">{item.label}</span>
-              </Link>
-            );
-          })}
+          {navItems.map((item) => (
+            <NavItem
+              key={item.label}
+              item={item}
+              onItemClick={() => {
+                if (window.innerWidth < 1024) toggleSidebar();
+              }}
+            />
+          ))}
         </nav>
 
         {/* User profile section */}
