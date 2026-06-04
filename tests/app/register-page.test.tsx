@@ -82,7 +82,7 @@ describe('RegisterPage', () => {
   })
 
   it('注册 API 成功 → 调 fetch + push /login?registered=true', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({ id: 'u1', username: 'alice' }),
     })
@@ -109,7 +109,7 @@ describe('RegisterPage', () => {
   })
 
   it('注册 API 失败时显示错误信息', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
       json: async () => ({ error: '用户名已存在' }),
     })
