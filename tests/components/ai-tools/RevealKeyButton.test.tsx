@@ -3,9 +3,10 @@
  * 验证点击后 fetch API、loading 状态、成功显示 input
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RevealKeyButton } from '@/app/(main)/ai-tools/RevealKeyButton'
+import { useUIStore } from '@/stores/uiStore'
 
 // Mock clipboard for copy functionality
 // jsdom 26+ 中 navigator.clipboard 是只读 property 且 writeText 默认 throw，
@@ -16,6 +17,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  // 清理 toasts 防止测试间污染（用顶层 import 的 store）
+  useUIStore.setState({ toasts: [] })
 })
 
 describe('RevealKeyButton', () => {
@@ -98,5 +101,31 @@ describe('RevealKeyButton', () => {
 
     await user.click(screen.getByTitle('隐藏'))
     expect(screen.getByTestId('apikey-reveal-btn')).toBeInTheDocument()
+  })
+
+  it('handleCopy 在 revealed 为 null 时不渲染复制按钮', () => {
+    // 这个 case 由结构保证：revealed 为 null 时不渲染复制按钮
+    render(<RevealKeyButton keyId="k1" />)
+    expect(screen.queryByTitle('复制')).not.toBeInTheDocument()
+  })
+
+  it('点击 input → select 全文（line 55 onClick）', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ key: 'npk_selectme' }),
+    }) as unknown as typeof fetch
+
+    const user = userEvent.setup()
+    render(<RevealKeyButton keyId="k1" />)
+    await user.click(screen.getByTestId('apikey-reveal-btn'))
+    await waitFor(() => screen.getByTestId('apikey-revealed'))
+
+    const input = screen.getByTestId('apikey-revealed').querySelector('input')
+    expect(input).not.toBeNull()
+    // 点击 input 触发 onClick={(e) => e.currentTarget.select()}
+    // 验证 select 被调用（通过 spyOn）
+    const selectSpy = vi.spyOn(input as HTMLInputElement, 'select')
+    await user.click(input as HTMLInputElement)
+    expect(selectSpy).toHaveBeenCalled()
   })
 })
