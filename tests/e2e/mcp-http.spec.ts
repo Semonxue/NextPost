@@ -93,8 +93,8 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
         accountId: testAccount.id,
         content: 'HTTP test post',
         status: 'scheduled',
-        scheduledTime: new Date('2026-12-01T10:00:00Z'),
-        publishToken: `tok_${ts}_http`,
+        scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+        publishToken: `tok_${Date.now()}_http`,
       },
     });
 
@@ -117,7 +117,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
     await prisma.externalApiKey.deleteMany({ where: { userId: testUser.id } });
     await prisma.user.delete({ where: { id: testUser.id } });
     // Platform 在最后（先确保没残留引用）
-    await prisma.platform.deleteMany({ where: { id: testPlatform.id } });
+    await prisma.platform.deleteMany({ where: { id: testPlatform.id } }).catch(() => undefined);
     await prisma.$disconnect();
   });
 
@@ -184,7 +184,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
         where: { id: testPost.id },
         data: { mediaUrls: JSON.stringify(['/api/uploads/test.jpg']) },
       });
-      const data = await callTool(readKey, 'get_pending_posts', { limit: 50 });
+      const data = await callTool(readKey, 'get_pending_posts', { limit: 50, windowMinutes: 43200 });
       const post = data.posts?.find((p: { id: string }) => p.id === testPost.id);
       expect(post).toBeDefined();
       expect(post.mediaUrls[0]).toMatch(/^https?:\/\//);
@@ -220,7 +220,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
           accountId: otherAccount.id,
           content: 'Other user post',
           status: 'scheduled',
-          scheduledTime: new Date('2026-12-02T10:00:00Z'),
+          scheduledTime: new Date(Date.now() + 5 * 24 * 60 * 60_000),
           publishToken: `tok_other_${Date.now()}`,
         },
       });
@@ -342,9 +342,95 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
         where: { id: testPost.id },
         data: {
           status: 'scheduled',
-          scheduledTime: new Date('2026-12-01T10:00:00Z'),
+          scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
         },
       });
     });
   });
+
+  // ============================================================
+  // v0.5.2 get_pending_posts windowMinutes 端到端测试
+  // ============================================================
+  test.describe('v0.5.2 get_pending_posts windowMinutes 时间窗口', () => {
+    let nearPostId: string;
+    let farPostId: string;
+    let pastPostId: string;
+
+    test.beforeAll(async () => {
+      // 创建 ±30min 的帖子（应被默认 60min 窗口命中）
+      const near = await prisma.post.create({
+        data: {
+          userId: testUser.id,
+          accountId: testAccount.id,
+          content: 'near window post',
+          mediaUrls: '[]',
+          status: 'scheduled',
+          scheduledTime: new Date(Date.now() + 30 * 60_000),
+          publishToken: `tok_near_${Date.now()}`,
+        },
+      });
+      nearPostId = near.id;
+
+      // 创建 +90min 的帖子（应被默认 60min 窗口过滤掉）
+      const far = await prisma.post.create({
+        data: {
+          userId: testUser.id,
+          accountId: testAccount.id,
+          content: 'far future post',
+          mediaUrls: '[]',
+          status: 'scheduled',
+          scheduledTime: new Date(Date.now() + 90 * 60_000),
+          publishToken: `tok_far_${Date.now()}`,
+        },
+      });
+      farPostId = far.id;
+
+      // 创建 -30min 的帖子（在过去，应被过滤）
+      const past = await prisma.post.create({
+        data: {
+          userId: testUser.id,
+          accountId: testAccount.id,
+          content: 'past post',
+          mediaUrls: '[]',
+          status: 'scheduled',
+          scheduledTime: new Date(Date.now() - 300 * 60_000),
+          publishToken: `tok_past_${Date.now()}`,
+        },
+      });
+      pastPostId = past.id;
+    });
+
+    test.afterAll(async () => {
+      await prisma.post.deleteMany({ where: { id: { in: [nearPostId, farPostId, pastPostId] } } });
+    });
+
+    test('TC-MCP-HTTP-016: 默认 60min 窗口：仅返回 ±30min 内帖子', async () => {
+      const data = await callTool(readKey, 'get_pending_posts', {});
+      expect(data.posts).toBeInstanceOf(Array);
+      const ids = data.posts.map((p: { id: string }) => p.id);
+      expect(ids).toContain(nearPostId);
+      expect(ids).not.toContain(farPostId);   // 90min > 60min 窗口
+      expect(ids).not.toContain(pastPostId);  // 过去
+    });
+
+    test('TC-MCP-HTTP-017: windowMinutes=200：所有 ±90min 内帖子都返回', async () => {
+      const data = await callTool(readKey, 'get_pending_posts', { windowMinutes: 200 });
+      const ids = data.posts.map((p: { id: string }) => p.id);
+      expect(ids).toContain(nearPostId);
+      expect(ids).toContain(farPostId);
+      expect(ids).not.toContain(pastPostId);
+    });
+
+    test('TC-MCP-HTTP-018: windowMinutes=-1 返回 INVALID_ARGUMENT', async () => {
+      const data = await callTool(readKey, 'get_pending_posts', { windowMinutes: -1 });
+      expect(data.errorCode).toBe('INVALID_ARGUMENT');
+      expect(data.error).toMatch(/windowMinutes/);
+    });
+
+    test('TC-MCP-HTTP-019: windowMinutes=99999 超上限返回 INVALID_ARGUMENT', async () => {
+      const data = await callTool(readKey, 'get_pending_posts', { windowMinutes: 99999 });
+      expect(data.errorCode).toBe('INVALID_ARGUMENT');
+    });
+  });
+
 });

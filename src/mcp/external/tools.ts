@@ -3,7 +3,7 @@
  *
  * v0.2 读取工具：
  * - list_accounts: 获取账号列表（脱敏）
- * - get_pending_posts: 获取待发布帖子
+ * - get_pending_posts: 获取待发布帖子（v0.5.2 起支持 windowMinutes 时间窗口）
  * - get_post_detail: 获取帖子详情
  * - report_publish_result: 报告发布结果
  *
@@ -19,6 +19,7 @@
  * - update_post 字段白名单：白名单内（content / mediaUrls / scheduledTime / timezone）可改，
  *   白名单外（accountId / status）静默忽略
  * - status 锁：仅 draft / scheduled 可改；publishing/published/failed 全部锁死
+ * - v0.5.2：get_pending_posts 默认 ±60 分钟窗口（windowMinutes 参数）
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -47,6 +48,37 @@ import {
 } from '@/lib/config';
 
 const prisma = new PrismaClient();
+
+/**
+ * v0.5.2 新增：get_pending_posts 时间窗口默认值与上限
+ */
+export const DEFAULT_WINDOW_MINUTES = 60;
+export const MAX_WINDOW_MINUTES = 43200; // 30 天
+
+/**
+ * v0.5.2 新增：校验 windowMinutes 参数
+ * - undefined → 使用默认值 60
+ * - 必须是非负整数，且 <= MAX_WINDOW_MINUTES
+ * - 任何非法值返回 INVALID_ARGUMENT
+ */
+export function validateWindowMinutes(
+  value: unknown,
+): { ok: true; value: number } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: DEFAULT_WINDOW_MINUTES };
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
+    return {
+      ok: false,
+      error: `windowMinutes must be an integer between 0 and ${MAX_WINDOW_MINUTES}`,
+    };
+  }
+  if (value < 0 || value > MAX_WINDOW_MINUTES) {
+    return {
+      ok: false,
+      error: `windowMinutes must be an integer between 0 and ${MAX_WINDOW_MINUTES}`,
+    };
+  }
+  return { ok: true, value };
+}
 
 /**
  * 从帖子正文提取 #hashtag（v0.5 新增）
@@ -104,7 +136,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'get_pending_posts',
-    description: '获取待发布的帖子列表，按计划时间排序。返回 accountId，请务必在发布前核对账号信息，避免发错账号。publishToken 用于后续 report_publish_result 验证。mediaUrls 返回完整 HTTP URL，CLI 可直接下载。',
+    description: '获取待发布的帖子列表，按计划时间排序。返回 accountId，请务必在发布前核对账号信息，避免发错账号。publishToken 用于后续 report_publish_result 验证。mediaUrls 返回完整 HTTP URL，CLI 可直接下载。v0.5.2 起支持 windowMinutes 参数（默认 60 = ±1 小时），只返回当前时间前后 N 分钟内的待发帖子，适合定时轮询发布场景。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -116,6 +148,13 @@ export const TOOLS: Tool[] = [
           type: 'number',
           description: '返回数量，默认 10',
           default: 10
+        },
+        windowMinutes: {
+          type: 'integer',
+          description: '以当前时间为中心的对称时间窗口（分钟）。只返回 scheduledTime 落在 [now-N, now+N] 区间内的帖子。取值 0~43200（30 天），默认 60（1 小时）。适合定时轮询发布场景，避免一次返回太多。',
+          default: DEFAULT_WINDOW_MINUTES,
+          minimum: 0,
+          maximum: MAX_WINDOW_MINUTES
         }
       }
     }
@@ -338,12 +377,18 @@ async function listAccounts(userId: string): Promise<ExternalAccount[]> {
 }
 
 /**
- * 获取待发布帖子
+ * 获取待发布帖子（v0.5.2 起支持 windowMinutes 时间窗口）
+ *
+ * @param userId 当前用户 ID
+ * @param accountId 可选账号筛选
+ * @param limit 返回数量，默认 10
+ * @param windowMinutes 时间窗口（分钟），默认 60（v0.5.2 起默认开启窗口过滤）
  */
 async function getPendingPosts(
   userId: string,
   accountId?: string,
-  limit: number = 10
+  limit: number = 10,
+  windowMinutes: number = DEFAULT_WINDOW_MINUTES,
 ): Promise<ExternalPost[]> {
   // 构建查询条件
   const where: Record<string, unknown> = {
@@ -356,6 +401,15 @@ async function getPendingPosts(
   if (accountId) {
     where.accountId = accountId;
   }
+
+  // v0.5.2 时间窗口过滤：以服务端当前时间为中心的对称区间
+  // 覆盖原本的 `scheduledTime: { not: null }`，确保数据库能利用索引
+  const nowMs = Date.now();
+  const windowMs = windowMinutes * 60_000;
+  where.scheduledTime = {
+    gte: new Date(nowMs - windowMs),
+    lte: new Date(nowMs + windowMs),
+  };
 
   const posts = await prisma.post.findMany({
     where,
@@ -980,8 +1034,22 @@ export async function executeTool(
       }
 
       case 'get_pending_posts': {
-        const { accountId, limit } = args as { accountId?: string; limit?: number };
-        const posts = await getPendingPosts(ctx.userId, accountId, limit || 10);
+        const { accountId, limit, windowMinutes } = args as {
+          accountId?: string;
+          limit?: number;
+          windowMinutes?: number;
+        };
+        // v0.5.2：先校验 windowMinutes
+        const wv = validateWindowMinutes(windowMinutes);
+        if (!wv.ok) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ error: wv.error, errorCode: 'INVALID_ARGUMENT' }, null, 2)
+            }]
+          };
+        }
+        const posts = await getPendingPosts(ctx.userId, accountId, limit || 10, wv.value);
         return {
           content: [{
             type: 'text',

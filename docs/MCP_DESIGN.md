@@ -12,6 +12,7 @@
 | **v0.4.1** | **2026-06-02** | **本地媒体上传**：新增 `upload_media_from_path`（本地文件路径直接读取）和 `upload_media_from_base64`（base64 编码数据，上限 5MB）两个写工具 |
 | **v0.4.2** | **2026-06-02** | **扩展 update_post**：支持通过外部 MCP 修改 content 和 mediaUrls，方便 AI 辅助编辑内容 |
 | **v0.4.8** | **2026-06-04** | **端口单一源（APP_URL）**：所有 URL 概念（基础 URL / MCP 端点 / 媒体 URL 拼接）从 `APP_URL` env 派生（`src/lib/config.ts` 中 `getAppUrl()` / `getMcpEndpointUrl()` helper）；`dev.mjs` 启动时自动注入；默认端口 3000 → 3456。**`NEXT_PUBLIC_BASE_URL` 不再是用户可配覆盖项**——它是 `dev.mjs` 派生的 env。 |
+| **v0.5.2** | **2026-06-11** | **`get_pending_posts` 时间窗口过滤**：新增可选参数 `windowMinutes`（integer，默认 60，范围 0~43200）。以服务端当前时间为中心的对称窗口 `[now-N, now+N]`，只返回 `scheduledTime` 落在区间内的待发帖子。仅影响 `get_pending_posts`，其他工具 / API / 数据库零改动。⚠️ **破坏性变更**：不传该参数时，默认只返回 ±1 小时内的帖子（旧行为：返回全部）；客户端可显式传 `43200` 还原旧行为。详见 [V0.5.2.md](./V0.5.2.md)。 |
 
 ## 概述
 
@@ -78,7 +79,7 @@
 | 工具 | 描述 | 权限 |
 |------|------|------|
 | `list_accounts` | 获取账号列表（脱敏） | read |
-| `get_pending_posts` | 获取待发布帖子 | read |
+| `get_pending_posts` | 获取待发布帖子（v0.5.2 起支持时间窗口过滤） | read |
 | `get_post_detail` | 获取帖子详情 | read |
 | `report_publish_result` | 报告发布结果 | read |
 
@@ -121,23 +122,30 @@
 // 数据脱敏：只返回 platform 和 displayName，不返回 handle、description 等
 ```
 
-#### 2.2.2 get_pending_posts
+#### 2.2.2 get_pending_posts（v0.5.2 起支持 windowMinutes 时间窗口）
 
 ```typescript
-// 工具定义
+// 工具定义（v0.5.2 更新）
 {
   name: "get_pending_posts",
-  description: "获取待发布的帖子列表，按计划时间排序",
+  description: "获取待发布的帖子列表，按计划时间排序。返回 accountId，请务必在发布前核对账号信息，避免发错账号。publishToken 用于后续 report_publish_result 验证。mediaUrls 返回完整 HTTP URL，CLI 可直接下载。v0.5.2 起支持 windowMinutes 参数，不传时默认 60（±1 小时），只返回当前时间前后 N 分钟内的待发帖子，适合定时轮询发布场景。",
   inputSchema: {
     type: "object",
     properties: {
-      accountId: { 
-        type: "string", 
+      accountId: {
+        type: "string",
         description: "可选：按账号筛选"
       },
-      limit: { 
-        type: "number", 
-        description: "返回数量，默认 10" 
+      limit: {
+        type: "number",
+        description: "返回数量，默认 10"
+      },
+      windowMinutes: {                  // v0.5.2 新增
+        type: "integer",
+        description: "以当前时间为中心的对称时间窗口（分钟），只返回 scheduledTime 落在 [now-N, now+N] 区间内的帖子。取值 0~43200（30 天），默认 60（1 小时）。适合定时轮询发布场景，避免一次返回太多。",
+        default: 60,
+        minimum: 0,
+        maximum: 43200
       }
     }
   }
@@ -150,15 +158,48 @@
       "id": "post_xxx",
       "accountId": "acc_xxx",
       "accountDisplayName": "我的推特",
+      "platform": "Twitter",                              // v0.5.1 新增
+      "title": "",                                        // v0.5 新增（小红书等平台必需）
       "content": "这是一条测试推文",
-      "mediaUrls": ["/uploads/2026-06-01/image.jpg"],
+      "mediaUrls": ["https://nextpost.example.com/uploads/2026-06-01/image.jpg"],
       "scheduledTime": "2026-06-01T15:00:00+08:00",
       "timezone": "Asia/Shanghai",
-      "publishToken": "tok_xxx"  // 用于回传验证
+      "publishToken": "tok_xxx",                          // 用于回传验证
+      "extractedTopics": ["xxx"]                          // v0.5 新增（从 content 提取的 #hashtag）
     }
   ]
 }
 ```
+
+**v0.5.2 时间窗口逻辑**：
+
+```typescript
+// 服务端伪代码
+const now = Date.now();
+const windowMs = windowMinutes * 60_000;
+const lower = new Date(now - windowMs);
+const upper = new Date(now + windowMs);
+
+where.scheduledTime = {
+  gte: lower,
+  lte: upper,
+};
+```
+
+**验证规则**：
+
+| 取值 | 处理 |
+|---|---|
+| 不传 / `undefined` | 应用默认 60 |
+| `null` / 字符串 / 布尔 / 对象 | 返回 `INVALID_ARGUMENT` |
+| `NaN` / `Infinity` | 返回 `INVALID_ARGUMENT` |
+| 小数 / 负数 / `> 43200` | 返回 `INVALID_ARGUMENT` |
+| `0 ~ 43200` 整数 | 接受 |
+
+**破坏性变更提示**：
+- v0.5.0 及之前：不传 `windowMinutes` 返回所有 scheduled 帖子
+- v0.5.2 起：不传 `windowMinutes` 仅返回 `±60min` 内的帖子
+- 还原旧行为：显式传 `windowMinutes: 43200`
 
 #### 2.2.3 get_post_detail
 
@@ -170,8 +211,8 @@
   inputSchema: {
     type: "object",
     properties: {
-      postId: { 
-        type: "string" 
+      postId: {
+        type: "string"
       }
     },
     required: ["postId"]
@@ -204,42 +245,42 @@
   inputSchema: {
     type: "object",
     properties: {
-      postId: { 
-        type: "string", 
-        description: "NextPost 帖子 ID" 
+      postId: {
+        type: "string",
+        description: "NextPost 帖子 ID"
       },
-      publishToken: { 
-        type: "string", 
-        description: "发布令牌，用于验证" 
+      publishToken: {
+        type: "string",
+        description: "发布令牌，用于验证"
       },
-      status: { 
-        type: "string", 
+      status: {
+        type: "string",
         enum: ["success", "failed", "partial"],
-        description: "发布状态" 
+        description: "发布状态"
       },
-      publishedAt: { 
-        type: "string", 
-        description: "实际发布时间，必须是带时区的 ISO 8601 格式（如 2026-06-03T19:40:00+08:00 或 2026-06-03T11:40:00Z）。NextPost 会自动解析时区并存储为 UTC" 
+      publishedAt: {
+        type: "string",
+        description: "实际发布时间，必须是带时区的 ISO 8601 格式（如 2026-06-03T19:40:00+08:00 或 2026-06-03T11:40:00Z）。NextPost 会自动解析时区并存储为 UTC"
       },
-      externalPostId: { 
-        type: "string", 
-        description: "外部平台帖子 ID（如 Twitter tweet ID），可选" 
+      externalPostId: {
+        type: "string",
+        description: "外部平台帖子 ID（如 Twitter tweet ID），可选"
       },
-      externalPostUrl: { 
-        type: "string", 
-        description: "【必须】外部帖子完整 URL，用于在浏览器打开，如 https://x.com/user/status/123。必须提供此字段才能在 NextPost 界面显示跳转按钮" 
+      externalPostUrl: {
+        type: "string",
+        description: "【必须】外部帖子完整 URL，用于在浏览器打开，如 https://x.com/user/status/123。必须提供此字段才能在 NextPost 界面显示跳转按钮"
       },
-      errorCode: { 
-        type: "string", 
-        description: "错误码（失败时）" 
+      errorCode: {
+        type: "string",
+        description: "错误码（失败时）"
       },
-      errorMessage: { 
-        type: "string", 
-        description: "错误信息（失败时）" 
+      errorMessage: {
+        type: "string",
+        description: "错误信息（失败时）"
       },
-      retryable: { 
-        type: "boolean", 
-        description: "是否可重试" 
+      retryable: {
+        type: "boolean",
+        description: "是否可重试"
       }
     },
     required: ["postId", "publishToken", "status", "externalPostUrl"]
@@ -373,8 +414,8 @@
     properties: {
       postId: { type: "string" },
       content: { type: "string", description: "帖子正文" },
-      mediaUrls: { 
-        type: "array", 
+      mediaUrls: {
+        type: "array",
         items: { type: "string" },
         description: "媒体 URL 列表（需先用 upload_media_from_* 工具上传）"
       },
@@ -485,7 +526,7 @@ interface ExternalApiKey {
 // 生成 API Key
 async function generateExternalApiKey(userId: string, name: string) {
   const key = crypto.randomBytes(32).toString("hex");
-  
+
   await prisma.externalApiKey.create({
     data: {
       userId,
@@ -493,7 +534,7 @@ async function generateExternalApiKey(userId: string, name: string) {
       key: `npk_${key}`,
     }
   });
-  
+
   return `npk_${key}`;  // 前缀便于识别
 }
 
@@ -503,16 +544,16 @@ async function validateApiKey(key: string) {
     where: { key },
     include: { user: true }
   });
-  
+
   if (!apiKey) return null;
   if (apiKey.expiresAt && new Date() > apiKey.expiresAt) return null;
-  
+
   // 更新最后使用时间
   await prisma.externalApiKey.update({
     where: { id: apiKey.id },
     data: { lastUsedAt: new Date() }
   });
-  
+
   return apiKey.user;
 }
 ```
@@ -523,20 +564,20 @@ async function validateApiKey(key: string) {
 // MCP Server 启动时验证
 export async function startExternalServer() {
   const apiKey = process.env.MCP_API_KEY;
-  
+
   if (!apiKey) {
     console.error("MCP_API_KEY is required");
     process.exit(1);
   }
-  
+
   const user = await validateApiKey(apiKey);
   if (!user) {
     console.error("Invalid API Key");
     process.exit(1);
   }
-  
+
   console.log(`External MCP Server started for user: ${user.id}`);
-  
+
   // 所有工具调用都会带上 userId 上下文
   return { userId: user.id };
 }
@@ -628,6 +669,7 @@ if (!hasScope(ctx.scope, required)) {
 | **URL 协议白名单** | `upload_media_from_url` | 只允许 `http:` / `https:`，否则 `INVALID_URL` |
 | **MIME 白名单** | `upload_media_from_url` | 6 种 image/video，否则 `UNSUPPORTED_MIME` |
 | **大小限制** | `upload_media_from_url` | 10MB（与 `/api/media/upload` 一致），否则 `FILE_TOO_LARGE` |
+| **windowMinutes 校验**（v0.5.2 新增）| `get_pending_posts` | 必须 integer、0 ≤ N ≤ 43200，否则 `INVALID_ARGUMENT` |
 
 ---
 
@@ -638,7 +680,7 @@ if (!hasScope(ctx.scope, required)) {
 ```prisma
 model Post {
   // ... 现有字段
-  
+
   // MCP 发布相关字段
   publishToken     String?                    // 外部发布验证令牌
   publishTokenExp  DateTime?                 // 令牌过期时间
@@ -646,7 +688,7 @@ model Post {
   externalPostId   String?                    // 外部平台帖子 ID
   publishError     String?                    // 发布错误信息
   publishAttempts  Int      @default(0)       // 发布尝试次数
-  
+
   // 软删除字段 (Phase 2)
   deletedAt  DateTime?
   deletedBy  String?    // "user" | "ai"
@@ -659,13 +701,15 @@ model Post {
 ```prisma
 model Account {
   // ... 现有字段
-  
+
   // 软删除字段 (Phase 2)
   deletedAt  DateTime?
   deletedBy  String?    // "user" | "ai"
   deleteNote String?
 }
 ```
+
+> **v0.5.2 备注**：`windowMinutes` 参数是 MCP 工具层参数，不入库。Post 模型零改动。
 
 ---
 
@@ -856,6 +900,27 @@ npm run dev:mcp
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### 8.4 v0.5.2 时间窗口 — 轮询发布模式（推荐）
+
+v0.5.2 起，建议 AI 客户端使用 `windowMinutes` 实现**轮询发布**，每 N 分钟拉一次：
+
+```bash
+# 示例：cron 每 1 分钟拉一次窗口 ±1min 的帖子（极低延迟发布）
+* * * * * curl -X POST http://localhost:3456/api/mcp \
+  -H "Authorization: Bearer npk_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_pending_posts","arguments":{"windowMinutes":1,"limit":5}}}'
+```
+
+```bash
+# 示例：cron 每 5 分钟拉一次窗口 ±5min 的帖子（降低调用频率）
+*/5 * * * * curl ... -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_pending_posts","arguments":{"windowMinutes":5,"limit":10}}}'
+```
+
+> **设计权衡**：
+> - `windowMinutes` ≈ cron 间隔 × 1.5 ~ 2 倍可避免漏发
+> - 例如 cron 每 5 分钟一次，`windowMinutes: 10` 可保证不漏
+
 ---
 
 ## 九、错误处理
@@ -902,6 +967,16 @@ const NON_RETRYABLE_ERRORS = [
 }
 ```
 
+### 9.3 windowMinutes 校验错误（v0.5.2 新增）
+
+```typescript
+// 负数 / 小数 / 字符串 / 超上限 / NaN
+{
+  "error": "windowMinutes must be an integer between 0 and 43200",
+  "errorCode": "INVALID_ARGUMENT"
+}
+```
+
 ---
 
 ## 十、后续规划
@@ -933,7 +1008,7 @@ const NON_RETRYABLE_ERRORS = [
 | `src/app/api/settings/external-keys/route.ts` | API Key 管理接口 |
 | `tests/mcp/external.test.ts` | 单元测试（基础：14 用例） |
 | `tests/mcp/auth-coverage.test.ts` | Scope 解析 / hasScope 单元测试 |
-| `tests/mcp/tools-coverage.test.ts` | 9 个工具 + scope 强制 + URL/媒体校验 全量单元测试 |
+| `tests/mcp/tools-coverage.test.ts` | 9 个工具 + scope 强制 + URL/媒体校验 + windowMinutes 全量单元测试 |
 | `tests/e2e/mcp.spec.ts` | E2E 测试 |
 
 ### 11.2 启动方式
@@ -962,14 +1037,14 @@ pnpm test:e2e -- tests/e2e/mcp.spec.ts
 pnpm test:coverage
 ```
 
-**v0.4 覆盖率**（`mcp/external/`）：
+**v0.5.2 覆盖率**（`mcp/external/`）：
 
 | 文件 | Stmts | Branches | Funcs | Lines |
 |------|-------|----------|-------|-------|
 | `auth.ts` | 100% | 96.55% | 100% | 100% |
-| `tools.ts` | 93.33% | 82.09% | 100% | 95.51% |
+| `tools.ts` | ≥ 80% | ≥ 80% | ≥ 80% | ≥ 80% |
 
-总计 96 个 mcp 单元测试，全量 262 个测试 0 失败。
+总计 ≥ 100 个 mcp 单元测试（含 windowMinutes 13 个新用例），全量测试 0 失败。
 
 ### 11.4 数据库更新
 
@@ -978,6 +1053,8 @@ pnpm test:coverage
 ```bash
 pnpm prisma db push
 ```
+
+> **v0.5.2 备注**：本次更新无需迁移数据库。
 
 ### 11.5 集成端点与独立服务
 
@@ -1087,7 +1164,58 @@ curl -s http://localhost:3456/api/mcp -X POST -H "Content-Type: application/json
 }
 ```
 
+### 11.9 windowMinutes 时间窗口实现细节（v0.5.2）
+
+**实现位置**：`src/mcp/external/tools.ts`
+
+**核心代码片段**：
+
+```typescript
+const DEFAULT_WINDOW_MINUTES = 60;
+const MAX_WINDOW_MINUTES = 43200;
+
+export function validateWindowMinutes(
+  value: unknown,
+): { ok: true; value: number } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: DEFAULT_WINDOW_MINUTES };
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return { ok: false, error: 'windowMinutes must be an integer between 0 and 43200' };
+  }
+  if (value < 0 || value > MAX_WINDOW_MINUTES) {
+    return { ok: false, error: `windowMinutes must be an integer between 0 and ${MAX_WINDOW_MINUTES}` };
+  }
+  return { ok: true, value };
+}
+
+async function getPendingPosts(
+  userId: string,
+  accountId?: string,
+  limit: number = 10,
+  windowMinutes: number = DEFAULT_WINDOW_MINUTES,
+): Promise<ExternalPost[]> {
+  const where: Record<string, unknown> = {
+    userId,
+    status: 'scheduled',
+    deletedAt: null,
+    scheduledTime: { not: null },
+  };
+
+  if (accountId) where.accountId = accountId;
+
+  // v0.5.2 时间窗口过滤
+  const now = Date.now();
+  where.scheduledTime = {
+    gte: new Date(now - windowMinutes * 60_000),
+    lte: new Date(now + windowMinutes * 60_000),
+  };
+
+  // ... 后续查询不变
+}
+```
+
+**影响范围**：仅 `get_pending_posts`。其他工具 / API / 数据库零改动。
+
 ---
 
 *文档生成时间：2026-06-01*
-*最后更新：2026-06-04 - v0.4.8 端口单一源（APP_URL 派生所有 URL）*
+*最后更新：2026-06-11 - v0.5.2 get_pending_posts 时间窗口过滤（windowMinutes）*

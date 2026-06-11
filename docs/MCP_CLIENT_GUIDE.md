@@ -1,8 +1,8 @@
-# MCP 客户端对接指南（v0.5 新增）
+# MCP 客户端对接指南（v0.5+）
 
 > **目标读者**：通过 NextPost MCP Server（`/api/mcp`）对接的 AI 客户端（Claude Desktop / 自主 agent）  
-> **版本**：v0.5.0  
-> **最后更新**：2026-06-04
+> **版本**：v0.5.2  
+> **最后更新**：2026-06-11
 
 ---
 
@@ -112,10 +112,10 @@ external_url = f"https://www.xiaohongshu.com/explore/{note_id}"
 
 ## 4. MCP 工具调用示例
 
-### 4.1 拉取待发布帖子
+### 4.1 拉取待发布帖子（v0.5.2 默认窗口 60 分钟）
 
 ```json
-// 请求
+// 请求（v0.5.2 起：不传 windowMinutes 即默认 ±60min）
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -126,14 +126,78 @@ external_url = f"https://www.xiaohongshu.com/explore/{note_id}"
   }
 }
 
-// 响应（v0.5 新增 title + extractedTopics）
+// 等价于显式传 windowMinutes: 60
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_pending_posts",
+    "arguments": { "limit": 10, "windowMinutes": 60 }
+  }
+}
+
+// 响应（v0.5 新增 title + extractedTopics；v0.5.2 仅含 ±60min 内帖子）
 {
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
     "content": [{
       "type": "text",
-      "text": "{\"posts\":[{\"id\":\"...\",\"accountId\":\"...\",\"content\":\"今天去了 #三里屯 #brunch\",\"title\":\"周末探店\",\"mediaUrls\":[\"https://nextpost.example.com/uploads/abc.jpg\"],\"scheduledTime\":\"2026-06-05T19:00:00+08:00\",\"timezone\":\"Asia/Shanghai\",\"publishToken\":\"tok_...\",\"extractedTopics\":[\"三里屯\",\"brunch\"]}]}"
+      "text": "{\"posts\":[{\"id\":\"...\",\"accountId\":\"...\",\"platform\":\"Twitter\",\"content\":\"今天去了 #三里屯 #brunch\",\"title\":\"周末探店\",\"mediaUrls\":[\"https://nextpost.example.com/uploads/abc.jpg\"],\"scheduledTime\":\"2026-06-11T19:00:00+08:00\",\"timezone\":\"Asia/Shanghai\",\"publishToken\":\"tok_...\",\"extractedTopics\":[\"三里屯\",\"brunch\"]}]}"
+    }]
+  }
+}
+```
+
+### 4.1.b 自定义时间窗口
+
+```json
+// 想要更长窗口（如±6 小时）
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "get_pending_posts",
+    "arguments": { "windowMinutes": 360, "limit": 20 }
+  }
+}
+
+// 还原 v0.5.0 旧行为（≈返回所有 scheduled）
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "get_pending_posts",
+    "arguments": { "windowMinutes": 43200, "limit": 50 }
+  }
+}
+```
+
+### 4.1.c windowMinutes 错误响应
+
+```json
+// 请求（非法参数）
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "get_pending_posts",
+    "arguments": { "windowMinutes": -1 }
+  }
+}
+
+// 响应
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "{\"error\":\"windowMinutes must be an integer between 0 and 43200\",\"errorCode\":\"INVALID_ARGUMENT\"}"
     }]
   }
 }
@@ -165,6 +229,74 @@ external_url = f"https://www.xiaohongshu.com/explore/{note_id}"
 
 ---
 
+## 4.3 轮询发布模式（v0.5.2 新增推荐用法）
+
+> ⚠️ **v0.5.2 起 `get_pending_posts` 默认只返回 ±60 分钟内的帖子**。客户端可利用 `windowMinutes` 实现"每 N 分钟轮询一次，发布 ±N 分钟内即将发布的帖子"，无需自行过滤时间范围。
+
+### 4.3.1 cron 示例
+
+```bash
+# crontab -e
+# 每 1 分钟拉一次窗口 ±1min 的帖子（极低延迟发布）
+* * * * * curl -s -X POST http://localhost:3456/api/mcp \
+  -H "Authorization: Bearer npk_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_pending_posts","arguments":{"windowMinutes":1,"limit":5}}}'
+
+# 每 5 分钟拉一次窗口 ±5min 的帖子（降低调用频率）
+*/5 * * * * curl -s -X POST http://localhost:3456/api/mcp \
+  -H "Authorization: Bearer npk_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_pending_posts","arguments":{"windowMinutes":5,"limit":10}}}'
+```
+
+### 4.3.2 Python 示例（轮询循环）
+
+```python
+import time
+import requests
+
+API_KEY = "npk_xxx"
+BASE = "http://localhost:3456/api/mcp"
+
+def call_mcp(name, arguments):
+    r = requests.post(BASE, headers={
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json",
+    }, json={
+        "jsonrpc": "2.0", "id": 1,
+        "method": "tools/call",
+        "params": {"name": name, "arguments": arguments},
+    })
+    return r.json()["result"]["content"][0]["text"]
+
+posted_ids = set()
+
+while True:
+    # 拉 ±1min 窗口
+    text = call_mcp("get_pending_posts", {"windowMinutes": 1, "limit": 10})
+    data = json.loads(text)
+    for post in data.get("posts", []):
+        if post["id"] in posted_ids:
+            continue
+        # ... 调 opencli 发布 ...
+        posted_ids.add(post["id"])
+    time.sleep(60)
+```
+
+### 4.3.3 windowMinutes 选择建议
+
+| 轮询频率 | 推荐 windowMinutes | 备注 |
+|---|---|---|
+| 每 1 分钟 | `1` | 极低延迟，命中即发 |
+| 每 5 分钟 | `5 ~ 10` | 容忍一次轮询失败 |
+| 每 15 分钟 | `15 ~ 30` | 留余量 |
+| 每 30 分钟 | `30 ~ 60` | 配合 ±1 小时默认窗口 |
+
+> **设计权衡**：`windowMinutes` 太大会一次返回太多帖子；太小可能漏发。建议 ≈ cron 间隔 × 1.5 ~ 2 倍。
+
+---
+
 ## 5. 错误码对照
 
 | 错误码 | 含义 | 客户端处理 |
@@ -177,6 +309,7 @@ external_url = f"https://www.xiaohongshu.com/explore/{note_id}"
 | `EMPTY_CONTENT` | content 与 mediaUrls 同时为空 | 跳过此帖 |
 | `INVALID_SCHEDULED_TIME` | scheduledTime 不合法 | 跳过此帖 |
 | `SCHEDULED_TIME_IN_PAST` | 计划时间已过 | 跳过此帖 |
+| `INVALID_ARGUMENT`（v0.5.2 新增）| 参数非法（如 `windowMinutes` 超范围） | 修正参数后重试 |
 
 ---
 
@@ -187,17 +320,17 @@ import json
 import subprocess
 import requests
 
-# 1. MCP 拉待发布帖子
+# 1. MCP 拉待发布帖子（v0.5.2 默认窗口 60 分钟）
 posts = call_mcp("get_pending_posts", {"limit": 10})
 
 for post in posts:
     # 2. 拿账号信息
     account = get_account(post["accountId"])
     platform = account["platform"]["name"]
-    
+
     # 3. 下载媒体
     media_paths = [download(url) for url in post["mediaUrls"]]
-    
+
     # 4. 按平台选 opencli 命令
     if platform == "Twitter":
         cmd = ["opencli", "twitter", "post", post["content"]]
@@ -212,10 +345,10 @@ for post in posts:
     elif platform == "Instagram":
         # ... 按媒体类型选 post/reel/note
         pass
-    
+
     # 5. 执行
     result = subprocess.run(cmd, capture_output=True, text=True)
-    
+
     # 6. 解析结果，构造 externalPostUrl
     parsed = json.loads(result.stdout)
     if platform == "Xiaohongshu":
@@ -224,7 +357,7 @@ for post in posts:
         external_url = f"https://www.xiaohongshu.com/explore/{note_id}"
     else:
         external_url = parsed["url"]
-    
+
     # 7. 回传 NextPost
     call_mcp("report_publish_result", {
         "postId": post["id"],
@@ -240,6 +373,7 @@ for post in posts:
 
 | 版本 | 变更 |
 |---|---|
+| v0.5.2 | `get_pending_posts` 新增 `windowMinutes` 时间窗口参数（默认 60，范围 0~43200），以当前时间为中心的对称窗口 `[now-N, now+N]`；不传时默认仅返回 ±1 小时内的待发帖子。**破坏性变更**：旧客户端期望"返回全部"，需显式传 `43200` 还原旧行为。详见 §4.3。 |
 | v0.5.0 | 新增 `title` 字段（`create_post` / `update_post` / `get_pending_posts` / `get_post_detail`）；新增 `extractedTopics` 计算字段（`get_pending_posts` / `get_post_detail`）；Xiaohongshu 平台支持 |
 | v0.4.2 | `update_post` 支持 `content` / `mediaUrls` |
 | v0.4.0 | 新增 `upload_media_from_*` / `create_post` / `update_post` |

@@ -88,7 +88,7 @@ describe('MCP platform 字段（v0.5.1）', () => {
   })
 
   it('get_pending_posts 返回 Post 含 platform 字段', async () => {
-    const result = await executeTool('get_pending_posts', {}, { userId: testUserId, scope: 'read' })
+    const result = await executeTool('get_pending_posts', { windowMinutes: 43200 }, { userId: testUserId, scope: 'read' })
     const data = JSON.parse(result.content[0].text)
     const post = data.posts.find((p: { id: string }) => p.id === testPostId)
     expect(post).toBeDefined()

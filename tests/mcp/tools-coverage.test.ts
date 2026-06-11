@@ -1533,3 +1533,211 @@ describe('MCP Tools - TOOLS 列表完整性', () => {
     expect(TOOL_SCOPE['upload_media_from_base64']).toBe('write')
   })
 })
+
+// ===== v0.5.2: get_pending_posts windowMinutes 时间窗口 =====
+
+describe('v0.5.2 - validateWindowMinutes 单元测试', () => {
+  it('undefined 应使用默认值 60', async () => {
+    const { validateWindowMinutes, DEFAULT_WINDOW_MINUTES } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(undefined)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe(DEFAULT_WINDOW_MINUTES)
+  })
+
+  it('显式 0 应返回 0', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(0)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe(0)
+  })
+
+  it('显式 120 应返回 120', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(120)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value).toBe(120)
+  })
+
+  it('显式 43200（上限）应接受', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(43200)
+    expect(r.ok).toBe(true)
+  })
+
+  it('负数应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(-1)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/integer between 0 and/)
+  })
+
+  it('超上限 43201 应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(43201)
+    expect(r.ok).toBe(false)
+  })
+
+  it('小数 3.5 应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(3.5)
+    expect(r.ok).toBe(false)
+  })
+
+  it('字符串 "60" 应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes('60')
+    expect(r.ok).toBe(false)
+  })
+
+  it('null 应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(null)
+    expect(r.ok).toBe(false)
+  })
+
+  it('NaN 应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(NaN)
+    expect(r.ok).toBe(false)
+  })
+
+  it('Infinity 应返回 INVALID_ARGUMENT', async () => {
+    const { validateWindowMinutes } = await import('@/mcp/external/tools')
+    const r = validateWindowMinutes(Infinity)
+    expect(r.ok).toBe(false)
+  })
+})
+
+describe('v0.5.2 - get_pending_posts windowMinutes 行为', () => {
+  beforeEach(() => {
+    resetMocks()
+  })
+
+  it('不传 windowMinutes：Prisma where 应包含 ±60min 窗口（默认行为）', async () => {
+    postMock.findMany.mockResolvedValue([])
+    const { executeTool } = await import('@/mcp/external/tools')
+    const before = Date.now()
+    await executeTool('get_pending_posts', {}, 'user-1')
+    const after = Date.now()
+
+    const where = postMock.findMany.mock.calls[0][0].where
+    expect(where.scheduledTime).toBeDefined()
+    const st = where.scheduledTime as { gte: Date; lte: Date }
+    // gte 应该是 now - 60min 之前一瞬间
+    expect(st.gte.getTime()).toBeLessThanOrEqual(before - 60 * 60 * 1000 + 100)
+    expect(st.gte.getTime()).toBeGreaterThanOrEqual(before - 60 * 60 * 1000 - 100)
+    // lte 应该是 now + 60min 之后一瞬间
+    expect(st.lte.getTime()).toBeLessThanOrEqual(after + 60 * 60 * 1000 + 100)
+    expect(st.lte.getTime()).toBeGreaterThanOrEqual(after + 60 * 60 * 1000 - 100)
+  })
+
+  it('显式 windowMinutes=60：等价于不传', async () => {
+    postMock.findMany.mockResolvedValue([])
+    const { executeTool } = await import('@/mcp/external/tools')
+    await executeTool('get_pending_posts', { windowMinutes: 60 }, 'user-1')
+
+    const where = postMock.findMany.mock.calls[0][0].where
+    const st = where.scheduledTime as { gte: Date; lte: Date }
+    const spanMs = st.lte.getTime() - st.gte.getTime()
+    expect(spanMs).toBe(120 * 60 * 1000) // ±60min = 120min 总宽度
+  })
+
+  it('显式 windowMinutes=120：±120min', async () => {
+    postMock.findMany.mockResolvedValue([])
+    const { executeTool } = await import('@/mcp/external/tools')
+    await executeTool('get_pending_posts', { windowMinutes: 120 }, 'user-1')
+
+    const where = postMock.findMany.mock.calls[0][0].where
+    const st = where.scheduledTime as { gte: Date; lte: Date }
+    const spanMs = st.lte.getTime() - st.gte.getTime()
+    expect(spanMs).toBe(240 * 60 * 1000) // ±120min = 240min 总宽度
+  })
+
+  it('显式 windowMinutes=0：gte 等于 lte（窗口收缩到 now）', async () => {
+    postMock.findMany.mockResolvedValue([])
+    const { executeTool } = await import('@/mcp/external/tools')
+    const before = Date.now()
+    await executeTool('get_pending_posts', { windowMinutes: 0 }, 'user-1')
+    const after = Date.now()
+
+    const where = postMock.findMany.mock.calls[0][0].where
+    const st = where.scheduledTime as { gte: Date; lte: Date }
+    // gte 和 lte 都在 before..after 之间，且几乎相等
+    expect(Math.abs(st.gte.getTime() - st.lte.getTime())).toBeLessThanOrEqual(after - before + 10)
+  })
+
+  it('windowMinutes + accountId 组合：where 同时含两个条件', async () => {
+    postMock.findMany.mockResolvedValue([])
+    const { executeTool } = await import('@/mcp/external/tools')
+    await executeTool('get_pending_posts', { windowMinutes: 30, accountId: 'a1' }, 'user-1')
+
+    const where = postMock.findMany.mock.calls[0][0].where
+    expect(where.accountId).toBe('a1')
+    const st = where.scheduledTime as { gte: Date; lte: Date }
+    expect(st.lte.getTime() - st.gte.getTime()).toBe(60 * 60 * 1000) // ±30min = 60min
+  })
+
+  it('windowMinutes + limit 组合：take 仍生效', async () => {
+    postMock.findMany.mockResolvedValue([])
+    const { executeTool } = await import('@/mcp/external/tools')
+    await executeTool('get_pending_posts', { windowMinutes: 60, limit: 5 }, 'user-1')
+    expect(postMock.findMany.mock.calls[0][0].take).toBe(5)
+  })
+
+  it('windowMinutes=-1：返回 INVALID_ARGUMENT，不调 prisma', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool('get_pending_posts', { windowMinutes: -1 }, 'user-1')
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+    expect(data.error).toMatch(/windowMinutes/)
+    expect(postMock.findMany).not.toHaveBeenCalled()
+  })
+
+  it('windowMinutes=3.5：返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool('get_pending_posts', { windowMinutes: 3.5 }, 'user-1')
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+    expect(postMock.findMany).not.toHaveBeenCalled()
+  })
+
+  it('windowMinutes="60"（字符串）：返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool('get_pending_posts', { windowMinutes: '60' }, 'user-1')
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+    expect(postMock.findMany).not.toHaveBeenCalled()
+  })
+
+  it('windowMinutes=null：返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool('get_pending_posts', { windowMinutes: null }, 'user-1')
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+    expect(postMock.findMany).not.toHaveBeenCalled()
+  })
+
+  it('windowMinutes=99999（超上限）：返回 INVALID_ARGUMENT', async () => {
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool('get_pending_posts', { windowMinutes: 99999 }, 'user-1')
+    const data = JSON.parse(result.content[0].text)
+    expect(data.errorCode).toBe('INVALID_ARGUMENT')
+    expect(postMock.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('v0.5.2 - TOOLS Schema 中 windowMinutes 字段', () => {
+  it('get_pending_posts inputSchema 应包含 windowMinutes', async () => {
+    const { TOOLS } = await import('@/mcp/external/tools')
+    const tool = TOOLS.find(t => t.name === 'get_pending_posts')
+    expect(tool).toBeDefined()
+    const props = (tool?.inputSchema as { properties: Record<string, unknown> }).properties
+    expect(props).toHaveProperty('windowMinutes')
+    const wm = props.windowMinutes as { type: string; default: number; minimum: number; maximum: number; description: string }
+    expect(wm.type).toBe('integer')
+    expect(wm.default).toBe(60)
+    expect(wm.minimum).toBe(0)
+    expect(wm.maximum).toBe(43200)
+    expect(wm.description.length).toBeGreaterThan(20); // 描述应非空
+  })
+})
