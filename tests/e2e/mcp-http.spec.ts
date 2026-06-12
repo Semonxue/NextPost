@@ -433,4 +433,110 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
     });
   });
 
+  // ============================================================
+  // v0.5.3 report_publish_result 使用服务端时间端到端测试
+  // ============================================================
+  test.describe('v0.5.3 report_publish_result 使用服务端时间', () => {
+    let v53PostSuccessId: string;
+    let v53PostSuccessToken: string;
+    let v53PostPartialId: string;
+    let v53PostPartialToken: string;
+
+    test.beforeAll(async () => {
+      // 准备一个 scheduled 帖子用于 success 场景
+      const successPost = await prisma.post.create({
+        data: {
+          userId: testUser.id,
+          accountId: testAccount.id,
+          content: 'v0.5.3 success test post',
+          mediaUrls: '[]',
+          status: 'scheduled',
+          scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+          publishToken: `tok_v53_success_${Date.now()}`,
+        },
+      });
+      v53PostSuccessId = successPost.id;
+      v53PostSuccessToken = successPost.publishToken!;
+
+      // 准备一个 scheduled 帖子用于 partial 场景
+      const partialPost = await prisma.post.create({
+        data: {
+          userId: testUser.id,
+          accountId: testAccount.id,
+          content: 'v0.5.3 partial test post',
+          mediaUrls: '[]',
+          status: 'scheduled',
+          scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+          publishToken: `tok_v53_partial_${Date.now()}`,
+        },
+      });
+      v53PostPartialId = partialPost.id;
+      v53PostPartialToken = partialPost.publishToken!;
+    });
+
+    test.afterAll(async () => {
+      await prisma.post.deleteMany({ where: { id: { in: [v53PostSuccessId, v53PostPartialId] } } });
+    });
+
+    test('TC-MCP-HTTP-020 (v0.5.3): 死机重试场景 — success 时传 1 小时前 publishedAt，断言服务端用 Date.now() 写入', async () => {
+      // 死机重试模拟：CLI 死机 1 小时后重试回传，publishedAt 是 1 小时前
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const beforeCall = Date.now();
+
+      const data = await callTool(readKey, 'report_publish_result', {
+        postId: v53PostSuccessId,
+        publishToken: v53PostSuccessToken,
+        status: 'success',
+        externalPostUrl: 'https://x.com/test/v053',
+        publishedAt: oneHourAgo,  // 死机前的时间
+      });
+
+      expect(data.received).toBe(true);
+      expect(data.postStatus).toBe('published');
+
+      // 关键断言：从 DB 读 publishedAt，应该是服务端时间，不是 1 小时前
+      const updated = await prisma.post.findUnique({ where: { id: v53PostSuccessId } });
+      expect(updated).not.toBeNull();
+      const publishedAtMs = updated!.publishedAt!.getTime();
+      const oneHourAgoMs = new Date(oneHourAgo).getTime();
+
+      // 绝对不能是 1 小时前
+      expect(publishedAtMs).not.toBe(oneHourAgoMs);
+      // 必须是 beforeCall 之后 5 秒内（服务端时间）
+      expect(publishedAtMs).toBeGreaterThanOrEqual(beforeCall - 1000);
+      expect(Math.abs(publishedAtMs - beforeCall)).toBeLessThan(5000);
+      // status 也被改了
+      expect(updated!.status).toBe('published');
+    });
+
+    test('TC-MCP-HTTP-021 (v0.5.3): partial 时同样忽略外部 publishedAt 用服务端时间', async () => {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const beforeCall = Date.now();
+
+      const data = await callTool(readKey, 'report_publish_result', {
+        postId: v53PostPartialId,
+        publishToken: v53PostPartialToken,
+        status: 'partial',
+        externalPostUrl: 'https://x.com/test/v053-partial',
+        publishedAt: twoHoursAgo,  // 2 小时前
+        errorMessage: 'image upload failed',
+      });
+
+      expect(data.received).toBe(true);
+      expect(data.postStatus).toBe('published');
+
+      const updated = await prisma.post.findUnique({ where: { id: v53PostPartialId } });
+      const publishedAtMs = updated!.publishedAt!.getTime();
+      const twoHoursAgoMs = new Date(twoHoursAgo).getTime();
+
+      // 关键：不是 2 小时前
+      expect(publishedAtMs).not.toBe(twoHoursAgoMs);
+      // 是服务端时间
+      expect(publishedAtMs).toBeGreaterThanOrEqual(beforeCall - 1000);
+      expect(Math.abs(publishedAtMs - beforeCall)).toBeLessThan(5000);
+      // partial 时 publishError 保留
+      expect(updated!.publishError).toBe('image upload failed');
+    });
+  });
+
 });

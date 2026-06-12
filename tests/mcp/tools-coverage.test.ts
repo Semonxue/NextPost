@@ -260,7 +260,8 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
     accountMock.findMany = vi.fn()
   })
 
-  it('success：使用传入的 publishedAt 或当前时间', async () => {
+  // v0.5.3：成功时忽略外部 publishedAt，统一使用服务端时间（Date.now()）
+  it('success：忽略外部 publishedAt 改为使用服务端时间（v0.5.3 修复）', async () => {
     postMock.findFirst.mockResolvedValue({
       id: 'p1', userId: 'user-1', publishToken: 'tok_abc', status: 'scheduled',
     })
@@ -270,7 +271,7 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
     const result = await executeTool('report_publish_result', {
       postId: 'p1', publishToken: 'tok_abc', status: 'success',
       externalPostUrl: 'https://x.com/1',
-      publishedAt: '2026-06-01T10:00:00Z', // 应该使用传入的时间
+      publishedAt: '2026-06-01T10:00:00Z', // v0.5.3 起被忽略，Post.publishedAt 用服务端时间
       externalPostId: 'tw_123',
     }, 'user-1')
     const afterCall = new Date()
@@ -288,10 +289,13 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
         publishAttempts: { increment: 1 },
       }),
     })
-    // 验证 publishedAt 使用传入的值：2026-06-01T10:00:00Z = 1780308000000
+    // 关键：publishedAt 应该是 Date.now()，不是外部传的时间
     const updateArgs = postMock.update.mock.calls[0][0]
     const publishedAt = updateArgs.data.publishedAt as Date
-    expect(publishedAt.getTime()).toBe(1780308000000)
+    expect(publishedAt.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime())
+    expect(publishedAt.getTime()).toBeLessThanOrEqual(afterCall.getTime())
+    // 关键断言：绝对不是外部传的时间（2026-06-01T10:00:00Z = 1780308000000）
+    expect(publishedAt.getTime()).not.toBe(1780308000000)
   })
 
   it('success：未传 publishedAt 时使用当前时间', async () => {
@@ -319,7 +323,8 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
     expect(publishedAt.getTime()).toBeLessThanOrEqual(afterCall.getTime())
   })
 
-  it('partial：使用传入的 publishedAt 或当前时间', async () => {
+  // v0.5.3：partial 时也忽略外部 publishedAt
+  it('partial：忽略外部 publishedAt 改为使用服务端时间（v0.5.3 修复）', async () => {
     postMock.findFirst.mockResolvedValue({
       id: 'p1', userId: 'user-1', publishToken: 'tok_abc', status: 'scheduled',
     })
@@ -329,7 +334,7 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
     const result = await executeTool('report_publish_result', {
       postId: 'p1', publishToken: 'tok_abc', status: 'partial',
       externalPostUrl: 'https://x.com/1',
-      publishedAt: '2026-06-01T10:00:00Z', // 应该使用传入的时间
+      publishedAt: '2026-06-01T10:00:00Z', // v0.5.3 起被忽略
       errorMessage: 'some warning',
     }, 'user-1')
     const afterCall = new Date()
@@ -339,8 +344,10 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
     expect(data.postStatus).toBe('published')
     const updateArgs = postMock.update.mock.calls[0][0]
     const publishedAt = updateArgs.data.publishedAt as Date
-    // 应该使用传入的 2026-06-01T10:00:00Z = 1780308000000
-    expect(publishedAt.getTime()).toBe(1780308000000)
+    // 关键：使用 Date.now()，不是外部传的时间
+    expect(publishedAt.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime())
+    expect(publishedAt.getTime()).toBeLessThanOrEqual(afterCall.getTime())
+    expect(publishedAt.getTime()).not.toBe(1780308000000)
   })
 
   it('partial：未传 publishedAt 时使用当前时间', async () => {
@@ -452,6 +459,63 @@ describe('MCP Tools - report_publish_result (executeTool)', () => {
         publishError: 'image upload failed',
       }),
     })
+  })
+
+  // ===== v0.5.3 新增用例：死机重试场景 + 健壮性 =====
+  it('v0.5.3 时间漂移场景：传 1 小时前的 publishedAt，断言使用服务端时间（不是 1 小时前）', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'user-1', publishToken: 'tok_abc', status: 'scheduled',
+    })
+    postMock.update.mockResolvedValue({})
+    const beforeCall = new Date()
+    // 模拟外部 CLI 死机 1 小时后回传：publishedAt 是 1 小时前
+    const oneHourAgo = new Date(beforeCall.getTime() - 60 * 60 * 1000)
+    const { executeTool } = await import('@/mcp/external/tools')
+    const result = await executeTool('report_publish_result', {
+      postId: 'p1', publishToken: 'tok_abc', status: 'success',
+      externalPostUrl: 'https://x.com/1',
+      publishedAt: oneHourAgo.toISOString(),
+    }, 'user-1')
+    const afterCall = new Date()
+    const data = JSON.parse(result.content[0].text)
+
+    expect(data.received).toBe(true)
+    expect(data.postStatus).toBe('published')
+    const updateArgs = postMock.update.mock.calls[0][0]
+    const publishedAt = updateArgs.data.publishedAt as Date
+    // 关键：使用服务端时间，应该是 beforeCall~afterCall 之间
+    expect(publishedAt.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime())
+    expect(publishedAt.getTime()).toBeLessThanOrEqual(afterCall.getTime())
+    // 关键：绝对不能是 1 小时前
+    expect(publishedAt.getTime()).not.toBe(oneHourAgo.getTime())
+    // 进一步断言：与服务端时间相差不超过 5 秒
+    expect(Math.abs(publishedAt.getTime() - beforeCall.getTime())).toBeLessThan(5000)
+  })
+
+  it('v0.5.3 健壮性：publishedAt 为空字符串或无效 ISO 也不影响写入', async () => {
+    postMock.findFirst.mockResolvedValue({
+      id: 'p1', userId: 'user-1', publishToken: 'tok_abc', status: 'scheduled',
+    })
+    postMock.update.mockResolvedValue({})
+    const beforeCall = new Date()
+    const { executeTool } = await import('@/mcp/external/tools')
+    // publishedAt 是无效字符串
+    const result = await executeTool('report_publish_result', {
+      postId: 'p1', publishToken: 'tok_abc', status: 'success',
+      externalPostUrl: 'https://x.com/1',
+      publishedAt: 'not-a-date',
+    }, 'user-1')
+    const afterCall = new Date()
+    const data = JSON.parse(result.content[0].text)
+
+    // 不报错
+    expect(data.received).toBe(true)
+    expect(data.postStatus).toBe('published')
+    const updateArgs = postMock.update.mock.calls[0][0]
+    const publishedAt = updateArgs.data.publishedAt as Date
+    // 仍然使用 Date.now()
+    expect(publishedAt.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime())
+    expect(publishedAt.getTime()).toBeLessThanOrEqual(afterCall.getTime())
   })
 
   it('publishToken 不匹配时返回 not_found，不调 update', async () => {

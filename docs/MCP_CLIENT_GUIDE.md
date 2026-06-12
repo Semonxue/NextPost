@@ -1,8 +1,8 @@
 # MCP 客户端对接指南（v0.5+）
 
 > **目标读者**：通过 NextPost MCP Server（`/api/mcp`）对接的 AI 客户端（Claude Desktop / 自主 agent）  
-> **版本**：v0.5.2  
-> **最后更新**：2026-06-11
+> **版本**：v0.5.3  
+> **最后更新**：2026-06-12
 
 ---
 
@@ -218,6 +218,7 @@ external_url = f"https://www.xiaohongshu.com/explore/{note_id}"
       "publishToken": "tok_...",
       "status": "success",
       "publishedAt": "2026-06-05T19:00:30+08:00",
+      // ⚠️ v0.5.3 起 publishedAt 已被服务端忽略，Post.publishedAt 始终使用服务端时间
       "externalPostId": "abc123",
       "externalPostUrl": "https://x.com/user/status/abc123"
     }
@@ -373,6 +374,7 @@ for post in posts:
 
 | 版本 | 变更 |
 |---|---|
+| **v0.5.3** | `report_publish_result` 成功/部分成功时忽略外部 CLI 回传的 `publishedAt`，统一使用服务端 `Date.now()` 写入 `Post.publishedAt`，解决外部 CLI 死机/断网重试导致的时间漂移。`publishedAt` 字段保留以维持 schema 向后兼容（标记为已废弃）。 |
 | v0.5.2 | `get_pending_posts` 新增 `windowMinutes` 时间窗口参数（默认 60，范围 0~43200），以当前时间为中心的对称窗口 `[now-N, now+N]`；不传时默认仅返回 ±1 小时内的待发帖子。**破坏性变更**：旧客户端期望"返回全部"，需显式传 `43200` 还原旧行为。详见 §4.3。 |
 | v0.5.0 | 新增 `title` 字段（`create_post` / `update_post` / `get_pending_posts` / `get_post_detail`）；新增 `extractedTopics` 计算字段（`get_pending_posts` / `get_post_detail`）；Xiaohongshu 平台支持 |
 | v0.4.2 | `update_post` 支持 `content` / `mediaUrls` |

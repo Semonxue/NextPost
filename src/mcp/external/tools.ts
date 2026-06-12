@@ -193,7 +193,7 @@ export const TOOLS: Tool[] = [
         },
         publishedAt: {
           type: 'string',
-          description: '实际发布时间，必须是带时区的 ISO 8601 格式（如 2026-06-03T19:40:00+08:00 或 2026-06-03T11:40:00Z）。NextPost 会自动解析时区并存储为 UTC'
+          description: '（v0.5.3 起已废弃，服务端忽略）保留字段仅为向后兼容。NextPost 在标记 status=published 时始终使用服务端时间 (Date.now()) 写入 Post.publishedAt，避免外部 CLI 死机重试 / 时钟漂移导致的时间不一致。'
         },
         externalPostId: {
           type: 'string',
@@ -538,8 +538,8 @@ async function reportPublishResult(
   switch (status) {
     case 'success':
       updateData.status = 'published';
-      // 使用传入的 publishedAt 或当前时间
-      updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
+      // v0.5.3：始终使用服务端时间（忽略外部 CLI 回传的 publishedAt），避免外部 CLI 死机/断网重试导致的时间漂移
+      updateData.publishedAt = new Date();
       if (externalPostId) {
         updateData.externalPostId = externalPostId;
       }
@@ -557,8 +557,8 @@ async function reportPublishResult(
       break;
     case 'partial':
       updateData.status = 'published';
-      // 使用传入的 publishedAt 或当前时间
-      updateData.publishedAt = publishedAt ? new Date(publishedAt) : new Date();
+      // v0.5.3：同上，统一服务端时间
+      updateData.publishedAt = new Date();
       updateData.publishError = errorMessage || 'Partial success';
       break;
   }

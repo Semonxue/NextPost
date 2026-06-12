@@ -15,7 +15,8 @@
 | **v0.4.5** | **2026-06-03** | **测试覆盖补充**：MediaPreview / MediaUploader / Pagination 组件、`/api/posts/[id]` PATCH 分支、`thumbnail.ts` 递归质量压缩等覆盖率提升 |
 | **v0.4.6** | **2026-06-03** | **配置集中重构（src/lib/config.ts）**：将分散的缩略图尺寸、媒体上传上限、cookie 名等常量统一收拢；同步更新 consumers（`thumbnail.ts` / `tools.ts` / `filterStore.ts` 等）|
 | **v0.4.7** | **2026-06-03** | **posts/trash/stats 健壮性提升**：账号/平台提取逻辑、trash 状态处理、stats 路由增强 |
-| **v0.4.8** | **2026-06-04** | **端口单一源（APP_URL）**：所有 URL 概念从 `APP_URL` env 派生；新增 `scripts/dev.mjs` 解析 `APP_URL` 自动注入 `PORT` / `NEXTAUTH_URL` / `NEXT_PUBLIC_BASE_URL`；UI / 工具 / 测试 / 文档全部改用 helper；vitest setup 默认给 `APP_URL` 兜底；`getAppUrl()` / `getPort()` / `getMcpEndpointUrl()` helper 覆盖单测；端口从 3000 → 3456 |
+| **v0.5.3** | **2026-06-12** | **`report_publish_result` 使用服务端时间**：`success` / `partial` 时忽略外部 CLI 回传的 `publishedAt`，统一用 NextPost 服务端 `Date.now()` 写入 `Post.publishedAt`，解决外部 CLI 死机/断网重试导致的时间漂移问题。Schema 零改动，旧客户端继续传 `publishedAt` 不报错（字段被静默忽略）。详见 [V0.5.3.md](./V0.5.3.md)。 |
+| | **v0.4.8** | **2026-06-04** | **端口单一源（APP_URL）**：所有 URL 概念从 `APP_URL` env 派生；新增 `scripts/dev.mjs` 解析 `APP_URL` 自动注入 `PORT` / `NEXTAUTH_URL` / `NEXT_PUBLIC_BASE_URL`；UI / 工具 / 测试 / 文档全部改用 helper；vitest setup 默认给 `APP_URL` 兜底；`getAppUrl()` / `getPort()` / `getMcpEndpointUrl()` helper 覆盖单测；端口从 3000 → 3456 |
 
 
 ---
