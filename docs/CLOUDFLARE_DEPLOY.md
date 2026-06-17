@@ -8,7 +8,7 @@
 
 ## 概述
 
-本文档描述 NextPost 部署到 Cloudflare Pages 的完整方案，包括本地开发环境配置、云端资源创建、CI/CD 自动化部署以及数据隔离策略。
+本文档描述 NextPost 部署到 Cloudflare Pages 的完整方案。
 
 ### 部署架构
 
@@ -21,11 +21,11 @@
 │  │   Pages Site    │     │  Pages Functions │                   │
 │  │   (静态资源)     │     │   (API 路由)     │                   │
 │  └─────────────────┘     └─────────────────┘                   │
-│           │                       │                            │
-│           │                       │                            │
+│           │                       │                              │
+│           │                       │                              │
 │  ┌────────┴────────┐     ┌────────┴────────┐                   │
 │  │     R2 Bucket    │     │      D1 DB      │                   │
-│  │  (媒体文件存储)   │     │   (SQLite)     │                   │
+│  │  (媒体文件存储)   │     │   (共享数据库)   │                   │
 │  └─────────────────┘     └─────────────────┘                   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -36,60 +36,120 @@
 | 组件 | 本地开发 | 云端部署 |
 |------|---------|---------|
 | 框架 | Next.js 16.2.6 | Cloudflare Pages |
-| 数据库 | SQLite 文件 | Cloudflare D1 |
+| 数据库 | SQLite 文件 | Cloudflare D1（共享） |
 | 存储 | 本地文件系统 | Cloudflare R2 |
 | 认证 | NextAuth.js | NextAuth.js (适配) |
 | CI/CD | - | GitHub Actions |
 
+### 多租户隔离策略
+
+**共享数据库 + userId 隔离**
+
+- 所有租户共享同一个 D1 数据库
+- 通过 `userId` 字段实现数据隔离
+- Prisma 查询自动带上 `userId` 条件
+- R2 存储桶共用，通过路径前缀区分（`uploads/{userId}/`）
+
 ---
 
-## Phase 1：环境准备
+## 第一步：Cloudflare 资源创建
 
-### 1.1 安装必要工具
+### 1.1 登录 Cloudflare
+
+访问 [Cloudflare Dashboard](https://dash.cloudflare.com/) 并登录。
+
+### 1.2 创建 D1 数据库
+
+**方式一：通过 Dashboard**
+
+1. 进入 **Workers & Pages** → **D1 Databases**
+2. 点击 **Create database**
+3. 输入数据库名称：`nextpost-db`
+4. 选择区域（默认即可）
+5. 点击 **Create**
+
+**方式二：通过 Wrangler CLI**
 
 ```bash
-# 安装 Wrangler CLI
+# 安装 Wrangler
 npm i -g wrangler
 
-# 登录 Cloudflare
+# 登录
 wrangler login
 
-# 验证登录
-wrangler whoami
-```
-
-### 1.2 创建 Cloudflare 资源
-
-#### 创建 D1 数据库
-
-```bash
-# 创建生产数据库
+# 创建数据库
 wrangler d1 create nextpost-db
-
-# 创建预览数据库（可选）
-wrangler d1 create nextpost-db-preview
 ```
 
 返回结果示例：
 ```
+✅ Successfully created D1 database 'nextpost-db'
 {d1_databases: { binding = "DB", database_name = "nextpost-db", database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" }}
 ```
 
-#### 创建 R2 存储桶
+**记录下 `database_id`**，稍后需要用到。
+
+### 1.3 创建 R2 存储桶
+
+**方式一：通过 Dashboard**
+
+1. 进入 **Workers & Pages** → **R2 Object Storage**
+2. 点击 **Create bucket**
+3. 输入存储桶名称：`nextpost-media`
+4. 点击 **Create bucket**
+
+**方式二：通过 Wrangler CLI**
 
 ```bash
-# 创建生产存储桶
 wrangler r2 bucket create nextpost-media
-
-# 创建预览存储桶（可选）
-wrangler r2 bucket create nextpost-media-preview
 ```
+
+### 1.4 创建 Cloudflare API Token
+
+1. 进入 **My Profile** → **API Tokens**
+2. 点击 **Create Token**
+3. 选择 **Edit Cloudflare Workers** 模板
+4. 设置以下权限：
+   - `Account: Workers:Edit`
+   - `User: Scripts:Edit`
+   - `Zone: Cache Purge`
+5. 点击 **Create Token**
+6. **复制并保存 Token**（只会显示一次）
+
+### 1.5 获取 Account ID
+
+1. 进入 **Overview** 页面
+2. 滚动到右侧，复制 **Account ID**
 
 ---
 
-## Phase 2：项目配置
+## 第二步：配置 GitHub Secrets
 
-### 2.1 创建 wrangler.toml
+### 2.1 添加 Secrets
+
+在 GitHub 仓库 **Settings** → **Secrets and variables** → **Actions** 中添加：
+
+| Secret Name | 值 |
+|-------------|---|
+| `CLOUDFLARE_API_TOKEN` | 刚才创建的 API Token |
+| `CLOUDFLARE_ACCOUNT_ID` | 刚才获取的 Account ID |
+| `AUTH_SECRET` | 随机密钥，生成方式见下方 |
+
+**生成 AUTH_SECRET：**
+
+```bash
+openssl rand -base64 32
+```
+
+### 2.2 添加 Variables（可选）
+
+| Variable Name | 值 |
+|---------------|---|
+| `NEXT_PUBLIC_BASE_URL` | 你的域名，如 `https://nextpost.pages.dev` |
+
+---
+
+## 第三步：配置 wrangler.toml
 
 在项目根目录创建 `wrangler.toml`：
 
@@ -98,641 +158,212 @@ name = "nextpost"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = ".next"
 
-# 生产环境 D1 数据库
+# D1 数据库绑定
 [[d1_databases]]
 binding = "DB"
 database_name = "nextpost-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-
-# 生产环境 R2 存储
-[[r2_buckets]]
-binding = "MEDIA"
-bucket_name = "nextpost-media"
+database_id = "你的-database-id"
 ```
 
-### 2.2 环境变量配置
+---
 
-创建 `.dev.vars`（本地开发用，不提交到 Git）：
+## 第四步：创建 Cloudflare Pages 项目
+
+### 4.1 通过 Dashboard 创建
+
+1. 进入 **Workers & Pages** → **Create application**
+2. 选择 **Pages** → **Connect to Git**
+3. 选择你的 GitHub 仓库
+4. 配置构建设置：
+   - **Project name**: `nextpost`
+   - **Build command**: `pnpm build`
+   - **Build output directory**: `.next`
+   - **Root directory**: `/`
+5. 点击 **Deploy**
+
+### 4.2 绑定 D1 数据库
+
+部署后，进入项目 **Settings** → **Functions** → **D1 Database Bindings**：
+- 变量名：`DB`
+- D1 database：选择 `nextpost-db`
+
+### 4.3 绑定 R2 存储桶
+
+进入项目 **Settings** → **Functions** → **R2 Database Bindings**：
+- 变量名：`MEDIA`
+- R2 bucket：选择 `nextpost-media`
+
+### 4.4 配置环境变量
+
+进入项目 **Settings** → **Environment variables**：
+
+**Production 环境：**
+| Variable | Value |
+|----------|-------|
+| `AUTH_SECRET` | 你的随机密钥 |
+| `NEXT_PUBLIC_BASE_URL` | `https://nextpost.pages.dev` |
+| `STORAGE_ENGINE` | `r2` |
+| `DATABASE_URL` | （留空或删除） |
+
+---
+
+## 第五步：运行数据库迁移
+
+### 5.1 推送 Prisma Schema
 
 ```bash
-# .dev.vars
-AUTH_SECRET=your-super-secret-key-min-32-chars
+# 安装 Wrangler（如果还没安装）
+npm i -g wrangler
+
+# 登录
+wrangler login
+
+# 创建本地 D1 数据库（用于生成迁移）
+wrangler d1 create nextpost-db --local
+
+# 生成迁移（使用现有 schema）
+pnpm prisma migrate dev --name init
+
+# 将迁移推送到远程 D1
+pnpm prisma migrate deploy
+```
+
+或者直接执行 SQL：
+
+```bash
+# 查看生成的 SQL
+cat prisma/migrations/*/migration.sql
+
+# 在远程 D1 执行
+wrangler d1 execute nextpost-db --remote --file=prisma/migrations/xxx/migration.sql
+```
+
+### 5.2 运行 Seed
+
+```bash
+# 种子数据会创建默认平台配置
+pnpm prisma db seed
+```
+
+---
+
+## 第六步：本地开发配置
+
+### 6.1 环境变量
+
+创建 `.env.local`：
+
+```bash
+# .env.local（本地开发用）
+AUTH_SECRET=你的本地随机密钥
 DATABASE_URL=file:./prisma/dev.db
 STORAGE_ENGINE=local
 NEXT_PUBLIC_BASE_URL=http://localhost:3456
-NEXTAUTH_URL=http://localhost:3456
 ```
 
-创建 `.env.example`（提交到 Git，作为模板）：
+创建 `.dev.vars`（Wrangler 本地开发用）：
 
 ```bash
-# .env.example
-
-# ===================
-# Cloudflare 配置
-# ===================
-# 在 Cloudflare Dashboard 中获取
-CLOUDFLARE_ACCOUNT_ID=your-account-id
-CLOUDFLARE_API_TOKEN=your-api-token
-
-# ===================
-# 认证配置
-# ===================
-AUTH_SECRET=generate-with-openssl-rand-base64-32
-NEXTAUTH_URL=https://your-domain.pages.dev
-
-# ===================
-# 数据库配置（本地开发）
-# ===================
-DATABASE_URL=file:./prisma/dev.db
-
-# ===================
-# 存储配置
-# ===================
-# local: 本地文件系统
-# r2: Cloudflare R2
-STORAGE_ENGINE=local
-
-# ===================
-# 公共配置
-# ===================
-NEXT_PUBLIC_BASE_URL=https://your-domain.pages.dev
+# .dev.vars
+AUTH_SECRET=你的本地随机密钥
 ```
 
-### 2.3 更新 next.config.ts
-
-```typescript
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  // Cloudflare Pages 适配
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '*.r2.cloudflarestorage.com',
-      },
-    ],
-  },
-  
-  // 实验性功能
-  experimental: {
-    // 启用 Cloudflare 适配
-    serverActions: {
-      allowedOrigins: ['localhost:3456', '*.pages.dev'],
-    },
-  },
-};
-
-export default nextConfig;
-```
-
----
-
-## Phase 3：存储引擎实现
-
-### 3.1 实现 R2 存储引擎
-
-创建 `src/lib/storage/r2.ts`：
-
-```typescript
-import { StorageEngine } from './types';
-
-export class R2StorageEngine implements StorageEngine {
-  private bucket: R2Bucket;
-  
-  constructor(bucket: R2Bucket) {
-    this.bucket = bucket;
-  }
-  
-  async upload(file: Buffer, filename: string, mimeType: string): Promise<string> {
-    const key = `uploads/${Date.now()}-${filename}`;
-    
-    await this.bucket.put(key, file, {
-      httpMetadata: {
-        contentType: mimeType,
-      },
-    });
-    
-    return key;
-  }
-  
-  async delete(url: string): Promise<void> {
-    await this.bucket.delete(url);
-  }
-  
-  getUrl(path: string): string {
-    // Cloudflare R2 公开访问 URL
-    return `https://pub-xxx.r2.dev/${path}`;
-  }
-  
-  async exists(path: string): Promise<boolean> {
-    const object = await this.bucket.head(path);
-    return object !== null;
-  }
-}
-
-// 工厂函数
-export function createR2Storage(bucket: R2Bucket): R2StorageEngine {
-  return new R2StorageEngine(bucket);
-}
-```
-
-### 3.2 更新存储索引文件
-
-修改 `src/lib/storage/index.ts`：
-
-```typescript
-import { localStorage, LocalStorageEngine } from './local';
-import { R2StorageEngine } from './r2';
-import { StorageEngine, StorageEngineType, UploadResult } from './types';
-
-// 获取存储引擎（根据环境变量）
-function getStorageEngine(): StorageEngine {
-  const engineType = (process.env.STORAGE_ENGINE || 'local') as StorageEngineType;
-  
-  switch (engineType) {
-    case 'local':
-      return localStorage;
-    case 'r2':
-      // 注意：R2 绑定在 Cloudflare Pages Functions 中可用
-      if (process.env.MEDIA) {
-        return new R2StorageEngine(process.env.MEDIA as unknown as R2Bucket);
-      }
-      console.warn('R2 bucket not configured, falling back to local storage');
-      return localStorage;
-    default:
-      return localStorage;
-  }
-}
-
-// ... 其他代码保持不变
-```
-
----
-
-## Phase 4：认证适配
-
-### 4.1 更新 NextAuth 配置
-
-Cloudflare Pages 需要特殊处理 NextAuth 的 `AUTH_SECRET` 和 `NEXTAUTH_URL`：
-
-```typescript
-// src/lib/auth.ts
-import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import prisma from "./prisma";
-
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Credentials({
-      name: "credentials",
-      credentials: {
-        username: { label: "用户名", type: "text" },
-        password: { label: "密码", type: "password" },
-      },
-      async authorize(credentials) {
-        // ... 保持原有逻辑
-      },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-  },
-  session: {
-    strategy: "jwt",
-  },
-  // Cloudflare 适配
-  trustHost: true,
-});
-```
-
-### 4.2 中间件更新
-
-```typescript
-// src/middleware.ts
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
-
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const isAuthPage = req.nextUrl.pathname.startsWith("/login") || 
-                     req.nextUrl.pathname.startsWith("/register");
-  
-  // API 路由允许通过（CORS 等）
-  if (req.nextUrl.pathname.startsWith("/api")) {
-    return NextResponse.next();
-  }
-  
-  // 静态资源允许通过
-  if (req.nextUrl.pathname.startsWith("/_next") || 
-      req.nextUrl.pathname.startsWith("/uploads")) {
-    return NextResponse.next();
-  }
-
-  if (!isLoggedIn && !isAuthPage) {
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  if (isLoggedIn && isAuthPage) {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-
-  return NextResponse.next();
-});
-
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
-```
-
----
-
-## Phase 5：CI/CD 自动化
-
-### 5.1 创建 GitHub Actions 工作流
-
-创建 `.github/workflows/deploy.yml`：
-
-```yaml
-name: Deploy to Cloudflare Pages
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
-env:
-  NODE_VERSION: '20'
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-      
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      
-      - name: Type check
-        run: pnpm type-check
-      
-      - name: Run tests
-        run: pnpm test
-      
-      - name: Build
-        run: pnpm build
-        env:
-          NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-      
-      - name: Deploy to Cloudflare (Preview)
-        if: github.event_name == 'pull_request'
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: 'nextpost'
-          directory: '.next'
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          wranglerVersion: '3'
-      
-      - name: Deploy to Cloudflare (Production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: 'nextpost'
-          directory: '.next'
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          wranglerVersion: '3'
-          environment: 'production'
-
-  e2e-test:
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: github.event_name == 'pull_request'
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-      
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      
-      - name: Install Playwright
-        run: pnpm exec playwright install --with-deps chromium
-      
-      - name: Run E2E tests
-        run: pnpm test:e2e
-        env:
-          NEXT_PUBLIC_BASE_URL: ${{ needs.deploy.outputs.preview_url }}
-```
-
-### 5.2 数据库迁移工作流
-
-创建 `.github/workflows/migrate.yml`：
-
-```yaml
-name: Database Migration
-
-on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'preview'
-        type: choice
-        options:
-          - preview
-          - production
-
-jobs:
-  migrate:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Install Wrangler
-        run: npm install -g wrangler
-      
-      - name: Run Migrations
-        run: |
-          wrangler d1 migrations apply nextpost-db \
-            --env ${{ inputs.environment }} \
-            --local
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-```
-
-### 5.3 添加 Secrets
-
-在 GitHub 仓库 Settings → Secrets and variables → Actions 中添加：
-
-| Secret Name | 说明 |
-|-------------|------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
-| `AUTH_SECRET` | NextAuth 密钥（32+ 字符） |
-| `NEXT_PUBLIC_BASE_URL` | 生产环境 URL |
-
----
-
-## Phase 6：本地开发环境
-
-### 6.1 本地 D1 开发
+### 6.2 本地开发
 
 ```bash
-# 创建本地 D1 数据库
-wrangler d1 create nextpost-db --local
-
-# 导入现有 schema
-wrangler d1 execute nextpost-db --local --file=./prisma/migrations/xxx.sql
-
-# 查看数据
-wrangler d1 execute nextpost-db --local --command="SELECT * FROM User LIMIT 10"
-```
-
-### 6.2 本地 R2 开发
-
-Cloudflare Pages 本地开发使用 Miniflare 模拟 R2：
-
-```bash
-# 启动本地开发服务器
-wrangler pages dev .next
-
-# 或者使用 Next.js dev
+# 本地开发（SQLite + 本地文件）
 pnpm dev
-```
 
-### 6.3 同步脚本
-
-创建 `scripts/sync-to-r2.ts` 用于同步本地文件到 R2：
-
-```typescript
-#!/usr/bin/env node
-/**
- * 同步本地 uploads 目录到 R2 存储桶
- * 用法: npx tsx scripts/sync-to-r2.ts
- */
-
-import { execSync } from 'child_process';
-import { readdirSync, statSync, createReadStream } from 'fs';
-import { join } from 'path';
-
-const UPLOADS_DIR = './uploads';
-const BUCKET_NAME = 'nextpost-media';
-
-function walkDir(dir: string): string[] {
-  const files: string[] = [];
-  
-  function traverse(currentDir: string) {
-    const items = readdirSync(currentDir);
-    for (const item of items) {
-      const fullPath = join(currentDir, item);
-      const stat = statSync(fullPath);
-      
-      if (stat.isDirectory()) {
-        traverse(fullPath);
-      } else if (stat.isFile()) {
-        files.push(fullPath);
-      }
-    }
-  }
-  
-  traverse(dir);
-  return files;
-}
-
-async function uploadFile(localPath: string) {
-  const relativePath = localPath.replace(UPLOADS_DIR + '/', '');
-  const r2Key = `uploads/${relativePath}`;
-  
-  try {
-    execSync(
-      `wrangler r2 object put ${BUCKET_NAME}/${r2Key} --file=${localPath}`,
-      { stdio: 'pipe' }
-    );
-    console.log(`✅ Uploaded: ${r2Key}`);
-  } catch (error) {
-    console.error(`❌ Failed: ${r2Key}`, error);
-  }
-}
-
-async function main() {
-  console.log('🚀 Starting upload to R2...\n');
-  
-  const files = walkDir(UPLOADS_DIR);
-  console.log(`Found ${files.length} files to upload\n`);
-  
-  for (const file of files) {
-    await uploadFile(file);
-  }
-  
-  console.log('\n✨ Done!');
-}
-
-main().catch(console.error);
+# 或者用 Wrangler 本地模拟 Cloudflare 环境
+wrangler pages dev .next
 ```
 
 ---
 
-## Phase 7：数据隔离策略
+## CI/CD 工作流
 
-### 7.1 环境对比
+### 部署触发条件
 
-| 数据类型 | 本地开发 | 预览环境 | 生产环境 |
-|---------|---------|---------|---------|
-| 数据库 | SQLite 文件 | D1 (preview) | D1 (production) |
-| 存储 | 本地文件系统 | R2 (preview) | R2 (production) |
-| 迁移 | 本地执行 | CI 自动 | CI 自动 |
-| 数据 | 完全隔离 | 独立数据 | 独立数据 |
+| 事件 | 行为 |
+|------|------|
+| Push 到 `main` | 部署到 Production |
+| Push 到 PR | 部署到 Preview |
+| 打标签 `v*` | 创建 Release |
 
-### 7.2 迁移策略
+### 部署流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      开发工作流                                  │
+│                      GitHub Actions                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. 本地修改 schema.prisma                                     │
-│  2. pnpm prisma migrate dev --name add_xxx                     │
-│  3. 本地测试通过                                                │
-│  4. git commit && git push                                     │
-│  5. CI 自动部署到 Preview 环境                                  │
-│     - wrangler d1 migrations apply --env preview               │
-│  6. 人工检查 Preview                                            │
-│  7. Merge 到 main                                               │
-│  8. CI 自动部署到 Production 环境                               │
-│     - wrangler d1 migrations apply --env production            │
+│  1. 检出代码                                                    │
+│  2. 安装 pnpm 依赖                                              │
+│  3. 运行测试 (vitest)                                          │
+│  4. 构建项目 (pnpm build)                                      │
+│  5. 部署到 Cloudflare Pages                                    │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.3 种子数据同步
+---
 
-对于 Platform、PlatformConfig 等基础数据：
+## 本地开发与线上数据隔离
 
-```bash
-# 本地导出
-sqlite3 prisma/dev.db ".dump Platform PlatformConfig" > seed.sql
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        本地开发环境                               │
+├─────────────────────────────────────────────────────────────────┤
+│  数据库: SQLite 文件 (prisma/dev.db)                           │
+│  存储:   本地目录 (./uploads/)                                  │
+│  数据:   完全隔离，不影响线上                                   │
+└─────────────────────────────────────────────────────────────────┘
 
-# 清理 SQLite 特定语法
-sed -i '' "s/PRAGMA foreign_keys=ON;//g" seed.sql
-
-# 线上导入
-wrangler d1 execute nextpost-db --remote --file=seed.sql
+┌─────────────────────────────────────────────────────────────────┐
+│                        线上生产环境                               │
+├─────────────────────────────────────────────────────────────────┤
+│  数据库: Cloudflare D1 (共享)                                   │
+│  存储:   Cloudflare R2 (共享，通过 userId 隔离)                  │
+│  数据:   所有用户共享同一数据库                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 8：故障排查
+## 故障排查
 
-### 8.1 常见问题
+### 常见问题
 
 | 问题 | 解决方案 |
 |------|---------|
-| D1 绑定失败 | 检查 wrangler.toml 的 binding 名称 |
-| R2 上传失败 | 确认 bucket 名称和权限 |
+| D1 绑定失败 | 检查 wrangler.toml 的 `binding = "DB"` |
+| R2 上传失败 | 确认 R2 bucket 名称和 `STORAGE_ENGINE=r2` |
 | AUTH_SECRET 错误 | 使用 `openssl rand -base64 32` 生成 |
-| CORS 错误 | 配置 `_headers` 文件或 Cloudflare Dashboard |
+| 部署失败 | 检查 GitHub Actions 日志 |
 
-### 8.2 调试命令
+### 调试命令
 
 ```bash
-# 查看 Cloudflare 日志
-wrangler pages project list
-wrangler pages deployment list nextpost
-
 # 查看 D1 数据
-wrangler d1 execute nextpost-db --remote --command="SELECT * FROM _prisma_migrations"
+wrangler d1 execute nextpost-db --remote --command="SELECT * FROM User LIMIT 10"
 
-# 测试 R2 连接
+# 查看 R2 文件
 wrangler r2 object list nextpost-media
+
+# 查看部署状态
+wrangler pages project list
 ```
 
 ---
 
-## 附录：完整 wrangler.toml 示例
+## 下一步
 
-```toml
-name = "nextpost"
-compatibility_date = "2024-01-01"
-pages_build_output_dir = ".next"
+部署完成后，可以继续实施：
 
-# 生产环境
-[env.production]
-[[env.production.d1_databases]]
-binding = "DB"
-database_name = "nextpost-db"
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+1. **R2 存储引擎实现** - 将媒体文件存储到 R2
+2. **版本升级系统** - 支持多租户升级
 
-[[env.production.r2_buckets]]
-binding = "MEDIA"
-bucket_name = "nextpost-media"
-
-# 预览环境
-[env.preview]
-[[env.preview.d1_databases]]
-binding = "DB"
-database_name = "nextpost-db-preview"
-database_id = "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
-
-[[env.preview.r2_buckets]]
-binding = "MEDIA"
-bucket_name = "nextpost-media-preview"
-```
+详见 [VERSION_UPGRADE.md](./VERSION_UPGRADE.md)
 
 ---
 
