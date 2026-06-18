@@ -10,7 +10,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { generateApiKey, deleteApiKey, listApiKeys } from '@/mcp/external/auth';
-import prisma from '@/lib/prisma';
 
 // GET 获取 Key 列表
 export async function GET(request: NextRequest) {

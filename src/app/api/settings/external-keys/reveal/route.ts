@@ -5,8 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { eq, and } from 'drizzle-orm';
 import { auth } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { getDb, externalApiKey } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -23,12 +24,10 @@ export async function GET(request: NextRequest) {
   }
   
   try {
-    const apiKey = await prisma.externalApiKey.findFirst({
-      where: {
-        id: keyId,
-        userId: session.user.id
-      }
-    });
+    const db = getDb();
+    const apiKey = db.select().from(externalApiKey)
+      .where(and(eq(externalApiKey.id, keyId), eq(externalApiKey.userId, session.user.id)))
+      .get();
     
     if (!apiKey) {
       return NextResponse.json({ error: 'Key not found' }, { status: 404 });
