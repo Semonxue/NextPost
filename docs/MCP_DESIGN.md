@@ -860,7 +860,7 @@ npm run dev:mcp
       "args": ["./dist/mcp/external/server.js"],
       "env": {
         "MCP_API_KEY": "npk_your_api_key_here",
-        "DATABASE_URL": "file:./prisma/dev.db"
+        "DATABASE_URL": "file:./data/nextpost.db"
       }
     }
   }
@@ -1053,7 +1053,7 @@ pnpm test:coverage
 如果数据库中没有 `ExternalApiKey` 表，需要运行：
 
 ```bash
-pnpm prisma db push
+pnpm pnpm db:migrate:local
 ```
 
 > **v0.5.2 备注**：本次更新无需迁移数据库。

@@ -8,8 +8,8 @@ export async function GET() {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const db = await getDb();
-    const platforms = db.select().from(platform).all();
-    return NextResponse.json(platforms);
+    const platforms = await db.select().from(platform).all();
+    return NextResponse.json({ platforms });
   } catch (error) {
     console.error("获取平台失败:", error);
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });

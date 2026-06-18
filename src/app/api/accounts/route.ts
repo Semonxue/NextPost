@@ -10,7 +10,8 @@ export async function GET() {
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const db = await getDb();
     const rows = await db.select().from(account).leftJoin(platform, eq(account.platformId, platform.id)).where(and(eq(account.userId, session.user.id), isNull(account.deletedAt))).orderBy(desc(account.createdAt)).all();
-    return NextResponse.json(rows.map(r => ({ ...r.account, platform: r.platform })));
+    const accounts = rows.map(r => ({ ...r.Account, platform: r.Platform }));
+    return NextResponse.json({ accounts });
   } catch (error) {
     console.error("获取账号失败:", error);
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });

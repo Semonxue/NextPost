@@ -13,13 +13,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const db = await getDb();
     const acct = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id), isNotNull(account.deletedAt))).get();
     if (!acct) return NextResponse.json({ error: "账号不存在或未删除" }, { status: 404 });
-    const posts = db.select().from(post).where(eq(post.accountId, id)).all();
+    const posts = await db.select().from(post).where(eq(post.accountId, id)).all();
     for (const p of posts) {
       const urls = JSON.parse(p.mediaUrls || "[]");
       for (const url of urls) { try { await deleteFile(url); } catch { /* ignore */ } }
     }
-    db.delete(post).where(eq(post.accountId, id)).run();
-    db.delete(account).where(eq(account.id, id)).run();
+    await db.delete(post).where(eq(post.accountId, id)).execute();
+    await db.delete(account).where(eq(account.id, id)).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("永久删除账号失败:", error);

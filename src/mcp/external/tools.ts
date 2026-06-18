@@ -360,7 +360,7 @@ export const TOOLS: Tool[] = [
 async function listAccounts(userId: string): Promise<ExternalAccount[]> {
   const db = await getDb();
 
-  const accounts = db.select().from(account)
+  const accounts = await db.select().from(account)
     .where(and(eq(account.userId, userId), isNull(account.deletedAt)))
     .all();
 
@@ -368,7 +368,7 @@ async function listAccounts(userId: string): Promise<ExternalAccount[]> {
 
   // 批量获取平台信息
   const platformIds = [...new Set(accounts.map(a => a.platformId))] as string[];
-  const platforms = db.select().from(platform)
+  const platforms = await db.select().from(platform)
     .where(inArray(platform.id, platformIds))
     .all();
   const platformMap = Object.fromEntries(platforms.map(p => [p.id, p]));
@@ -415,7 +415,7 @@ async function getPendingPosts(
     conditions.push(eq(post.accountId, accountId));
   }
 
-  const posts = db.select().from(post)
+  const posts = await db.select().from(post)
     .where(and(...conditions))
     .orderBy(post.scheduledTime)
     .limit(limit)
@@ -425,11 +425,11 @@ async function getPendingPosts(
 
   // 批量获取账号和平台信息
   const accountIds = [...new Set(posts.map(p => p.accountId))] as string[];
-  const accounts = db.select().from(account)
+  const accounts = await db.select().from(account)
     .where(inArray(account.id, accountIds))
     .all();
   const platformIds2 = [...new Set(accounts.map(a => a.platformId))] as string[];
-  const platforms = db.select().from(platform)
+  const platforms = await db.select().from(platform)
     .where(inArray(platform.id, platformIds2))
     .all();
 
@@ -463,7 +463,7 @@ async function getPendingPosts(
 async function getPostDetail(userId: string, postId: string): Promise<ExternalPostDetail | null> {
   const db = await getDb();
 
-  const postRecord = db.select().from(post)
+  const postRecord = await db.select().from(post)
     .where(and(eq(post.id, postId), eq(post.userId, userId), isNull(post.deletedAt)))
     .get();
 
@@ -472,8 +472,8 @@ async function getPostDetail(userId: string, postId: string): Promise<ExternalPo
   }
 
   // 单独查账号和平台
-  const acc = db.select().from(account).where(eq(account.id, postRecord.accountId)).get();
-  const plt = acc ? db.select().from(platform).where(eq(platform.id, acc.platformId)).get() : null;
+  const acc = await db.select().from(account).where(eq(account.id, postRecord.accountId)).get();
+  const plt = acc ? await db.select().from(platform).where(eq(platform.id, acc.platformId)).get() : null;
 
   // 将 mediaUrls 中的相对路径转换为完整 URL
   const rawMediaUrls = JSON.parse(postRecord.mediaUrls || '[]') as string[];
@@ -512,7 +512,7 @@ async function reportPublishResult(
   const db = await getDb();
 
   // 验证帖子存在且令牌匹配
-  const existing = db.select().from(post)
+  const existing = await db.select().from(post)
     .where(and(eq(post.id, postId), eq(post.publishToken, publishToken), isNull(post.deletedAt)))
     .get();
 
@@ -551,7 +551,7 @@ async function reportPublishResult(
   }
 
   // 更新帖子
-  db.update(post).set(updateData).where(eq(post.id, postId)).run();
+  await db.update(post).set(updateData).where(eq(post.id, postId)).execute();
 
   return {
     received: true,
@@ -794,7 +794,7 @@ async function createPost(
   const db = await getDb();
 
   // 校验账号归属
-  const acc = db.select().from(account)
+  const acc = await db.select().from(account)
     .where(and(eq(account.id, accountId), eq(account.userId, userId), isNull(account.deletedAt)))
     .get();
   if (!acc) {
@@ -820,7 +820,7 @@ async function createPost(
   // 生成 publishToken（与 /api/posts 保持一致的格式）
   const publishToken = `tok_${crypto.randomUUID().replace(/-/g, '')}`;
 
-  db.insert(post)
+  await db.insert(post)
     .values({
       userId,
       accountId,
@@ -832,10 +832,10 @@ async function createPost(
       status: 'scheduled',
       publishToken,
     })
-    .run();
+    .execute();
 
   // 查询刚创建的帖子以返回完整信息
-  const created = db.select().from(post)
+  const created = await db.select().from(post)
     .where(and(eq(post.accountId, accountId), eq(post.publishToken, publishToken)))
     .get();
 
@@ -843,7 +843,7 @@ async function createPost(
     return { success: true, post: undefined };
   }
 
-  const plt = db.select().from(platform).where(eq(platform.id, acc.platformId)).get();
+  const plt = await db.select().from(platform).where(eq(platform.id, acc.platformId)).get();
   return {
     success: true,
     post: {
@@ -877,7 +877,7 @@ async function updatePost(
   const db = await getDb();
 
   // 找帖子（必须在 draft/scheduled 状态，未软删）
-  const existing = db.select().from(post)
+  const existing = await db.select().from(post)
     .where(and(eq(post.id, postId), eq(post.userId, userId), isNull(post.deletedAt)))
     .get();
   if (!existing) {
@@ -932,8 +932,8 @@ async function updatePost(
 
   // 没东西可改也算成功（白名单字段都未传）
   if (Object.keys(data).length === 0) {
-    const acc = db.select().from(account).where(eq(account.id, existing.accountId)).get();
-    const plt = acc ? db.select().from(platform).where(eq(platform.id, acc.platformId)).get() : null;
+    const acc = await db.select().from(account).where(eq(account.id, existing.accountId)).get();
+    const plt = acc ? await db.select().from(platform).where(eq(platform.id, acc.platformId)).get() : null;
     return {
       success: true,
       post: {
@@ -952,15 +952,15 @@ async function updatePost(
     };
   }
 
-  db.update(post).set(data).where(eq(post.id, postId)).run();
+  await db.update(post).set(data).where(eq(post.id, postId)).execute();
 
-  const updated = db.select().from(post).where(eq(post.id, postId)).get();
+  const updated = await db.select().from(post).where(eq(post.id, postId)).get();
   if (!updated) {
     return { success: true, post: undefined };
   }
 
-  const acc = db.select().from(account).where(eq(account.id, updated.accountId)).get();
-  const plt = acc ? db.select().from(platform).where(eq(platform.id, acc.platformId)).get() : null;
+  const acc = await db.select().from(account).where(eq(account.id, updated.accountId)).get();
+  const plt = acc ? await db.select().from(platform).where(eq(platform.id, acc.platformId)).get() : null;
   return {
     success: true,
     post: {

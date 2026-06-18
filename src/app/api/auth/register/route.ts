@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     const result = await db.insert(user).values({ username, password: hashed, email: email || null }).returning().get();
     for (const plat of REGISTERED_PLATFORMS) {
       const p = await db.select().from(platform).where(eq(platform.name, plat.key)).get();
-      if (!p) db.insert(platform).values({ name: plat.key, icon: plat.icon }).run();
-      else if (p.icon !== plat.icon) db.update(platform).set({ icon: plat.icon }).where(eq(platform.id, p.id)).run();
+      if (!p) await db.insert(platform).values({ name: plat.key, icon: plat.icon }).execute();
+      else if (p.icon !== plat.icon) await db.update(platform).set({ icon: plat.icon }).where(eq(platform.id, p.id)).execute();
     }
     return NextResponse.json({ id: result.id, username: result.username, email: result.email });
   } catch (error) {

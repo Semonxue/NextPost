@@ -45,11 +45,10 @@ next-env.d.ts
 # uploads (user uploaded files)
 uploads/
 
-# database files
-prisma/prisma/dev.db
-prisma/prisma/dev.db-journal
-prisma/dev.db
-prisma/dev.db-journal
+# database files (Drizzle ORM + libsql local SQLite)
+data/nextpost.db
+data/nextpost.db-journal
+data/
 *.db
 *.db-journal
 

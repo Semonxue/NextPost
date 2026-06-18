@@ -42,6 +42,18 @@ const STYLES: Record<string, PlatformStyle> = {
     icon: '📷',
     label: 'Instagram',
   },
+  linkedin: {
+    bgClass: 'bg-blue-700',
+    textClass: 'text-white',
+    icon: '💼',
+    label: 'LinkedIn',
+  },
+  facebook: {
+    bgClass: 'bg-blue-600',
+    textClass: 'text-white',
+    icon: '👥',
+    label: 'Facebook',
+  },
 };
 
 export function getPlatformStyle(name?: string | null): PlatformStyle {

@@ -79,7 +79,7 @@ export async function validateApiKey(apiKey: string): Promise<{
   try {
     const db = await getDb();
     // 查询 API Key
-    const apiKeyRecord = db.select().from(externalApiKey).where(eq(externalApiKey.key, apiKey)).get();
+    const apiKeyRecord = await db.select().from(externalApiKey).where(eq(externalApiKey.key, apiKey)).get();
 
     if (!apiKeyRecord) {
       return {
@@ -90,7 +90,7 @@ export async function validateApiKey(apiKey: string): Promise<{
     }
 
     // 检查是否过期
-    if (apiKeyRecord.expiresAt && new Date() > apiKeyRecord.expiresAt) {
+    if (apiKeyRecord.expiresAt && new Date() > new Date(apiKeyRecord.expiresAt)) {
       return {
         valid: false,
         error: 'API Key has expired',
@@ -99,10 +99,10 @@ export async function validateApiKey(apiKey: string): Promise<{
     }
 
     // 更新最后使用时间
-    db.update(externalApiKey)
+    await db.update(externalApiKey)
       .set({ lastUsedAt: new Date().toISOString() })
       .where(eq(externalApiKey.id, apiKeyRecord.id))
-      .run();
+      .execute();
 
     // 【v0.4 修复】自动迁移遗留的 'read_report' → 'read'。
     // 背景：v0.2 时代所有 key 默认是 'read_report'，但用户/AI 客户端经常误以为是
@@ -110,10 +110,10 @@ export async function validateApiKey(apiKey: string): Promise<{
     // 这里主动把 DB 改对，让状态自我修复，并打日志提醒（用户后续能通过 Settings UI
     // 看到这条 key 的真实 scope = 'read'，需要的话手动删了重建为 read_write）。
     if (apiKeyRecord.permissions === 'read_report') {
-      db.update(externalApiKey)
+      await db.update(externalApiKey)
         .set({ permissions: 'read' })
         .where(eq(externalApiKey.id, apiKeyRecord.id))
-        .run();
+        .execute();
       console.warn(
         `[MCP Auth] Auto-migrated legacy key ${apiKeyRecord.id} (name="${apiKeyRecord.name}", user=${apiKeyRecord.userId}) from 'read_report' to 'read'. User should recreate if they need write.`
       );
@@ -166,7 +166,7 @@ export async function generateApiKey(
     const fullKey = `npk_${keyValue}`;
 
     // 创建 API Key 记录
-    db.insert(externalApiKey)
+    await db.insert(externalApiKey)
       .values({
         userId,
         name,
@@ -174,7 +174,7 @@ export async function generateApiKey(
         expiresAt: expiresAt?.toISOString() ?? null,
         permissions: finalScope,
       })
-      .run();
+      .execute();
 
     return {
       success: true,
@@ -203,7 +203,7 @@ export async function deleteApiKey(
   try {
     const db = await getDb();
     // 先验证归属
-    const existing = db.select().from(externalApiKey)
+    const existing = await db.select().from(externalApiKey)
       .where(eq(externalApiKey.id, keyId))
       .get();
     if (!existing || existing.userId !== userId) {
@@ -212,9 +212,9 @@ export async function deleteApiKey(
         error: 'API Key not found or not owned by user'
       };
     }
-    db.delete(externalApiKey)
+    await db.delete(externalApiKey)
       .where(eq(externalApiKey.id, keyId))
-      .run();
+      .execute();
     return { success: true };
   } catch (error) {
     console.error('Error deleting API Key:', error);
@@ -244,12 +244,12 @@ export async function listApiKeys(userId: string): Promise<{
   try {
     const db = await getDb();
     // 【v0.4】先把遗留的 read_report 一次性迁到 read，让 Settings UI 展示真实 scope
-    db.update(externalApiKey)
+    await db.update(externalApiKey)
       .set({ permissions: 'read' })
       .where(eq(externalApiKey.permissions, 'read_report'))
-      .run();
+      .execute();
 
-    const keys = db.select().from(externalApiKey)
+    const keys = await db.select().from(externalApiKey)
       .where(eq(externalApiKey.userId, userId))
       .all();
 

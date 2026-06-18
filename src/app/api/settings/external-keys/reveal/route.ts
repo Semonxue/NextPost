@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   
   try {
     const db = await getDb();
-    const apiKey = db.select().from(externalApiKey)
+    const apiKey = await db.select().from(externalApiKey)
       .where(and(eq(externalApiKey.id, keyId), eq(externalApiKey.userId, session.user.id)))
       .get();
     

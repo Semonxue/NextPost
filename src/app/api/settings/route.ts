@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest) {
       if (!valid) return NextResponse.json({ error: "当前密码不正确" }, { status: 400 });
       updates.password = await bcrypt.hash(newPassword, 10);
     }
-    db.update(user).set(updates).where(eq(user.id, session.user.id)).run();
+    await db.update(user).set(updates).where(eq(user.id, session.user.id)).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("更新设置失败:", error);

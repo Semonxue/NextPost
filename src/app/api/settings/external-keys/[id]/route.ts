@@ -95,16 +95,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const db = await getDb();
     // 验证归属：只能改自己的 key
-    const existing = db.select().from(externalApiKey)
+    const existing = await db.select().from(externalApiKey)
       .where(and(eq(externalApiKey.id, id), eq(externalApiKey.userId, session.user.id)))
       .get();
     if (!existing) {
       return NextResponse.json({ error: 'Key not found' }, { status: 404 });
     }
 
-    db.update(externalApiKey).set(data).where(eq(externalApiKey.id, id)).run();
+    await db.update(externalApiKey).set(data).where(eq(externalApiKey.id, id)).execute();
 
-    const updated = db.select().from(externalApiKey)
+    const updated = await db.select().from(externalApiKey)
       .where(eq(externalApiKey.id, id))
       .get();
 

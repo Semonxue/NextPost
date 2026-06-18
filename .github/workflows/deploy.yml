@@ -60,7 +60,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # opennextjs-cloudflare build = next build + transform for Workers
-      # Prisma generate no longer needed — app uses Drizzle ORM
+      # Drizzle ORM（D1 binding 模式，schema 推送走 wrangler d1 migrations apply）
       - name: Build for Cloudflare Workers
         run: |
           pnpm exec opennextjs-cloudflare build > /tmp/build.log 2>&1 || {
@@ -72,7 +72,7 @@ jobs:
             exit 1
           }
         env:
-          DATABASE_URL: "file:./prisma/dev.db"
+          DATABASE_URL: "file:./data/nextpost.db"
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           STORAGE_ENGINE: r2

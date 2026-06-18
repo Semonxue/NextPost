@@ -12,7 +12,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const db = await getDb();
     const p = await db.select().from(post).where(and(eq(post.id, id), eq(post.userId, session.user.id), isNotNull(post.deletedAt))).get();
     if (!p) return NextResponse.json({ error: "帖子不存在或未删除" }, { status: 404 });
-    db.update(post).set({ deletedAt: null, deletedBy: null, deleteNote: null }).where(eq(post.id, id)).run();
+    await db.update(post).set({ deletedAt: null, deletedBy: null, deleteNote: null }).where(eq(post.id, id)).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("恢复帖子失败:", error);

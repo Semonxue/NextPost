@@ -12,7 +12,7 @@
  */
 
 import { test, expect, request as pwRequest } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './_db';
 
 const prisma = new PrismaClient();
 // 单一 source of truth：与 src/lib/config.ts 的 getAppUrl() 保持一致

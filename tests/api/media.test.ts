@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+/**
+ * Media API tests
+ *
+ * Tests POST /api/media/upload and DELETE /api/media/[path].
+ * Uses @/lib/storage mock for reliable testing without real filesystem.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-// Mock the storage module
 vi.mock('@/lib/storage', () => ({
   uploadFile: vi.fn().mockResolvedValue({
     url: '/api/uploads/2024-01-01/test-file.jpg',
@@ -22,7 +28,6 @@ vi.mock('@/lib/storage', () => ({
   deleteFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock auth
 vi.mock('@/lib/auth', () => ({
   auth: vi.fn(),
 }));
@@ -60,7 +65,6 @@ describe('Media API', () => {
 
     it('should return 400 when no file provided', async () => {
       const formData = new FormData();
-      // 不添加任何文件
 
       const request = new NextRequest('http://localhost/api/media/upload', {
         method: 'POST',
@@ -91,7 +95,7 @@ describe('Media API', () => {
 
     it('should upload file successfully', async () => {
       const { uploadFileWithThumbnail } = await import('@/lib/storage');
-      
+
       const mockFile = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
       const formData = new FormData();
       formData.append('file', mockFile);
@@ -112,7 +116,7 @@ describe('Media API', () => {
 
     it('should upload video file successfully', async () => {
       const { uploadFileWithThumbnail } = await import('@/lib/storage');
-      
+
       const mockFile = new File(['test'], 'video.mp4', { type: 'video/mp4' });
       const formData = new FormData();
       formData.append('file', mockFile);
@@ -124,13 +128,14 @@ describe('Media API', () => {
 
       const response = await POST(request);
       expect(response.status).toBe(200);
-      // Verify uploadFileWithThumbnail was called with video mimeType
       expect(uploadFileWithThumbnail).toHaveBeenCalled();
     });
 
-    it('should handle file size validation', async () => {
-      // 创建一个小文件来测试基本功能 - 不测试大文件因为 mock 会拦截
-      const mockFile = new File(['test'], 'small.jpg', { type: 'image/jpeg' });
+    it('should handle upload error', async () => {
+      const { uploadFileWithThumbnail } = await import('@/lib/storage');
+      (uploadFileWithThumbnail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Upload failed'));
+
+      const mockFile = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
       const formData = new FormData();
       formData.append('file', mockFile);
 
@@ -140,7 +145,7 @@ describe('Media API', () => {
       });
 
       const response = await POST(request);
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(500);
     });
   });
 
@@ -169,28 +174,7 @@ describe('Media API', () => {
       expect(data.success).toBe(true);
       expect(deleteFile).toHaveBeenCalled();
     });
-  });
-});
-  describe('POST /api/media/upload - Error cases', () => {
-    it('should handle upload error', async () => {
-      const { uploadFileWithThumbnail } = await import('@/lib/storage');
-      (uploadFileWithThumbnail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Upload failed'));
 
-      const mockFile = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
-      const formData = new FormData();
-      formData.append('file', mockFile);
-
-      const request = new NextRequest('http://localhost/api/media/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(500);
-    });
-  });
-
-  describe('DELETE /api/media/:path - Error cases', () => {
     it('should handle delete error', async () => {
       const { deleteFile } = await import('@/lib/storage');
       (deleteFile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Delete failed'));
@@ -203,3 +187,4 @@ describe('Media API', () => {
       expect(response.status).toBe(500);
     });
   });
+})

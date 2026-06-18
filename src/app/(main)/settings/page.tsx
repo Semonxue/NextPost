@@ -156,8 +156,29 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/stats");
       if (res.ok) {
-        const data = await res.json() as Stats;
-        setStats(data);
+        // /api/stats 当前只返回基础 5 个计数；把缺失字段补成空默认值，
+        // 避免 stats tab 渲染时拿到 undefined 字段（prisma → drizzle 迁移遗留）。
+        const data = await res.json() as {
+          totalPosts?: number;
+          draftPosts?: number;
+          scheduledPosts?: number;
+          publishedPosts?: number;
+          totalAccounts?: number;
+        };
+        setStats({
+          accounts: data.totalAccounts ?? 0,
+          posts: data.totalPosts ?? 0,
+          postsByStatus: {
+            draft: data.draftPosts ?? 0,
+            scheduled: data.scheduledPosts ?? 0,
+            published: data.publishedPosts ?? 0,
+            failed: 0,
+          },
+          media: 0,
+          mediaStats: { totalSize: 0, images: { count: 0, size: 0 }, videos: { count: 0, size: 0 } },
+          thumbnailStats: { count: 0, size: 0 },
+          categories: [],
+        });
       }
     } catch (error) {
       console.error("获取统计失败:", error);

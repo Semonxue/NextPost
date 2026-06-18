@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './_db';
 
 const prisma = new PrismaClient();
 const genUser = () => `aitools_${Date.now()}${Math.random().toString(36).slice(2, 6)}`;

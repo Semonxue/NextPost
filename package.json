@@ -1,6 +1,6 @@
 {
   "name": "nextpost",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -15,7 +15,15 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "mcp:external": "node --import tsx src/mcp/external/server.ts"
+    "mcp:external": "node --import tsx src/mcp/external/server.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "drizzle-kit migrate",
+    "db:reset:local": "rm -f data/nextpost.db && drizzle-kit migrate",
+    "db:seed": "node --import tsx src/lib/db/seed.ts",
+    "db:seed:local": "node --import tsx src/lib/db/seed.ts --local",
+    "db:seed:d1": "node --import tsx src/lib/db/seed.ts --d1",
+    "db:studio": "drizzle-kit studio",
+    "db:migrate:remote": "wrangler d1 migrations apply nextpost-db --remote"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
@@ -42,7 +50,6 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

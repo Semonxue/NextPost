@@ -15,7 +15,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     if (!p) return NextResponse.json({ error: "帖子不存在或未删除" }, { status: 404 });
     const urls = JSON.parse(p.mediaUrls || "[]");
     for (const url of urls) { try { await deleteFile(url); } catch { /* ignore */ } }
-    db.delete(post).where(eq(post.id, id)).run();
+    await db.delete(post).where(eq(post.id, id)).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("永久删除帖子失败:", error);

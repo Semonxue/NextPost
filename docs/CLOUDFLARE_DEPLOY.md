@@ -41,7 +41,7 @@
 | 组件 | 本地开发 | 云端部署 |
 |------|---------|---------|
 | 框架 | Next.js 16.2.6 + Turbopack (dev) | Next.js 16 + **Webpack** (prod) + OpenNext |
-| 数据库 | Drizzle ORM + SQLite (dev.db) | Cloudflare D1 (通过 Drizzle D1 adapter) |
+| 数据库 | Drizzle ORM + libsql (data/nextpost.db) | Cloudflare D1 (通过 Drizzle D1 adapter) |
 | 存储 | 本地文件系统 | Cloudflare R2 |
 | 认证 | NextAuth.js | NextAuth.js (适配) |
 | CI/CD | — | GitHub Actions + wrangler |
@@ -124,7 +124,7 @@ pnpm build
   "main": ".open-next/worker.js",        // OpenNext 生成，不要改
   "compatibility_date": "2024-12-30",
   "compatibility_flags": [
-    "nodejs_compat",                     // 开启 Node.js API（D1/R2/Prisma 必需）
+    "nodejs_compat",                     // 开启 Node.js API（D1/R2/Drizzle 必需）
     "global_fetch_strictly_public"        // 允许 fetch 公开 URL
   ],
   "assets": {
@@ -154,9 +154,9 @@ pnpm build
 
 **D1（数据库）：**
 ```ts
-// src/lib/prisma.ts
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+// src/lib/db/index.ts
+import { drizzle as drizzleD1 } from "drizzle-orm/d1";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 // Workers 运行时自动从 binding "DB" 读取
 ```
 
@@ -189,7 +189,7 @@ await bucket.put(key, file)
 # .dev.vars（本地开发用 Wrangler 时读取）
 NEXTJS_ENV=development
 AUTH_SECRET=dev-secret-please-change
-DATABASE_URL=file:./prisma/dev.db
+DATABASE_URL=file:./data/nextpost.db
 STORAGE_ENGINE=local
 NEXT_PUBLIC_BASE_URL=http://localhost:3456
 ```
@@ -199,11 +199,11 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3456
 ## 数据库迁移
 
 ```bash
-# 推送 Prisma schema 到远程 D1
-pnpm prisma migrate deploy
+# 推送 Drizzle schema 到远程 D1
+pnpm db:migrate:remote
 
 # 或直接执行 SQL
-wrangler d1 execute nextpost-db --remote --file=prisma/migrations/xxx/migration.sql
+wrangler d1 execute nextpost-db --remote --file=drizzle/0000_xxx.sql
 
 # 查看数据
 wrangler d1 execute nextpost-db --remote --command="SELECT * FROM User LIMIT 10"
@@ -249,7 +249,7 @@ wrangler d1 execute nextpost-db --remote --command="SELECT * FROM User LIMIT 10"
 
 | | 本地开发 | 线上生产 |
 |---|---|---|
-| 数据库 | SQLite (`prisma/dev.db`) | Cloudflare D1 |
+| 数据库 | SQLite (`data/nextpost.db`) | Cloudflare D1 |
 | 存储 | `./uploads/` 目录 | R2 bucket |
 | 数据隔离 | 完全隔离 | 通过 `userId` 隔离 |
 
@@ -280,3 +280,40 @@ nextpost/
 ---
 
 **文档结束**
+
+---
+
+## 初始化 D1 数据（首次部署后必做）
+
+D1 是空数据库，平台元数据 / 配置不会自动写入。首次部署后需要手动 seed：
+
+### 方式 1：直接跑脚本（推荐）
+
+```bash
+# 1. 先在本地生成 migration SQL（如果还没生成）
+pnpm db:generate
+
+# 2. 把 migration 推到远程 D1（建表）
+pnpm db:migrate:remote
+# 等价于：wrangler d1 migrations apply nextpost-db --remote
+
+# 3. 注入平台/配置 seed 数据
+wrangler d1 execute nextpost-db --remote --file=./scripts/d1-seed.sql
+# scripts/d1-seed.sql 由 src/lib/db/seed.ts 派生，定义在 src/lib/db/seed.ts 的 DEFAULT_PLATFORM_CONFIG
+```
+
+### 方式 2：单条 SQL 直接 INSERT
+
+```bash
+# 查看已建表
+wrangler d1 execute nextpost-db --remote --command="SELECT name FROM sqlite_master WHERE type='table';"
+
+# 插入 Twitter 平台
+wrangler d1 execute nextpost-db --remote --command="INSERT INTO Platform (id, name, icon, createdAt) VALUES ('cl-twitter-1', 'twitter', '/icons/twitter.svg', '2024-01-01T00:00:00.000Z');"
+
+# 插入 Twitter 内容配置
+wrangler d1 execute nextpost-db --remote --command="INSERT INTO PlatformConfig (id, platformId, maxContentLength, maxImages, maxVideos, allowMixedMedia, createdAt, updatedAt) SELECT 'cl-twitter-cfg-1', id, 280, 4, 1, 1, '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z' FROM Platform WHERE name='twitter';"
+```
+
+> **Note**: 完整 seed 列表在 `src/lib/db/seed.ts:DEFAULT_PLATFORM_CONFIG`。
+> 当前默认包含 3 个平台：twitter、xiaohongshu、instagram。

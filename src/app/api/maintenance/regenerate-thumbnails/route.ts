@@ -9,7 +9,7 @@ export async function GET() {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const db = await getDb();
-    const total = db.select({ count: count() }).from(media).where(isNull(media.thumbnailUrl)).get();
+    const total = await db.select({ count: count() }).from(media).where(isNull(media.thumbnailUrl)).get();
     return NextResponse.json({ count: total?.count ?? 0 });
   } catch (error) {
     console.error("检查缩略图失败:", error);
@@ -23,11 +23,13 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { force } = (await request.json()) as { force?: boolean };
     const db = await getDb();
-    const items = force ? db.select().from(media).all() : db.select().from(media).where(isNull(media.thumbnailUrl)).all();
+    const items = force
+      ? await db.select().from(media).all()
+      : await db.select().from(media).where(isNull(media.thumbnailUrl)).all();
     let processed = 0;
     for (const item of items) {
       try {
-        db.update(media).set({ thumbnailUrl: item.url }).where(eq(media.id, item.id)).run();
+        await db.update(media).set({ thumbnailUrl: item.url }).where(eq(media.id, item.id)).execute();
         processed++;
       } catch { /* skip */ }
     }

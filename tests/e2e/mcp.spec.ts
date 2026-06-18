@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './_db';
 
 const prisma = new PrismaClient();
 

@@ -12,7 +12,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const db = await getDb();
     const acct = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id), isNotNull(account.deletedAt))).get();
     if (!acct) return NextResponse.json({ error: "账号不存在或未删除" }, { status: 404 });
-    db.update(account).set({ deletedAt: null, deletedBy: null, deleteNote: null }).where(eq(account.id, id)).run();
+    await db.update(account).set({ deletedAt: null, deletedBy: null, deleteNote: null }).where(eq(account.id, id)).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("恢复账号失败:", error);

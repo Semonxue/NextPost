@@ -33,7 +33,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (handle !== undefined) updates.handle = handle;
     if (description !== undefined) updates.description = description;
     if (platformId !== undefined) updates.platformId = platformId;
-    db.update(account).set(updates).where(eq(account.id, id)).run();
+    await db.update(account).set(updates).where(eq(account.id, id)).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("更新账号失败:", error);
@@ -49,8 +49,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const db = await getDb();
     const existing = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id))).get();
     if (!existing) return NextResponse.json({ error: "账号不存在" }, { status: 404 });
-    db.update(account).set({ deletedAt: new Date().toISOString(), deletedBy: "user" }).where(eq(account.id, id)).run();
-    db.update(post).set({ deletedAt: new Date().toISOString(), deletedBy: "user" }).where(and(eq(post.accountId, id), isNull(post.deletedAt))).run();
+    await db.update(account).set({ deletedAt: new Date().toISOString(), deletedBy: "user" }).where(eq(account.id, id)).execute();
+    await db.update(post).set({ deletedAt: new Date().toISOString(), deletedBy: "user" }).where(and(eq(post.accountId, id), isNull(post.deletedAt))).execute();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("删除账号失败:", error);

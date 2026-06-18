@@ -56,7 +56,8 @@ export default async function AIToolsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const rawKeys = await getDb().select().from(externalApiKey).where(eq(externalApiKey.userId, session.user.id)).orderBy(desc(externalApiKey.createdAt)).all();
+  const db = await getDb();
+  const rawKeys = await db.select().from(externalApiKey).where(eq(externalApiKey.userId, session.user.id)).orderBy(desc(externalApiKey.createdAt)).all();
   const keys = rawKeys.map((k) => ({ id: k.id, name: k.name, permissions: k.permissions, keyPreview: k.key.substring(0, 12) + "...", lastUsedAt: k.lastUsedAt, expiresAt: k.expiresAt, createdAt: k.createdAt }));
 
   return (

@@ -1,14 +1,13 @@
 /**
  * Storage module tests
  *
- * Uses real filesystem operations with temp directories for reliable testing.
- * Covers: LocalStorageEngine, storage index (uploadFile, deleteFile, getFileUrl)
+ * LocalStorageEngine always uses process.cwd()/uploads/ (ignores constructor arg).
+ * Tests write to real uploads/ directory and clean up.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'fs';
 import path from 'path';
-import os from 'os';
 
 // Mock uuid for predictable filenames
 vi.mock('uuid', () => ({
@@ -18,19 +17,23 @@ vi.mock('uuid', () => ({
 import { LocalStorageEngine } from '@/lib/storage/local';
 import { uploadFile, deleteFile, getFileUrl } from '@/lib/storage';
 
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+
 describe('LocalStorageEngine', () => {
   let engine: LocalStorageEngine;
-  let tempDir: string;
+  // unique subdirectory per test run
+  let testDir: string;
 
   beforeEach(async () => {
-    tempDir = path.join(os.tmpdir(), 'nextpost-test-' + Date.now());
-    await fs.mkdir(tempDir, { recursive: true });
-    engine = new LocalStorageEngine(tempDir);
+    testDir = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await fs.mkdir(path.join(UPLOADS_DIR, testDir), { recursive: true });
+    engine = new LocalStorageEngine();
   });
 
   afterEach(async () => {
+    // Clean up test directory
     try {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(path.join(UPLOADS_DIR, testDir), { recursive: true, force: true });
     } catch {
       // ignore cleanup errors
     }
@@ -78,10 +81,10 @@ describe('LocalStorageEngine', () => {
       const url = await engine.upload(buffer, 'test.jpg', 'image/jpeg');
 
       expect(url).toMatch(/^\/api\/uploads\/\d{4}-\d{2}-\d{2}\/test-uuid-1234\.jpg$/);
-      
-      // Verify file was actually created
+
+      // Verify file was actually created in uploads dir
       const relativePath = url.replace('/api/uploads/', '');
-      const filePath = path.join(tempDir, relativePath);
+      const filePath = path.join(UPLOADS_DIR, relativePath);
       const content = await fs.readFile(filePath, 'utf-8');
       expect(content).toBe('test content');
     });
@@ -95,7 +98,7 @@ describe('LocalStorageEngine', () => {
     it('should create date-based subdirectory', async () => {
       const buffer = Buffer.from('test');
       const url = await engine.upload(buffer, 'test.jpg', 'image/jpeg');
-      
+
       const relativePath = url.replace('/api/uploads/', '');
       const today = new Date().toISOString().slice(0, 10);
       expect(relativePath).toContain(today);
@@ -107,48 +110,61 @@ describe('LocalStorageEngine', () => {
       // First upload a file
       const buffer = Buffer.from('to be deleted');
       const url = await engine.upload(buffer, 'delete-me.jpg', 'image/jpeg');
-      
+
       // Verify it exists
       const relativePath = url.replace('/api/uploads/', '');
-      const filePath = path.join(tempDir, relativePath);
+      const filePath = path.join(UPLOADS_DIR, relativePath);
       await expect(fs.access(filePath)).resolves.toBeUndefined();
-      
+
       // Delete it
       await engine.delete(url);
-      
+
       // Verify it's gone
       await expect(fs.access(filePath)).rejects.toThrow();
     });
 
     it('should do nothing for non-matching URL', async () => {
-      // Should not throw
       await expect(engine.delete('invalid-url')).resolves.toBeUndefined();
     });
 
     it('should not throw for non-existent file', async () => {
-      // Should not throw (ENOENT is ignored)
       await expect(engine.delete('/api/uploads/nonexistent.jpg')).resolves.toBeUndefined();
     });
   });
 
   describe('exists', () => {
     it('should return true for existing file', async () => {
-      // Create a test file
-      const testFile = 'exists-test.txt';
-      await fs.writeFile(path.join(tempDir, testFile), 'test');
-      
-      const result = await engine.exists(testFile);
+      const testFile = `${testDir}/exists-test.txt`;
+      const filePath = path.join(UPLOADS_DIR, testFile);
+      await fs.writeFile(filePath, 'test');
+
+      const result = await engine.exists(`${testDir}/exists-test.txt`);
       expect(result).toBe(true);
     });
 
     it('should return false for non-existing file', async () => {
-      const result = await engine.exists('nonexistent-file.txt');
+      const result = await engine.exists(`${testDir}/nonexistent-file.txt`);
       expect(result).toBe(false);
     });
   });
 });
 
 describe('storage index', () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = `test-index-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await fs.mkdir(path.join(UPLOADS_DIR, testDir), { recursive: true });
+  });
+
+  afterEach(async () => {
+    try {
+      await fs.rm(path.join(UPLOADS_DIR, testDir), { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
   describe('uploadFile', () => {
     it('should return UploadResult with correct structure', async () => {
       const buffer = Buffer.from('test content for index');

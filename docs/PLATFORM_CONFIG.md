@@ -21,7 +21,7 @@
 
 平台元数据在 `src/lib/platform.ts` 的 `REGISTERED_PLATFORMS` 常量定义，**全应用从这一处派生**：
 
-- `prisma/seed.ts`（DB seed 插入）
+- `src/lib/db/seed.ts`（DB seed 插入）
 - `src/app/api/auth/register/route.ts`（新用户注册时补全）
 - `src/app/api/platforms/route.ts`（前端拉列表）
 
@@ -90,7 +90,7 @@ opencli instagram story
 
 1. 在 `src/lib/platform.ts` 的 `REGISTERED_PLATFORMS` 数组加一条
 2. 在 `src/lib/platform.ts` 的 `DEFAULT_PLATFORM_CONFIG` 加对应 spec
-3. 跑 `pnpm prisma db seed` 同步到 DB
+3. 跑 `pnpm pnpm db:seed` 同步到 DB
 4. 在 `/public/icons/` 加对应 SVG 图标
 5. （可选）写 `opencli <platform>` 适配
 6. 在 `docs/MCP_CLIENT_GUIDE.md` 加平台命令说明

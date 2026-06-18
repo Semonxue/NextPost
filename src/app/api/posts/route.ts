@@ -7,9 +7,9 @@ import { getDb, post, account, platform } from "@/lib/db";
 async function attachAccountAndPlatform(db, postRows) {
   if (postRows.length === 0) return [];
   const accountIds = [...new Set(postRows.map(p => p.accountId))];
-  const accounts = db.select().from(account).where(inArray(account.id, accountIds)).all();
+  const accounts = await db.select().from(account).where(inArray(account.id, accountIds)).all();
   const platformIds = [...new Set(accounts.map(a => a.platformId))];
-  const platforms = db.select().from(platform).where(inArray(platform.id, platformIds)).all();
+  const platforms = await db.select().from(platform).where(inArray(platform.id, platformIds)).all();
   const accMap = new Map(accounts.map(a => [a.id, a]));
   const platMap = new Map(platforms.map(p => [p.id, p]));
   return postRows.map(p => {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     if (search) conditions.push(or(like(post.content, '%' + search + '%'), like(post.title, '%' + search + '%')));
     if (accountId) conditions.push(eq(post.accountId, accountId));
     if (platformId) {
-      const platformAccounts = db.select({ id: account.id }).from(account).where(eq(account.platformId, platformId)).all();
+      const platformAccounts = await db.select({ id: account.id }).from(account).where(eq(account.platformId, platformId)).all();
       if (platformAccounts.length > 0) conditions.push(inArray(post.accountId, platformAccounts.map(a => a.id)));
     }
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const orderFn = order === "asc" ? asc : desc;
 
     const rows = await db.select().from(post).where(and(...conditions)).orderBy(orderFn(sortCol)).limit(limit).offset(offset).all();
-    const total = db.select({ count: count() }).from(post).where(and(...conditions)).get();
+    const total = await db.select({ count: count() }).from(post).where(and(...conditions)).get();
     const posts = await attachAccountAndPlatform(db, rows);
 
     return NextResponse.json({ posts, total: total?.count ?? 0 });
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }).returning().get();
     const rows = await db.select().from(post).leftJoin(account, eq(post.accountId, account.id)).leftJoin(platform, eq(account.platformId, platform.id)).where(eq(post.id, result.id)).all();
     const p = rows[0];
-    return NextResponse.json(p ? { ...p.post, account: p.account ? { ...p.account, platform: p.platform } : null } : result, { status: 201 });
+    return NextResponse.json(p ? { ...p.Post, account: p.Account ? { ...p.Account, platform: p.Platform } : null } : result, { status: 201 });
   } catch (error) {
     console.error("创建帖子失败:", error);
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });

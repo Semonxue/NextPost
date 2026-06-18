@@ -38,8 +38,8 @@ cd nextpost
 pnpm install
 
 # 初始化数据库
-pnpm prisma generate
-pnpm prisma db push
+pnpm db:generate
+pnpm db:migrate:local && pnpm db:seed
 ```
 
 ### 配置环境变量
@@ -51,7 +51,7 @@ pnpm prisma db push
 AUTH_SECRET=your-secret-key
 
 # 数据库
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="file:./data/nextpost.db"
 
 # 文件存储
 UPLOAD_DIR=./uploads
@@ -134,7 +134,7 @@ nextpost/
 ├── mcp/           # 外部 MCP 工具实现
 ├── stores/        # Zustand 状态管理
 ├── scripts/       # 启动脚本（dev.mjs：env 解析 + 启动 next dev）
-├── prisma/        # 数据库配置
+├── src/lib/db/    # 数据库（schema + drizzle client）
 ├── tests/         # 测试（vitest + playwright）
 └── docs/          # 文档
 ```
@@ -158,7 +158,7 @@ pnpm mcp:external  # 启动独立外部 MCP Server
 
 | 层级 | 命令 | 数量 | 说明 |
 |---|---|---|---|
-| 单元 | `pnpm test` | 671 tests | vitest 覆盖 stores / middleware / components / page / API |
+| 单元 | `pnpm test` | 754 tests | vitest 覆盖 stores / middleware / components / page / API |
 | 覆盖率 | `pnpm test:coverage` | — | 40 个被覆盖源文件全部 ≥ 80% |
 | E2E | `pnpm test:e2e` | 96 passed, 0 skipped | Playwright 真实浏览器 |
 
@@ -179,4 +179,4 @@ MIT License
 
 ---
 
-*Last updated: 2026-06-04 (v0.4.8)*
+*Last updated: 2026-06-18 (v0.6.0)*
