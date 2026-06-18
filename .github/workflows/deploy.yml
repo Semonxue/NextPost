@@ -58,6 +58,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
       - name: Type check
         run: pnpm exec tsc --noEmit
 
@@ -65,6 +68,8 @@ jobs:
         run: pnpm test
 
       # opennextjs-cloudflare build = next build + transform for Workers
+      # (opennextjs-cloudflare runs `next build` internally; `prisma generate`
+      # must run before that so PrismaClient is available during typecheck/build.)
       - name: Build for Cloudflare Workers
         run: pnpm exec opennextjs-cloudflare build
         env:
@@ -107,6 +112,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
 
       - name: Install Playwright
         run: pnpm exec playwright install --with-deps chromium
