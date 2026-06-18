@@ -89,8 +89,8 @@ function NewPostContent() {
     try {
       const res = await fetch("/api/accounts");
       if (res.ok) {
-        const data = await res.json() as Account[];
-        setAccounts(data);
+        const data = await res.json() as { accounts: Account[] };
+        setAccounts(data.accounts || []);
         if (data.length > 0) {
           setFormData((prev) => ({ ...prev, accountId: data[0].id }));
           fetchPlatformConfig(data[0].id);

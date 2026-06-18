@@ -14,7 +14,7 @@ import bcrypt from "bcryptjs";
 import * as schema from "../../src/lib/db/schema";
 
 export default async function globalSetup() {
-  const dbPath = (process.env.DATABASE_URL ?? "file:./prisma/dev.db").replace("file:", "");
+  const dbPath = (process.env.DATABASE_URL ?? "file:./data/nextpost.db").replace("file:", "");
   const client = createClient({ url: `file:${dbPath}` });
   const db = drizzle(client, { schema });
 
