@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     // 解析请求体，支持 force 参数强制重新生成
     let forceRegenerate = false;
     try {
-      const body = await request.json();
+      const body = await request.json() as { force?: boolean };
       forceRegenerate = body.force === true;
     } catch {
       // 如果没有请求体，使用默认值

@@ -22,8 +22,8 @@ export function RevealKeyButton({ keyId }: { keyId: string }) {
     try {
       const res = await fetch(`/api/settings/external-keys/reveal?id=${keyId}`);
       if (res.ok) {
-        const data = await res.json();
-        setRevealed(data.key);
+        const data = await res.json() as { key?: string };
+        setRevealed(data.key || '');
       } else {
         addToast({ type: "error", message: "获取 key 失败" });
       }

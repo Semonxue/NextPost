@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json() as { name?: unknown; expiresAt?: string | number | Date; scope?: string };
     const { name, expiresAt, scope } = body;
 
     if (!name || typeof name !== 'string') {

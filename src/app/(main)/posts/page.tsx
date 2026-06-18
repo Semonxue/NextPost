@@ -118,13 +118,13 @@ export default function PostsPage() {
       ]);
       
       if (postsRes.ok) {
-        const postsData = await postsRes.json();
+        const postsData = await postsRes.json() as { posts?: Post[]; total?: number };
         setPosts(postsData.posts || []);
         setTotalPosts(postsData.total || 0);
       }
       
       if (accountsRes.ok) {
-        const accountsData = await accountsRes.json();
+        const accountsData = await accountsRes.json() as { accounts?: Account[] };
         const accountsList: Account[] = Array.isArray(accountsData) ? accountsData : accountsData.accounts || [];
         setAccounts(accountsList);
 
@@ -140,7 +140,7 @@ export default function PostsPage() {
 
       // 平台列表（v0.5 新增：从 /api/platforms 拉全量，覆盖仅从账号派生的旧逻辑）
       if (platformsRes.ok) {
-        const platformsData = await platformsRes.json();
+        const platformsData = await platformsRes.json() as { platforms?: Platform[] };
         const platformsList: Platform[] = platformsData.platforms || [];
         setPlatforms(platformsList);
       }
@@ -183,7 +183,7 @@ export default function PostsPage() {
       
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { posts?: Post[]; total?: number };
         setPosts(data.posts || []);
         setTotalPosts(data.total || 0);
       }

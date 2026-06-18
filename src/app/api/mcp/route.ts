@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as { method?: string; id?: string | number | null; params?: Record<string, unknown> };
     const response = await handleMcpRequest(body, validation.userId!, validation.scope || 'read');
 
     return NextResponse.json(response);

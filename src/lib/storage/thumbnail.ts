@@ -1,7 +1,37 @@
-import sharp from 'sharp';
 import { promises as fs } from 'fs';
-import path from 'path';
 import { THUMBNAIL_SIZE, THUMBNAIL_QUALITY, THUMBNAIL_MIN_SIZE, THUMBNAIL_MAX_SIZE } from '@/lib/config';
+
+/**
+ * Sharp 缩略图生成器
+ * 仅在支持 Sharp 的环境中可用（Node.js）
+ * Cloudflare Workers 环境会回退到禁用缩略图
+ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let sharpModule: any = null;
+
+async function getSharp() {
+  if (sharpModule === null) {
+    try {
+      // 动态导入 Sharp
+      sharpModule = await import('sharp');
+    } catch {
+      // Sharp 不可用（如 Cloudflare Workers）
+      console.warn('[Thumbnail] Sharp not available, thumbnail generation disabled');
+      sharpModule = false;
+      return null;
+    }
+  }
+  return sharpModule || null;
+}
+
+/**
+ * 检查当前环境是否支持 Sharp
+ */
+export async function isSharpAvailable(): Promise<boolean> {
+  const sharp = await getSharp();
+  return sharp !== null;
+}
 
 /**
  * 生成缩略图
@@ -14,7 +44,18 @@ export async function generateThumbnail(
   maxSize: number = THUMBNAIL_SIZE,
   quality: number = THUMBNAIL_QUALITY
 ): Promise<Buffer> {
-  const resized = await sharp(imageBuffer)
+  const sharp = await getSharp();
+  
+  if (!sharp) {
+    // Sharp 不可用时，返回原图
+    console.warn('[Thumbnail] Sharp not available, returning original image');
+    return imageBuffer;
+  }
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sharpInstance = (sharp as any).default ? (sharp as any).default(imageBuffer) : sharp(imageBuffer);
+  
+  const resized = await sharpInstance
     .resize(maxSize, maxSize, {
       fit: 'inside',
       withoutEnlargement: true,
@@ -38,8 +79,7 @@ export async function generateThumbnail(
 export async function needsThumbnail(filePath: string): Promise<boolean> {
   try {
     const stat = await fs.stat(filePath);
-  // 如果文件小于最小尺寸，不需要生成
-  return stat.size > THUMBNAIL_MIN_SIZE;
+    return stat.size > THUMBNAIL_MIN_SIZE;
   } catch {
     return false;
   }

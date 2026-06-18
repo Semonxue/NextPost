@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
-    const { aiConfig } = await request.json();
+    const { aiConfig } = (await request.json()) as { aiConfig?: { provider?: string; apiKey?: string; model?: string } };
 
     await prisma.user.update({
       where: { id: session.user.id },

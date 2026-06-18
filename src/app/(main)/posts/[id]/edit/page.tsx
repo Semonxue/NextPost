@@ -106,11 +106,11 @@ export default function EditPostPage() {
         fetch(`/api/posts/${params.id}`),
       ]);
       if (accountsRes.ok) {
-        const accountsData = await accountsRes.json();
-        setAccounts(accountsData);
+        const accountsData = await accountsRes.json() as { accounts?: Account[] };
+        setAccounts(accountsData.accounts || []);
       }
       if (postRes.ok) {
-        const postData = await postRes.json();
+        const postData = await postRes.json() as Post;
         setPost(postData);
         setFormData({
           accountId: postData.accountId,
@@ -151,7 +151,7 @@ export default function EditPostPage() {
     try {
       const res = await fetch(`/api/accounts/${accountId}/config`);
       if (res.ok) {
-        const config = await res.json();
+        const config = await res.json() as PlatformConfig;
         setPlatformConfig(config);
       } else {
         // 使用默认配置
@@ -211,14 +211,14 @@ export default function EditPostPage() {
         });
         
         if (!uploadRes.ok) {
-          const error = await uploadRes.json();
+          const error = await uploadRes.json() as { error?: string };
           addToast({ type: "error", message: error.error || "上传失败" });
           setSaving(false);
           return;
         }
         
-        const uploadData = await uploadRes.json();
-        mediaUrls.push(uploadData.url);
+        const uploadData = await uploadRes.json() as { url?: string; thumbnailUrl?: string };
+        if (uploadData.url) mediaUrls.push(uploadData.url);
         // 保存服务端生成的缩略图 URL
         if (uploadData.thumbnailUrl) {
           mediaThumbnailsResult.push(uploadData.thumbnailUrl);
@@ -249,7 +249,7 @@ export default function EditPostPage() {
         addToast({ type: "success", message: "帖子已更新" });
         router.push(backUrl);
       } else {
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         addToast({ type: "error", message: data.error || "更新失败" });
       }
     } catch {

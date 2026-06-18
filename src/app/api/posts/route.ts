@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
-    const { accountId, content, title, mediaUrls, mediaThumbnails, scheduledTime, timezone, status } = await request.json();
+    const { accountId, content, title, mediaUrls, mediaThumbnails, scheduledTime, timezone, status } = (await request.json()) as { accountId?: string; content?: string; title?: string; mediaUrls?: string[]; mediaThumbnails?: string[]; scheduledTime?: string; timezone?: string; status?: string };
 
     if (!accountId) {
       return NextResponse.json({ error: "请选择账号" }, { status: 400 });

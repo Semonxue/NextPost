@@ -32,7 +32,7 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, email }),
       });
-      const registerData = await registerRes.json();
+      const registerData = await registerRes.json() as { error?: string };
       if (!registerRes.ok) {
         setError(registerData.error || "注册失败");
         return;

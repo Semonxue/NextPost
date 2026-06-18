@@ -5,7 +5,7 @@ import { REGISTERED_PLATFORMS } from "@/lib/platform";
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password, email } = await request.json();
+    const { username, password, email } = await request.json() as { username?: string; password?: string; email?: string };
 
     if (!username || !password) {
       return NextResponse.json(
@@ -41,9 +41,9 @@ export async function POST(request: NextRequest) {
     // 确保所有已注册平台存在（从 REGISTERED_PLATFORMS 派生）
     for (const platform of REGISTERED_PLATFORMS) {
       await prisma.platform.upsert({
-        where: { name: platform.name },
+        where: { name: platform.key },
         update: { icon: platform.icon },
-        create: { name: platform.name, icon: platform.icon },
+        create: { name: platform.key, icon: platform.icon },
       });
     }
 

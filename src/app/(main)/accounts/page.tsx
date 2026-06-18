@@ -63,8 +63,8 @@ export default function AccountsPage() {
     try {
       const res = await fetch("/api/accounts");
       if (res.ok) {
-        const data = await res.json();
-        setAccounts(data);
+        const data = await res.json() as { accounts?: Account[] };
+        setAccounts(data.accounts || []);
       }
     } catch (error) {
       console.error("获取账号失败:", error);
@@ -76,7 +76,7 @@ export default function AccountsPage() {
     try {
       const res = await fetch("/api/platforms");
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { platforms?: Platform[] };
         setPlatforms(data.platforms || []);
         // 默认选第一个平台（创建账号时）
         setFormData((prev) => prev.platformId ? prev : { ...prev, platformId: data.platforms?.[0]?.id || "" });
@@ -118,7 +118,7 @@ export default function AccountsPage() {
         setEditingAccount(null);
         setFormData({ name: "", handle: "", description: "", platformId: platforms[0]?.id || "" });
       } else {
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         addToast({ type: "error", message: data.error || "操作失败" });
       }
     } catch (error) {

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
-    const { name, handle, description, platformId } = await request.json();
+    const { name, handle, description, platformId } = await request.json() as { name?: string; handle?: string; description?: string; platformId?: string };
 
     if (!name || !handle) {
       return NextResponse.json({ error: "名称和handle不能为空" }, { status: 400 });

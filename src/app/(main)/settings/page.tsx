@@ -149,7 +149,7 @@ export default function SettingsPage() {
     try {
       const keysRes = await fetch("/api/settings/external-keys");
       if (keysRes.ok) {
-        const keysData = await keysRes.json();
+        const keysData = await keysRes.json() as { keys?: ExternalApiKey[] };
         setExternalKeys(keysData.keys || []);
       }
     } catch (error) {
@@ -164,7 +164,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/stats");
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as Stats;
         setStats(data);
       }
     } catch (error) {
@@ -193,8 +193,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ name: newKeyName, scope: newKeyScope }),
       });
       if (res.ok) {
-        const data = await res.json();
-        setShowNewKey(data.key);
+        const data = await res.json() as { key?: string };
+        setShowNewKey(data.key || null);
         setNewKeyName("");
         addToast({
           type: "success",
@@ -230,8 +230,8 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`/api/settings/external-keys/reveal?id=${id}`);
       if (res.ok) {
-        const data = await res.json();
-        setShowNewKey(data.key);
+        const data = await res.json() as { key?: string };
+        setShowNewKey(data.key || null);
         addToast({ type: "info", message: `正在查看 ${name} 的完整 Key` });
       } else {
         addToast({ type: "error", message: "获取 Key 失败" });
@@ -257,7 +257,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ force: forceRegenerate })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { message?: string; processed?: number; skipped?: number; failed?: number };
         setRegenerateProgress(100);
         addToast({ 
           type: "success", 

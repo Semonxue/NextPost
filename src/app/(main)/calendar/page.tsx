@@ -96,20 +96,20 @@ export default function CalendarPage() {
       ]);
       
       if (postsRes.ok) {
-        const postsData = await postsRes.json();
+        const postsData = await postsRes.json() as { posts?: Post[] };
         setPosts(postsData.posts || []);
       }
       
       if (accountsRes.ok) {
-        const accountsData = await accountsRes.json();
-        setAccounts(Array.isArray(accountsData) ? accountsData : accountsData.accounts || []);
+        const accountsData = await accountsRes.json() as Account[] | { accounts?: Account[] };
+        setAccounts(Array.isArray(accountsData) ? accountsData : (accountsData as { accounts?: Account[] }).accounts || []);
         
         // 提取所有平台（从 /api/platforms 拿全量，不依赖账号）
         // 注意：accountsData 可能是数组或 {accounts: []} 包装，accountsData.accounts?.forEach 永远空
         try {
           const platformsRes = await fetch('/api/platforms')
           if (platformsRes.ok) {
-            const platformsData = await platformsRes.json()
+            const platformsData = await platformsRes.json() as { platforms?: Platform[] }
             setPlatforms(platformsData.platforms || [])
           }
         } catch {
@@ -148,7 +148,7 @@ export default function CalendarPage() {
       
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { posts?: Post[] };
         setPosts(data.posts || []);
       }
     } catch (error) {

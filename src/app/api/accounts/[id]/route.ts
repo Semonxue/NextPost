@@ -13,7 +13,7 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const { name, handle, description } = await request.json();
+    const { name, handle, description } = await request.json() as { name?: string; handle?: string; description?: string };
 
     // 验证账号归属（且未被软删除）
     const existingAccount = await prisma.account.findFirst({

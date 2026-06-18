@@ -62,7 +62,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   let body: { name?: unknown; scope?: unknown };
   try {
-    body = await request.json();
+    body = (await request.json()) as { name?: unknown; scope?: unknown };
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }

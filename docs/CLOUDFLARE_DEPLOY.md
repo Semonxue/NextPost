@@ -356,12 +356,51 @@ wrangler pages project list
 
 ---
 
+## 实现状态 (v0.5.3+)
+
+以下代码已实现并可使用：
+
+### 已实现
+- ✅ **R2 存储引擎** (`src/lib/storage/r2.ts`)
+  - 支持 `upload / uploadWithThumbnail / delete / exists / getUrl`
+  - Cloudflare Workers 环境下自动检测 `MEDIA` 绑定
+  - 缩略图生成在 CF 环境自动降级（返回原图 URL）
+- ✅ **Sharp 兼容** (`src/lib/storage/thumbnail.ts`)
+  - 使用动态导入，在不支持 Sharp 的环境中优雅降级
+- ✅ **存储引擎自动选择** (`src/lib/storage/index.ts`)
+  - 通过 `STORAGE_ENGINE` 环境变量切换 local/r2
+- ✅ **wrangler.toml** 配置文件
+  - 已包含 D1/R2 绑定的注释示例
+  - 本地 `.dev.vars` 开发配置
+- ✅ **next.config.ts** 适配
+  - 配置 R2 远程图片模式
+  - 设置 serverActions 允许的 origin
+
+### 部署后配置步骤
+
+1. **绑定资源**：在 Cloudflare Dashboard 中绑定 D1（`DB`）和 R2（`MEDIA`）
+2. **设置环境变量**：
+   - `AUTH_SECRET` - NextAuth 加密密钥
+   - `STORAGE_ENGINE=r2` - 启用 R2 存储
+   - `NEXT_PUBLIC_BASE_URL` - 站点 URL
+3. **运行迁移**：`wrangler d1 migrations apply nextpost-db`
+4. **种子数据**（可选）：部署一个简单的 seed 脚本
+
+### 已知限制
+
+- **缩略图**：Cloudflare Workers 不支持 Sharp，CF 环境下不上传缩略图，使用原图替代
+- **本地存储**：本地开发仍用 `prisma/dev.db` SQLite 文件 + `./uploads/` 目录
+- **数据隔离**：D1 共享数据库，通过 `userId` 字段隔离；R2 通过路径前缀隔离
+
+---
+
 ## 下一步
 
 部署完成后，可以继续实施：
 
-1. **R2 存储引擎实现** - 将媒体文件存储到 R2
-2. **版本升级系统** - 支持多租户升级
+1. **R2 公开访问配置** - 启用 R2 公开访问或配置自定义域名
+2. **CI/CD 配置** - 接入 GitHub Actions 自动部署
+3. **多租户改造** - 支持多租户升级
 
 详见 [VERSION_UPGRADE.md](./VERSION_UPGRADE.md)
 
