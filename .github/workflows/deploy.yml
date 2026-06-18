@@ -25,23 +25,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
 
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10 --activate
-
-      - name: Get pnpm store directory
-        shell: bash
+      # Corepack ships with Node.js and is the official way to install pnpm.
+      # We pin the version and put it on PATH for the rest of the job.
+      - name: Install pnpm via corepack
         run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          echo "$(pnpm --version)"
+          echo "::add-path::$HOME/.local/share/pnpm"
 
-      - name: Setup pnpm cache
+      - name: Cache pnpm store
         uses: actions/cache@v4
         with:
-          path: ${{ env.STORE_PATH }}
+          path: ~/.local/share/pnpm/store
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
@@ -82,13 +82,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
 
-      - name: Install pnpm
-        run: corepack enable && corepack prepare pnpm@10 --activate
+      - name: Install pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          echo "::add-path::$HOME/.local/share/pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
