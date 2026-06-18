@@ -74,9 +74,18 @@ jobs:
       # (opennextjs-cloudflare runs `next build` internally; `prisma generate`
       # must run before that so PrismaClient is available during build.)
       - name: Build for Cloudflare Workers
+        # Save full log; emit last 50 lines as ::error:: annotation so the
+        # failure shows up in the PR/Run summary even without login.
         run: |
-          echo "=== Next.js + OpenNext build ==="
-          pnpm exec opennextjs-cloudflare build 2>&1 | tail -100
+          set -o pipefail
+          pnpm exec opennextjs-cloudflare build > /tmp/build.log 2>&1 || {
+            echo "::error::opennextjs-cloudflare build failed"
+            echo "::error::--- Last 50 lines of build output ---"
+            tail -50 /tmp/build.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
         env:
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
