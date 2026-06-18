@@ -15,12 +15,13 @@ async function ensureDir(dirPath: string): Promise<void> {
 
 // 本地存储引擎
 export class LocalStorageEngine implements StorageEngine {
-  private baseDir: string;
-  private baseUrl: string;
+  // baseDir 和 baseUrl 不再在 constructor 里通过 process.cwd() 计算
+  // 这样可以避免 Turbopack 在模块加载时追踪 uploads/ 目录
+  private readonly baseUrl = '/api/uploads';
 
-  constructor(baseDir: string = './uploads', baseUrl: string = '/api/uploads') {
-    this.baseDir = path.resolve(process.cwd(), baseDir);
-    this.baseUrl = baseUrl;
+  // 每个方法内部用 path.join(process.cwd(), ...) — Turbopack 不会在加载时追踪
+  private getBaseDir(): string {
+    return path.join(process.cwd(), 'uploads');
   }
 
   async upload(file: Buffer, filename: string, mimeType: string): Promise<string> {
@@ -30,11 +31,12 @@ export class LocalStorageEngine implements StorageEngine {
     const relativePath = `${new Date().toISOString().slice(0, 10)}/${uniqueName}`;
     
     // 确保目录存在
-    const dirPath = path.join(this.baseDir, path.dirname(relativePath));
+    const baseDir = this.getBaseDir();
+    const dirPath = path.join(baseDir, path.dirname(relativePath));
     await ensureDir(dirPath);
     
     // 写入文件
-    const filePath = path.join(this.baseDir, relativePath);
+    const filePath = path.join(baseDir, relativePath);
     await fs.writeFile(filePath, file);
     
     return this.getUrl(relativePath);
@@ -60,12 +62,13 @@ export class LocalStorageEngine implements StorageEngine {
     const relativePath = `${new Date().toISOString().slice(0, 10)}/${uniqueName}`;
     const thumbnailPath = `${new Date().toISOString().slice(0, 10)}/${baseName}_thumb.webp`;
     
+    const baseDir = this.getBaseDir();
     // 确保目录存在
-    const dirPath = path.join(this.baseDir, path.dirname(relativePath));
+    const dirPath = path.join(baseDir, path.dirname(relativePath));
     await ensureDir(dirPath);
     
     // 写入原文件
-    const filePath = path.join(this.baseDir, relativePath);
+    const filePath = path.join(baseDir, relativePath);
     await fs.writeFile(filePath, file);
     
     // 生成并写入缩略图（仅对图片生成）
@@ -75,7 +78,7 @@ export class LocalStorageEngine implements StorageEngine {
     if (isImage) {
       try {
         thumbnailBuffer = await generateThumbnail(file);
-        const thumbPath = path.join(this.baseDir, thumbnailPath);
+        const thumbPath = path.join(baseDir, thumbnailPath);
         await fs.writeFile(thumbPath, thumbnailBuffer);
       } catch (err) {
         console.error('生成缩略图失败:', err);
@@ -97,7 +100,7 @@ export class LocalStorageEngine implements StorageEngine {
     const relativePath = this.getRelativePath(url);
     if (!relativePath) return;
     
-    const filePath = path.join(this.baseDir, relativePath);
+    const filePath = path.join(this.getBaseDir(), relativePath);
     try {
       await fs.unlink(filePath);
     } catch (error: unknown) {
@@ -125,7 +128,7 @@ export class LocalStorageEngine implements StorageEngine {
   }
 
   async exists(relativePath: string): Promise<boolean> {
-    const filePath = path.join(this.baseDir, relativePath);
+    const filePath = path.join(this.getBaseDir(), relativePath);
     try {
       await fs.access(filePath);
       return true;

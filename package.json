@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "prisma generate && next build",
+    "build:cf": "prisma generate && next build && rm -rf .next/node_modules",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",

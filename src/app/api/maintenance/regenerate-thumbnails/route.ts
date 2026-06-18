@@ -134,6 +134,10 @@ export async function POST(request: Request) {
   }
 }
 
+// 静态计算 uploads 目录路径，避免 Turbopack 动态追踪 process.cwd()
+// 这只在构建时执行一次，resolve 会把 './uploads' 转成绝对路径
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+
 /**
  * 根据 mediaUrl 获取实际文件路径
  */
@@ -155,7 +159,8 @@ function getFilePath(mediaUrl: string): string | null {
     return null;
   }
   
-  return path.join(process.cwd(), relativePath);
+  // Turbopack 可以静态解析 path.join(绝对路径, ...) 不会追踪目录
+  return path.join(UPLOADS_DIR, relativePath);
 }
 
 /**
