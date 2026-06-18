@@ -358,7 +358,7 @@ export const TOOLS: Tool[] = [
  * 获取账号列表（脱敏）
  */
 async function listAccounts(userId: string): Promise<ExternalAccount[]> {
-  const db = getDb();
+  const db = await getDb();
 
   const accounts = db.select().from(account)
     .where(and(eq(account.userId, userId), isNull(account.deletedAt)))
@@ -395,7 +395,7 @@ async function getPendingPosts(
   limit: number = 10,
   windowMinutes: number = DEFAULT_WINDOW_MINUTES,
 ): Promise<ExternalPost[]> {
-  const db = getDb();
+  const db = await getDb();
 
   // v0.5.2 时间窗口过滤：以服务端当前时间为中心的对称区间
   const nowMs = Date.now();
@@ -461,7 +461,7 @@ async function getPendingPosts(
  * 获取帖子详情
  */
 async function getPostDetail(userId: string, postId: string): Promise<ExternalPostDetail | null> {
-  const db = getDb();
+  const db = await getDb();
 
   const postRecord = db.select().from(post)
     .where(and(eq(post.id, postId), eq(post.userId, userId), isNull(post.deletedAt)))
@@ -509,7 +509,7 @@ async function reportPublishResult(
   errorMessage?: string,
   retryable?: boolean
 ): Promise<PublishResultResponse> {
-  const db = getDb();
+  const db = await getDb();
 
   // 验证帖子存在且令牌匹配
   const existing = db.select().from(post)
@@ -791,7 +791,7 @@ async function createPost(
   timezone?: string,
   title?: string
 ): Promise<WriteResult> {
-  const db = getDb();
+  const db = await getDb();
 
   // 校验账号归属
   const acc = db.select().from(account)
@@ -874,7 +874,7 @@ async function updatePost(
   timezone?: string,
   title?: string
 ): Promise<WriteResult> {
-  const db = getDb();
+  const db = await getDb();
 
   // 找帖子（必须在 draft/scheduled 状态，未软删）
   const existing = db.select().from(post)

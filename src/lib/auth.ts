@@ -15,7 +15,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
-        const db = getDb();
+        const db = await getDb();
         const found = db.select().from(user).where(eq(user.username, credentials.username as string)).get();
         if (!found) return null;
         const valid = await bcrypt.compare(credentials.password as string, found.password);

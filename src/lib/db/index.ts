@@ -20,33 +20,34 @@ function resolveD1Binding(): D1Database | null {
   return null;
 }
 
-function createDb(): any {
-  // Cloudflare Workers: use D1 binding (sync)
-  if (process.env.STORAGE_ENGINE === "r2") {
-    const d1Binding = resolveD1Binding();
-    if (d1Binding) {
-      console.log("[db] Using D1 (Cloudflare Workers)");
-      return drizzleD1(d1Binding, { schema });
-    }
+async function createDb(): Promise<any> {
+  // Cloudflare Workers: prefer D1 binding (always available in CF Workers env)
+  const d1Binding = resolveD1Binding();
+  if (d1Binding) {
+    console.log("[db] Using D1 (Cloudflare Workers)");
+    return drizzleD1(d1Binding, { schema });
   }
 
-  // Local dev: use @libsql/client (Node.js only)
-  // This branch is NOT reached in Workers (D1 is always available there via getCloudflareContext)
+  // Local dev: use @libsql/client (Node.js only — never reached in Workers)
+  // Dynamic import so Workers bundle doesn't try to resolve @libsql/* at build time
   console.log("[db] Using libsql (local dev)");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createClient } = require("@libsql/client");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { drizzle } = require("drizzle-orm/libsql");
+  const [{ createClient }, { drizzle }] = await Promise.all([
+    import("@libsql/client"),
+    import("drizzle-orm/libsql"),
+  ]);
   const dbPath = (process.env.DATABASE_URL ?? "file:./prisma/dev.db").replace("file:", "");
   const client = createClient({ url: `file:${dbPath}` });
   return drizzle(client, { schema });
 }
 
-// Eager init
-_db = createDb();
+let _initPromise: Promise<any> | null = null;
 
-export function getDb(): any {
-  return _db;
+export async function getDb(): Promise<any> {
+  if (_db) return _db;
+  if (!_initPromise) {
+    _initPromise = createDb().then((d) => { _db = d; return _db; });
+  }
+  return _initPromise;
 }
 
 // Re-export schema for convenience

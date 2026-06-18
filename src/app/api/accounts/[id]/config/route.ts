@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = getDb();
+    const db = await getDb();
     const acct = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id))).get();
     if (!acct) return NextResponse.json({ error: "账号不存在" }, { status: 404 });
     const config = await db.select().from(platformConfig).where(eq(platformConfig.platformId, acct.platformId)).get();

@@ -9,7 +9,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { eq } from "drizzle-orm";
 import * as schema from "./schema";
-import { REGISTERED_PLATFORMS } from "@/lib/platform";
+import { REGISTERED_PLATFORMS } from "../../lib/platform";
 
 const dbPath = (process.env.DATABASE_URL ?? "file:./prisma/dev.db").replace("file:", "");
 const client = createClient({ url: `file:${dbPath}` });

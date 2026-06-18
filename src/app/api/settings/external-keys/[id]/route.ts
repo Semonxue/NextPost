@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const data: { name: string } = { name: body.name.trim() };
 
   try {
-    const db = getDb();
+    const db = await getDb();
     // 验证归属：只能改自己的 key
     const existing = db.select().from(externalApiKey)
       .where(and(eq(externalApiKey.id, id), eq(externalApiKey.userId, session.user.id)))

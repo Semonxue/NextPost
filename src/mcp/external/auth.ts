@@ -77,7 +77,7 @@ export async function validateApiKey(apiKey: string): Promise<{
   }
 
   try {
-    const db = getDb();
+    const db = await getDb();
     // 查询 API Key
     const apiKeyRecord = db.select().from(externalApiKey).where(eq(externalApiKey.key, apiKey)).get();
 
@@ -154,7 +154,7 @@ export async function generateApiKey(
   error?: string;
 }> {
   try {
-    const db = getDb();
+    const db = await getDb();
     // 解析并归一化 scope
     const finalScope: Scope = parseScope(scope);
 
@@ -201,7 +201,7 @@ export async function deleteApiKey(
   error?: string;
 }> {
   try {
-    const db = getDb();
+    const db = await getDb();
     // 先验证归属
     const existing = db.select().from(externalApiKey)
       .where(eq(externalApiKey.id, keyId))
@@ -242,7 +242,7 @@ export async function listApiKeys(userId: string): Promise<{
   error?: string;
 }> {
   try {
-    const db = getDb();
+    const db = await getDb();
     // 【v0.4】先把遗留的 read_report 一次性迁到 read，让 Settings UI 展示真实 scope
     db.update(externalApiKey)
       .set({ permissions: 'read' })
