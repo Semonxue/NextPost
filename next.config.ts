@@ -18,9 +18,16 @@ const nextConfig: NextConfig = {
   },
 
   // sharp/prisma 是运行时原生依赖，不打包进 Workers bundle
-  // jose: next-auth v5 依赖，必须 external 以使用 workerd 兼容的 entry point
+  // jose/next-auth/@auth/core: 这些包有 workerd/Node 双 entry，必须 external
   // 详见 https://opennext.js.org/cloudflare/howtos/workerd
-  serverExternalPackages: ['sharp', 'prisma', '@prisma/client', 'jose'],
+  serverExternalPackages: [
+    'sharp',
+    'prisma',
+    '@prisma/client',
+    'jose',
+    'next-auth',
+    '@auth/core',
+  ],
 };
 
 export default nextConfig;
