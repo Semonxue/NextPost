@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
+// Use Node.js runtime for middleware (next-auth v5 uses jose which needs Node.js)
+export const runtime = "nodejs";
+
 export default auth((req) => {
   // 排除 API 路由
   if (req.nextUrl.pathname.startsWith("/api")) {
