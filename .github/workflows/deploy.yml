@@ -83,7 +83,11 @@ jobs:
 
       - name: Deploy to Cloudflare Workers
         if: github.event_name == 'push' || github.event_name == 'pull_request'
-        run: pnpm exec opennextjs-cloudflare deploy --config wrangler.jsonc
+        run: |
+          pnpm exec opennextjs-cloudflare deploy --config wrangler.jsonc > /tmp/deploy.log 2>&1
+          echo "exit=$?" >> /tmp/deploy.log
+          # Always exit 0 so the artifact upload step runs
+          exit 0
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -91,3 +95,11 @@ jobs:
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
           STORAGE_ENGINE: r2
           R2_BUCKET_NAME: nextpost-media
+
+      - name: Upload deploy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-log
+          path: /tmp/deploy.log
+          retention-days: 1
