@@ -5,10 +5,6 @@ name = "nextpost"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = ".next"
 
-# 构建命令: build:cf 会在 build 后删除 .next/node_modules/，
-# 防止 Turbopack 创建的符号链接导致 CF Pages 验证失败
-build.command = "pnpm build:cf"
-
 # ===================
 # D1 数据库绑定
 # ===================
