@@ -41,7 +41,7 @@
 | 组件 | 本地开发 | 云端部署 |
 |------|---------|---------|
 | 框架 | Next.js 16.2.6 + Turbopack (dev) | Next.js 16 + **Webpack** (prod) + OpenNext |
-| 数据库 | SQLite (dev.db) | Cloudflare D1 |
+| 数据库 | Drizzle ORM + SQLite (dev.db) | Cloudflare D1 (通过 Drizzle D1 adapter) |
 | 存储 | 本地文件系统 | Cloudflare R2 |
 | 认证 | NextAuth.js | NextAuth.js (适配) |
 | CI/CD | — | GitHub Actions + wrangler |

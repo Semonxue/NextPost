@@ -14,6 +14,7 @@
 | **v0.4.8** | **2026-06-04** | **端口单一源（APP_URL）**：所有 URL 概念（基础 URL / MCP 端点 / 媒体 URL 拼接）从 `APP_URL` env 派生（`src/lib/config.ts` 中 `getAppUrl()` / `getMcpEndpointUrl()` helper）；`dev.mjs` 启动时自动注入；默认端口 3000 → 3456。**`NEXT_PUBLIC_BASE_URL` 不再是用户可配覆盖项**——它是 `dev.mjs` 派生的 env。 |
 | **v0.5.2** | **2026-06-11** | **`get_pending_posts` 时间窗口过滤**：新增可选参数 `windowMinutes`（integer，默认 60，范围 0~43200）。以服务端当前时间为中心的对称窗口 `[now-N, now+N]`，只返回 `scheduledTime` 落在区间内的待发帖子。仅影响 `get_pending_posts`，其他工具 / API / 数据库零改动。⚠️ **破坏性变更**：不传该参数时，默认只返回 ±1 小时内的帖子（旧行为：返回全部）；客户端可显式传 `43200` 还原旧行为。详见 [V0.5.2.md](./V0.5.2.md)。 |
 | **v0.5.3** | **2026-06-12** | **report_publish_result 使用服务端时间**：成功（success / partial）时忽略外部 CLI 回传的 publishedAt，统一改用 NextPost 服务端收到回传时的 Date.now() 作为 Post.publishedAt。解决外部 CLI 死机 / 断网重试导致的发布时间漂移问题。publishedAt 入参字段保留以维持 schema 向后兼容（标注为已废弃，服务端忽略）。详见 [V0.5.3.md](./V0.5.3.md)。 |
+| **v0.6.0** | **2026-06-18** | **Prisma → Drizzle ORM 迁移**：MCP 层无 schema 变更，底层数据库访问从 Prisma 切换到 Drizzle ORM。对外接口和行为完全兼容。详见 [PROJECT_PLAN.md](./PROJECT_PLAN.md)。 |
 
 ## 概述
 

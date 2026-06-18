@@ -17,6 +17,7 @@
 | **v0.4.7** | **2026-06-03** | **posts/trash/stats 健壮性提升**：账号/平台提取逻辑、trash 状态处理、stats 路由增强 |
 | **v0.5.3** | **2026-06-12** | **`report_publish_result` 使用服务端时间**：`success` / `partial` 时忽略外部 CLI 回传的 `publishedAt`，统一用 NextPost 服务端 `Date.now()` 写入 `Post.publishedAt`，解决外部 CLI 死机/断网重试导致的时间漂移问题。Schema 零改动，旧客户端继续传 `publishedAt` 不报错（字段被静默忽略）。详见 [V0.5.3.md](./V0.5.3.md)。 |
 | | **v0.4.8** | **2026-06-04** | **端口单一源（APP_URL）**：所有 URL 概念从 `APP_URL` env 派生；新增 `scripts/dev.mjs` 解析 `APP_URL` 自动注入 `PORT` / `NEXTAUTH_URL` / `NEXT_PUBLIC_BASE_URL`；UI / 工具 / 测试 / 文档全部改用 helper；vitest setup 默认给 `APP_URL` 兜底；`getAppUrl()` / `getPort()` / `getMcpEndpointUrl()` helper 覆盖单测；端口从 3000 → 3456 |
+| | **v0.6.0** | **2026-06-18** | **Prisma → Drizzle ORM 迁移 + CF Workers 部署**：数据库层从 Prisma v5 全面迁移到 Drizzle ORM（`drizzle-orm` + `@libsql/client`），10 张表 schema 重建。本地开发 SQLite（`@libsql/client`），CF Workers 用 D1 adapter。移除 `prisma generate`。Cloudflare Pages 废弃，改 Workers + OpenNext。新增 `src/lib/db/`（`schema.ts` + `index.ts` 双模式 db client）。API/认证/页面全适配 Drizzle。详见 [CLOUDFLARE_DEPLOY.md](./CLOUDFLARE_DEPLOY.md)。 |
 
 
 ---
