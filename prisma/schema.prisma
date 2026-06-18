@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+  engineType      = "wasm"
 }
 
 datasource db {
@@ -39,10 +41,10 @@ model Platform {
 model PlatformConfig {
   id                String   @id @default(cuid())
   platformId        String   @unique
-  maxContentLength  Int      @default(280)     // 最大文字长度
-  maxImages         Int      @default(4)       // 最多图片数
-  maxVideos         Int      @default(1)        // 最多视频数
-  allowMixedMedia   Boolean  @default(true)     // 是否允许图片+视频混合
+  maxContentLength  Int      @default(280)
+  maxImages         Int      @default(4)
+  maxVideos         Int      @default(1)
+  allowMixedMedia   Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
@@ -57,9 +59,8 @@ model Account {
   handle String
   description String?
   
-  // 软删除字段 (MCP Phase 2)
   deletedAt  DateTime?
-  deletedBy  String?    // "user" | "ai"
+  deletedBy  String?
   deleteNote String?
   
   createdAt   DateTime @default(now())
@@ -79,25 +80,23 @@ model Post {
   userId        String
   accountId     String
   content String
-  title  String?             // 可选标题（小红书等平台必需，其他平台可选）
-  mediaUrls     String   @default("[]")   // JSON 数组：["url1", "url2"]
-  mediaThumbnails String @default("[]")   // JSON 数组：["thumb1", "thumb2"]，与服务端缩略图一一对应
+  title  String?
+  mediaUrls     String   @default("[]")
+  mediaThumbnails String @default("[]")
   scheduledTime DateTime?
   timezone String   @default("Asia/Shanghai")
-  status        String   @default("draft")  // draft, scheduled, publishing, published, failed
+  status        String   @default("draft")
   
-  // MCP 发布相关字段
-  publishToken     String?                    // 外部发布验证令牌
-  publishTokenExp  DateTime?                 // 令牌过期时间
-  publishedAt      DateTime?                  // 实际发布时间
-  externalPostId   String?                    // 外部平台帖子 ID
-  externalPostUrl  String?                    // 外部帖子链接（可点击打开）
-  publishError     String?                    // 发布错误信息
-  publishAttempts  Int      @default(0)       // 发布尝试次数
+  publishToken     String?
+  publishTokenExp  DateTime?
+  publishedAt      DateTime?
+  externalPostId   String?
+  externalPostUrl  String?
+  publishError     String?
+  publishAttempts  Int      @default(0)
   
-  // 软删除字段 (MCP Phase 2)
   deletedAt  DateTime?
-  deletedBy  String?    // "user" | "ai"
+  deletedBy  String?
   deleteNote String?
   
   createdAt     DateTime @default(now())
@@ -117,7 +116,7 @@ model Media {
   userId    String
   type String
   url       String
-  thumbnailUrl String?                      // 服务端生成的缩略图 URL
+  thumbnailUrl String?
   filename String
   size      Int
   mimeType  String
@@ -150,15 +149,14 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 }
 
-// 外部 API Key (MCP 外部访问)
 model ExternalApiKey {
   id          String    @id @default(cuid())
   userId      String
-  name        String                    // 密钥名称，如 "Claude Desktop"
-  key         String    @unique         // 密钥值（加密存储）
-  permissions String    @default("read_report")  // 权限范围
+  name        String
+  key         String    @unique
+  permissions String    @default("read_report")
   lastUsedAt  DateTime?
-  expiresAt   DateTime?                 // 可选过期时间
+  expiresAt   DateTime?
   createdAt   DateTime  @default(now())
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -167,17 +165,16 @@ model ExternalApiKey {
   @@index([key])
 }
 
-// AI 操作审计日志 (MCP Phase 2)
 model AiOperationLog {
   id             String   @id @default(cuid())
   userId         String
-  conversationId String?  // 关联的 AI 对话
-  operation      String   // 操作类型：create, update, delete
-  entityType     String   // 实体类型：account, post
-  entityId       String   // 实体 ID
-  beforeState    String?  // 操作前状态（JSON）
-  afterState     String?  // 操作后状态（JSON）
-  aiModel        String?  // 使用的 AI 模型
+  conversationId String?
+  operation      String
+  entityType     String
+  entityId       String
+  beforeState    String?
+  afterState     String?
+  aiModel        String?
   createdAt      DateTime @default(now())
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

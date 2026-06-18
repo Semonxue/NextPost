@@ -19,7 +19,6 @@ jobs:
     permissions:
       contents: read
       deployments: write
-      cloudflare-workers: write
 
     steps:
       - name: Checkout
@@ -59,12 +58,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm exec prisma generate
-
       # opennextjs-cloudflare build = next build + transform for Workers
-      # (opennextjs-cloudflare runs `next build` internally; `prisma generate`
-      # must run before that so PrismaClient is available during build.)
+      # Prisma generate no longer needed — app uses Drizzle ORM
       - name: Build for Cloudflare Workers
         run: |
           pnpm exec opennextjs-cloudflare build > /tmp/build.log 2>&1 || {
@@ -76,6 +71,7 @@ jobs:
             exit 1
           }
         env:
+          DATABASE_URL: "file:./prisma/dev.db"
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           STORAGE_ENGINE: r2
