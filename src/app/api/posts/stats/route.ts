@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
-    const db = await getDb();
+    const db = getDb();
     const total = db.select({ count: count() }).from(post).where(and(eq(post.userId, session.user.id), isNull(post.deletedAt))).get();
     const scheduled = db.select({ count: count() }).from(post).where(and(eq(post.userId, session.user.id), eq(post.status, "scheduled"), isNull(post.deletedAt))).get();
     const draft = db.select({ count: count() }).from(post).where(and(eq(post.userId, session.user.id), eq(post.status, "draft"), isNull(post.deletedAt))).get();

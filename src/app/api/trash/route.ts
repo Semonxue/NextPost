@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
-    const db = await getDb();
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     const postsLimit = parseInt(searchParams.get("postsLimit") || "50");
     const postsOffset = parseInt(searchParams.get("postsOffset") || "0");

@@ -10,7 +10,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = await getDb();
+    const db = getDb();
     const acct = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id), isNotNull(account.deletedAt))).get();
     if (!acct) return NextResponse.json({ error: "账号不存在或未删除" }, { status: 404 });
     const posts = db.select().from(post).where(eq(post.accountId, id)).all();

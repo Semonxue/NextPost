@@ -9,7 +9,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = await getDb();
+    const db = getDb();
     const p = await db.select().from(post).where(and(eq(post.id, id), eq(post.userId, session.user.id), isNotNull(post.deletedAt))).get();
     if (!p) return NextResponse.json({ error: "帖子不存在或未删除" }, { status: 404 });
     db.update(post).set({ deletedAt: null, deletedBy: null, deleteNote: null }).where(eq(post.id, id)).run();

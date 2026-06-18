@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
-    const db = await getDb();
+    const db = getDb();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const accountId = searchParams.get("accountId");
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const { content, title, mediaUrls, mediaThumbnails, scheduledTime, timezone, status, accountId } = await request.json();
     if (!content) return NextResponse.json({ error: "内容不能为空" }, { status: 400 });
     if (!accountId) return NextResponse.json({ error: "请选择账号" }, { status: 400 });
-    const db = await getDb();
+    const db = getDb();
     const result = await db.insert(post).values({
       userId: session.user.id,
       accountId,

@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
-    const db = await getDb();
+    const db = getDb();
     const u = await db.select().from(user).where(eq(user.id, session.user.id)).get();
     if (!u) return NextResponse.json({ error: "用户不存在" }, { status: 404 });
     return NextResponse.json({ username: u.username, email: u.email, aiProvider: u.aiProvider, aiModel: u.aiModel });
@@ -24,7 +24,7 @@ export async function PATCH(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { email, currentPassword, newPassword, aiProvider, aiApiKey, aiModel } = await request.json();
-    const db = await getDb();
+    const db = getDb();
     const u = await db.select().from(user).where(eq(user.id, session.user.id)).get();
     if (!u) return NextResponse.json({ error: "用户不存在" }, { status: 404 });
     const updates = {};

@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = await getDb();
+    const db = getDb();
     const rows = await db.select().from(post).leftJoin(account, eq(post.accountId, account.id)).leftJoin(platform, eq(account.platformId, platform.id)).where(and(eq(post.id, id), eq(post.userId, session.user.id), isNull(post.deletedAt))).all();
     const p = rows[0];
     if (!p) return NextResponse.json({ error: "帖子不存在" }, { status: 404 });
@@ -26,7 +26,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
     const { content, title, mediaUrls, mediaThumbnails, scheduledTime, timezone, status, accountId } = await request.json();
-    const db = await getDb();
+    const db = getDb();
     const existing = await db.select().from(post).where(and(eq(post.id, id), eq(post.userId, session.user.id))).get();
     if (!existing) return NextResponse.json({ error: "帖子不存在" }, { status: 404 });
     const updates = { updatedAt: new Date().toISOString() };
@@ -53,7 +53,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = await getDb();
+    const db = getDb();
     const existing = await db.select().from(post).where(and(eq(post.id, id), eq(post.userId, session.user.id))).get();
     if (!existing) return NextResponse.json({ error: "帖子不存在" }, { status: 404 });
     db.update(post).set({ deletedAt: new Date().toISOString(), deletedBy: "user" }).where(eq(post.id, id)).run();
