@@ -18,16 +18,8 @@ const nextConfig: NextConfig = {
   },
 
   // sharp/prisma 是运行时原生依赖，不打包进 Workers bundle
-  // jose/next-auth/@auth/core: 这些包有 workerd/Node 双 entry，必须 external
   // 详见 https://opennext.js.org/cloudflare/howtos/workerd
-  serverExternalPackages: [
-    'sharp',
-    'prisma',
-    '@prisma/client',
-    'jose',
-    'next-auth',
-    '@auth/core',
-  ],
+  serverExternalPackages: ['sharp', 'prisma', '@prisma/client'],
 };
 
 export default nextConfig;

@@ -43,7 +43,8 @@ vi.mock('fs', () => ({
   promises: fsMock,
 }))
 
-import { GET, formatBytes } from '@/app/api/stats/route'
+import { GET } from '@/app/api/stats/route'
+import { formatBytes } from '@/lib/utils'
 import { auth } from '@/lib/auth'
 import { promises as fs } from 'fs'
 

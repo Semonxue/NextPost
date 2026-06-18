@@ -6,6 +6,7 @@ import { Key, User, Plus, Trash2, Copy, Eye, Pencil, Check, Filter, BarChart3, S
 import { Button } from "@/components/ui/Button";
 import { useUIStore } from "@/stores/uiStore";
 import { COOKIE_SETTINGS_TAB } from "@/lib/config";
+import { formatBytes } from "@/lib/utils";
 
 type TabType = "profile" | "apikeys" | "maintenance" | "stats";
 const VALID_TABS: TabType[] = ["profile", "apikeys", "maintenance", "stats"];
@@ -59,15 +60,6 @@ interface Stats {
     name: string;
     count: number;
   }[];
-}
-
-// 格式化字节大小
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 // 归一化 permissions 字段到 3 值之一
