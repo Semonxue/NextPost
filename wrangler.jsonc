@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "nextpost",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public",
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "nextpost",
+    },
+  ],
+  // D1 Database binding — database already exists in CF dashboard
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nextpost-db",
+      "database_id": "acfaa8c9-2b80-4348-854d-1d7444e892f8",
+    },
+  ],
+  // R2 Media bucket binding — already exists in CF dashboard
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "nextpost-media",
+    },
+  ],
+  // Environment variables (set in CF dashboard > Workers & Pages > your worker > Settings > Variables)
+  // Required: AUTH_SECRET, NEXT_PUBLIC_BASE_URL, STORAGE_ENGINE=r2, R2_BUCKET_NAME=nextpost-media
+  "vars": {
+    "NEXT_PUBLIC_BASE_URL": "https://nextpost.<ACCOUNT_HASH>.workers.dev",
+  },
+}

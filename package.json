@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "prisma generate && next build && rm -rf .next/node_modules",
+    "build": "prisma generate && next build --webpack",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
@@ -17,6 +19,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opennextjs/cloudflare": "^1.0.0",
     "@prisma/client": "^5.22.0",
     "@types/bcryptjs": "^3.0.0",
     "bcryptjs": "^3.0.3",
@@ -45,11 +48,12 @@
     "@types/uuid": "^11.0.0",
     "@vitest/coverage-v8": "4.1.7",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "^16.2.6",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5",
-    "vitest": "^4.1.7"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7",
+    "wrangler": "^4.0.0"
   }
 }
