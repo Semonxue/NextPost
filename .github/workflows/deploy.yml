@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
+      cloudflare-workers: write
 
     steps:
       - name: Checkout
