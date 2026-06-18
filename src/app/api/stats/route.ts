@@ -177,3 +177,15 @@ export async function GET() {
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });
   }
 }
+
+/**
+ * 格式化字节数为人类可读字符串
+ * 在其他模块（如测试）中通过 `import { formatBytes }` 使用
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
