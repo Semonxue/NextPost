@@ -17,10 +17,19 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
-  // sharp / @libsql/client 是原生二进制依赖，必须 externalize（Workers 不可用）
-  // prisma 和 @prisma/client 不 externalize，让其 WASM 引擎（engineType=wasm）
-  // 随 D1 adapter 一起打包进 Workers bundle，避免 fs.readdir 调用
-  serverExternalPackages: ['sharp', '@libsql/client'],
+  // @libsql/* 是 Node.js 原生包，workerd 环境不可用，Workers 用 D1 binding 替代
+  // drizzle-orm/libsql 内部 import @libsql/client，必须一起 externalize
+  // drizzle-orm/d1 不依赖 @libsql/*，可以正常 bundle
+  serverExternalPackages: [
+    'sharp',
+    'drizzle-orm/libsql',
+    '@libsql/client',
+    '@libsql/client-wasm',
+    '@libsql/core',
+    '@libsql/hrana-client',
+    '@libsql/isomorphic-fetch',
+    '@libsql/isomorphic-ws',
+  ],
 };
 
 export default nextConfig;
