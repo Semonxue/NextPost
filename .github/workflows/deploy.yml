@@ -82,8 +82,11 @@ jobs:
 
       - name: Deploy to Cloudflare Workers
         if: github.event_name == 'push' || github.event_name == 'pull_request'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+        run: pnpm exec opennextjs-cloudflare deploy --config wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+          STORAGE_ENGINE: r2
+          R2_BUCKET_NAME: nextpost-media
