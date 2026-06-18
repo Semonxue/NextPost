@@ -30,13 +30,22 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       # Corepack ships with Node.js and is the official way to install pnpm.
-      # We pin the version and put it on PATH for the rest of the job.
+      # We pin the version, install to a known location, and put it on PATH
+      # via the standard $GITHUB_PATH env file (::add-path:: is deprecated).
       - name: Install pnpm via corepack
         run: |
           corepack enable
           corepack prepare pnpm@10.11.0 --activate
-          echo "$(pnpm --version)"
-          echo "::add-path::$HOME/.local/share/pnpm"
+          # pnpm is shimmed by corepack into ~/.cache/node/corepack/bin/pnpm or
+          # ~/.local/share/pnpm. Find the actual binary and add its dir to PATH.
+          PNPM_BIN="$(node -e "console.log(require('child_process').execSync('corepack pnpm --version >/dev/null 2>&1; which pnpm || true').toString().trim())" 2>/dev/null || true)"
+          if [ -z "$PNPM_BIN" ]; then
+            PNPM_BIN="$(corepack which pnpm 2>/dev/null || echo)"
+          fi
+          if [ -n "$PNPM_BIN" ]; then
+            echo "$PNPM_BIN" >> "$GITHUB_PATH"
+          fi
+          pnpm --version
 
       - name: Cache pnpm store
         uses: actions/cache@v4
@@ -90,7 +99,11 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@10.11.0 --activate
-          echo "::add-path::$HOME/.local/share/pnpm"
+          PNPM_BIN="$(corepack which pnpm 2>/dev/null || true)"
+          if [ -n "$PNPM_BIN" ]; then
+            echo "$(dirname "$PNPM_BIN")" >> "$GITHUB_PATH"
+          fi
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
