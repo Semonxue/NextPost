@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
     unoptimized: false,
   },
   
+  // Cloudflare Pages: 把运行时二进制依赖剔出打包
+  serverExternalPackages: ['sharp', 'prisma', '@prisma/client'],
+
   // 实验性功能
   experimental: {
     // 启用 serverActions 支持 Cloudflare
