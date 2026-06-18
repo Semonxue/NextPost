@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = getDb();
+    const db = await getDb();
     const acct = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id))).get();
     if (!acct) return NextResponse.json({ error: "账号不存在" }, { status: 404 });
     return NextResponse.json(acct);
@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
     const { name, handle, description, platformId } = await request.json();
-    const db = getDb();
+    const db = await getDb();
     const existing = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id))).get();
     if (!existing) return NextResponse.json({ error: "账号不存在" }, { status: 404 });
     const updates = { updatedAt: new Date().toISOString() };
@@ -46,7 +46,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "未授权" }, { status: 401 });
     const { id } = await params;
-    const db = getDb();
+    const db = await getDb();
     const existing = await db.select().from(account).where(and(eq(account.id, id), eq(account.userId, session.user.id))).get();
     if (!existing) return NextResponse.json({ error: "账号不存在" }, { status: 404 });
     db.update(account).set({ deletedAt: new Date().toISOString(), deletedBy: "user" }).where(eq(account.id, id)).run();

@@ -17,10 +17,10 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
-  // sharp 是原生二进制依赖，必须 externalize（Workers 不可用，图片已设 unoptimized）
+  // sharp / @libsql/client 是原生二进制依赖，必须 externalize（Workers 不可用）
   // prisma 和 @prisma/client 不 externalize，让其 WASM 引擎（engineType=wasm）
   // 随 D1 adapter 一起打包进 Workers bundle，避免 fs.readdir 调用
-  serverExternalPackages: ['sharp'],
+  serverExternalPackages: ['sharp', '@libsql/client'],
 };
 
 export default nextConfig;
