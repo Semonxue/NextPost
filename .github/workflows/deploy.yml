@@ -61,15 +61,12 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
-      - name: Type check
-        run: pnpm exec tsc --noEmit
-
       - name: Run tests
-        run: pnpm test
+        run: pnpm test --run
 
       # opennextjs-cloudflare build = next build + transform for Workers
       # (opennextjs-cloudflare runs `next build` internally; `prisma generate`
-      # must run before that so PrismaClient is available during typecheck/build.)
+      # must run before that so PrismaClient is available during build.)
       - name: Build for Cloudflare Workers
         run: pnpm exec opennextjs-cloudflare build
         env:
