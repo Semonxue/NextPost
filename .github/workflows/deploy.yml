@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - feature/cloudflare-deploy
   pull_request:
     branches:
       - main
+      - feature/cloudflare-deploy
 
 env:
   NODE_VERSION: '22'
@@ -64,21 +66,13 @@ jobs:
           STORAGE_ENGINE: r2
           R2_BUCKET_NAME: nextpost-media
 
-      - name: Deploy to Cloudflare Workers (Preview)
-        if: github.event_name == 'pull_request'
+      - name: Deploy to Cloudflare Workers
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          environment: preview
-
-      - name: Deploy to Cloudflare Workers (Production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          environment: production
+          environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
 
   e2e-test:
     runs-on: ubuntu-latest
