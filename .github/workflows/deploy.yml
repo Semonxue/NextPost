@@ -74,7 +74,9 @@ jobs:
       # (opennextjs-cloudflare runs `next build` internally; `prisma generate`
       # must run before that so PrismaClient is available during build.)
       - name: Build for Cloudflare Workers
-        run: pnpm exec opennextjs-cloudflare build
+        run: |
+          echo "=== Next.js + OpenNext build ==="
+          pnpm exec opennextjs-cloudflare build 2>&1 | tail -100
         env:
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
