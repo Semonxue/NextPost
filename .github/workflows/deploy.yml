@@ -80,6 +80,13 @@ jobs:
       - name: Deploy to Cloudflare Workers
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
+          # Skip deploy if required Cloudflare secrets are missing (PR from fork,
+          # or repo owner hasn't set them yet). Build still proves the bundle is valid.
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID not set, skipping deploy"
+            echo "exit=skipped" > /tmp/deploy.log
+            exit 0
+          fi
           pnpm exec opennextjs-cloudflare deploy --config wrangler.jsonc > /tmp/deploy.log 2>&1
           echo "exit=$?" >> /tmp/deploy.log
           # Always exit 0 so the artifact upload step runs
