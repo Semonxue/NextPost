@@ -78,6 +78,18 @@ jobs:
           STORAGE_ENGINE: r2
           R2_BUCKET_NAME: nextpost-media
 
+      # OpenNext generate .open-next/worker.js but doesn't expose R2 bucket bindings
+      # to globalThis. populateProcessEnv() in init.js only copies string env vars.
+      # This step sed-injects globalThis.MEDIA = env.MEDIA so the storage layer can
+      # read the R2 bucket binding. TODO: replace with proper CloudflareEnv typing.
+      - name: Patch worker.js for CF bindings
+        run: |
+          WORKER=.open-next/worker.js
+          if [ -f "$WORKER" ]; then
+            sed -i 's/return runWithCloudflareRequestContext(request, env, ctx, async () => {/globalThis.MEDIA = env.MEDIA;\n        globalThis.DB = env.DB;\n        return runWithCloudflareRequestContext(request, env, ctx, async () => {/' "$WORKER"
+            echo "Patched $WORKER"
+          fi
+
       - name: Deploy to Cloudflare Workers
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
