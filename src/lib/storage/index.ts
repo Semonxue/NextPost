@@ -5,21 +5,28 @@ import { StorageEngine, StorageEngineType, UploadResult } from './types';
 // R2 存储引擎单例
 let r2StorageInstance: R2StorageEngine | null = null;
 
+// OpenNext Cloudflare adapter 在 init.js 中通过 AsyncLocalStorage
+// 把 CF env（包含 R2/MEDIA 绑定）存在 globalThis[Symbol.for("__cloudflare-context__")]
+// 参考: node_modules/@opennextjs/cloudflare/dist/cli/templates/init.js
+const CLOUDFLARE_CONTEXT_SYMBOL = Symbol.for('__cloudflare-context__');
+
 /**
  * 获取 R2 存储引擎实例
- * 在 Cloudflare Pages Functions 中可用
+ * - Cloudflare Workers: 直接读 globalThis 上的 CF context，从 env.MEDIA 拿 R2 bucket
+ * - 本地开发: globalThis 上没有 CF context，返回 null，由调用方 fallback
  */
 function getR2Engine(): R2StorageEngine | null {
-  // 延迟初始化，只在需要时获取
-  if (typeof globalThis.MEDIA !== 'undefined') {
-    if (!r2StorageInstance) {
-      const bucketName = process.env.R2_BUCKET_NAME || 'nextpost-media';
-      r2StorageInstance = new R2StorageEngine(
-        globalThis.MEDIA as unknown as R2Bucket,
-        bucketName
-      );
+  const ctx = (globalThis as Record<string, unknown>)[CLOUDFLARE_CONTEXT_SYMBOL];
+  if (ctx && typeof ctx === 'object' && ctx !== null) {
+    const env = (ctx as { env?: Record<string, unknown> }).env;
+    const media = env?.MEDIA as R2Bucket | undefined;
+    if (media) {
+      if (!r2StorageInstance) {
+        const bucketName = process.env.R2_BUCKET_NAME || 'nextpost-media';
+        r2StorageInstance = new R2StorageEngine(media, bucketName);
+      }
+      return r2StorageInstance;
     }
-    return r2StorageInstance;
   }
   return null;
 }
@@ -139,9 +146,3 @@ export function getFileUrl(path: string): string {
 export { localStorage } from './local';
 export { R2StorageEngine } from './r2';
 export type { StorageEngine, StorageEngineType, UploadResult } from './types';
-
-// Cloudflare 运行时类型声明
-declare global {
-  // eslint-disable-next-line no-var
-  var MEDIA: R2Bucket | undefined;
-}
