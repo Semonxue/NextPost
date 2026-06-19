@@ -10,7 +10,7 @@ interface MediaUploaderProps {
   platformConfig: PlatformConfig;
   initialUrls?: string[];
   initialThumbnails?: string[]; // 服务端生成的缩略图 URL 数组
-  onChange: (urls: string[], files: File[]) => void;
+  onChange: (uploadedUrls: string[], uploadedThumbnails: string[], pendingFiles: File[]) => void;
   maxFileSize?: number; // 默认 10MB
 }
 
@@ -129,9 +129,11 @@ export function MediaUploader({
       return;
     }
     prevMediaItemsRef.current = mediaItems;
-    const urls = mediaItems.filter((m) => m.url).map((m) => m.url!);
-    const files = mediaItems.filter((m) => m.file).map((m) => m.file!);
-    onChange(urls, files);
+    const uploadedUrls = mediaItems.filter((m) => m.url).map((m) => m.url as string);
+    const uploadedThumbnails = mediaItems.filter((m) => m.url).map((m) => (m.thumbnailUrl ?? m.url) as string);
+    // 只传还没有 URL 的文件（已上传的不要在提交时重复上传）
+    const pendingFiles = mediaItems.filter((m) => m.file && !m.url).map((m) => m.file!);
+    onChange(uploadedUrls, uploadedThumbnails, pendingFiles);
   }, [mediaItems, onChange]);
 
   // 处理文件选择

@@ -57,9 +57,9 @@ export default function EditPostPage() {
   });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
-  const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
+  const [uploadedThumbnails, setUploadedThumbnails] = useState<string[]>([]);
+  const [pendingMediaFiles, setPendingMediaFiles] = useState<File[]>([]);
   // 默认平台配置
   const defaultConfig: PlatformConfig = {
     platformId: "",
@@ -131,10 +131,10 @@ export default function EditPostPage() {
           setExistingMediaUrls(urls);
         }
         
-        // 解析已有缩略图
+        // 解析已有缩略图（同时用于 MediaUploader 初始化和提交时保存）
         if (postData.mediaThumbnails) {
           const thumbnails = JSON.parse(postData.mediaThumbnails);
-          setMediaThumbnails(thumbnails);
+          setUploadedThumbnails(thumbnails);
         }
         
         // 获取平台配置
@@ -176,9 +176,13 @@ export default function EditPostPage() {
     fetchPlatformConfig(accountId);
   };
   // 媒体变更处理
-  const handleMediaChange = useCallback((urls: string[], files: File[]) => {
-    setExistingMediaUrls(urls);
-    setMediaFiles(files);
+  // - uploadedUrls: 已上传的 R2 URL（后台自动上传完成的）
+  // - uploadedThumbnails: 已上传项对应的缩略图 URL
+  // - pendingFiles: 还没上传的新文件
+  const handleMediaChange = useCallback((uploadedUrls: string[], uploadedThumbnails: string[], pendingFiles: File[]) => {
+    setExistingMediaUrls(uploadedUrls);
+    setUploadedThumbnails(uploadedThumbnails);
+    setPendingMediaFiles(pendingFiles);
   }, []);
   const handleSubmit = async () => {
     if (!formData.accountId) {
@@ -200,11 +204,11 @@ export default function EditPostPage() {
     }
     setSaving(true);
     try {
-      // 如果有新文件，先上传
+      // 如果有新文件，先上传（已有 URL 的不要重复上传）
       let mediaUrls: string[] = [...existingMediaUrls];
-      let mediaThumbnailsResult: string[] = [...mediaThumbnails];
+      let mediaThumbnailsResult: string[] = [...uploadedThumbnails];
       
-      for (const file of mediaFiles) {
+      for (const file of pendingMediaFiles) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", file);
         
@@ -373,7 +377,7 @@ export default function EditPostPage() {
           <MediaUploader
             platformConfig={platformConfig || defaultConfig}
             initialUrls={existingMediaUrls}
-            initialThumbnails={mediaThumbnails}
+            initialThumbnails={uploadedThumbnails}
             onChange={handleMediaChange}
           />
         </div>

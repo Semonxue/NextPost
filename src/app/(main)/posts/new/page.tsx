@@ -36,9 +36,9 @@ function NewPostContent() {
     timezone: "Asia/Shanghai",
   });
   const [saving, setSaving] = useState(false);
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
-  const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
+  const [uploadedThumbnails, setUploadedThumbnails] = useState<string[]>([]);
+  const [pendingMediaFiles, setPendingMediaFiles] = useState<File[]>([]);
   
   // 根据来源决定返回路径
   const fromCalendar = searchParams.get("from") === "calendar";
@@ -127,9 +127,13 @@ function NewPostContent() {
     fetchPlatformConfig(accountId);
   };
   // 媒体变更处理
-  const handleMediaChange = useCallback((urls: string[], files: File[]) => {
-    setExistingMediaUrls(urls);
-    setMediaFiles(files);
+  // - uploadedUrls: 已上传的 R2 URL（后台自动上传完成的）
+  // - uploadedThumbnails: 已上传项对应的缩略图 URL
+  // - pendingFiles: 还没上传的新文件
+  const handleMediaChange = useCallback((uploadedUrls: string[], uploadedThumbnails: string[], pendingFiles: File[]) => {
+    setExistingMediaUrls(uploadedUrls);
+    setUploadedThumbnails(uploadedThumbnails);
+    setPendingMediaFiles(pendingFiles);
   }, []);
   const handleSubmit = async (asDraft: boolean) => {
     if (!formData.accountId) {
@@ -153,9 +157,9 @@ function NewPostContent() {
     try {
       // 如果有新文件，先上传
       let mediaUrls: string[] = [...existingMediaUrls];
-      let mediaThumbnailsResult: string[] = [...mediaThumbnails];
+      let mediaThumbnailsResult: string[] = [...uploadedThumbnails];
       
-      for (const file of mediaFiles) {
+      for (const file of pendingMediaFiles) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", file);
         
