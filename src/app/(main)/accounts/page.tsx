@@ -255,6 +255,7 @@ export default function AccountsPage() {
                 <div className="flex gap-1">
                   <button
                     onClick={() => openEditModal(account)}
+                    aria-label="编辑账号"
                     className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                   >
                     <Edit2 size={16} className="text-gray-500" />

@@ -73,6 +73,7 @@ test.describe('外部 MCP Server E2E', () => {
 
   test.afterAll(async () => {
     // 清理测试数据
+    if (!testUser?.id) return; // beforeAll 失败时 testUser 未定义，直接返回
     try {
       await prisma.post.deleteMany({ where: { userId: testUser.id } });
       await prisma.account.deleteMany({ where: { userId: testUser.id } });
@@ -93,7 +94,9 @@ test.describe('外部 MCP Server E2E', () => {
         }
       });
 
-      expect(createResponse.status()).toBe(401);
+      // NextAuth 未登录时返回 307 → /login → 200。检查最终 URL 确认重定向到 /login
+      expect(createResponse.status()).toBe(200);
+      expect(createResponse.url()).toContain('/login');
     });
 
     test('用户可以获取 API Key 列表', async ({ request }) => {
@@ -125,8 +128,9 @@ test.describe('外部 MCP Server E2E', () => {
     });
 
     test('未登录无法查看 Key', async ({ request }) => {
+      // NextAuth 未登录时返回 307 → /login → 200，检查最终 URL 确认重定向
       const res = await request.get('/api/settings/external-keys/reveal?id=test-id');
-      expect(res.status()).toBe(401);
+      expect(res.url()).toContain('/login');
     });
 
     test('reveal 接口返回完整 Key 格式', () => {

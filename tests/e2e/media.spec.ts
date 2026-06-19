@@ -215,7 +215,8 @@ test.describe('媒体上传模块', () => {
       await page.waitForLoadState('networkidle')
       await page.locator('textarea').fill('公开图片测试')
       await page.locator('input[type="file"]').setInputFiles(testImagePath)
-      await expect(page.locator('img')).toBeVisible({ timeout: 5000 })
+      // 等待上传完成：img src 从 base64 变成 /api/uploads/ URL
+      await expect(page.locator('img[src*="/api/uploads/"]')).toBeVisible({ timeout: 10000 })
 
       // 保存帖子，拿到 mediaUrl
       await page.getByRole('button', { name: '保存草稿' }).click()

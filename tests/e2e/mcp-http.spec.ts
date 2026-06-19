@@ -111,6 +111,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
   });
 
   test.afterAll(async () => {
+    if (!testUser?.id) return; // beforeAll 失败时 testUser 未定义，直接返回
     // 清理顺序：先删依赖多的，最后删 user
     await prisma.post.deleteMany({ where: { userId: testUser.id } });
     await prisma.account.deleteMany({ where: { userId: testUser.id } });
@@ -118,7 +119,7 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
     await prisma.user.delete({ where: { id: testUser.id } });
     // Platform 在最后（先确保没残留引用）
     await prisma.platform.deleteMany({ where: { id: testPlatform.id } }).catch(() => undefined);
-    await prisma.$disconnect();
+    // 不调用 $disconnect()：client 是模块级共享的，close 后其他 test 文件的 beforeAll 会报 CLIENT_CLOSED
   });
 
   // ============================================================
@@ -324,7 +325,11 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(dbPost?.mediaUrls).toBe('["/evil.jpg"]'); // 白名单内,被改
       expect(dbPost?.status).toBe('scheduled'); // 名单外,未被改
       expect(dbPost?.accountId).toBe(testAccount.id); // 名单外,未被改
-      expect(dbPost?.scheduledTime?.toISOString()).toBe('2027-02-01T10:00:00.000Z'); // 白名单内,被改
+      // SQLite/Prisma 返回的是字符串，normalize to Date 再比较
+      const scheduledTime = dbPost?.scheduledTime
+        ? new Date(dbPost.scheduledTime as unknown as string).toISOString()
+        : null;
+      expect(scheduledTime).toBe('2027-02-01T10:00:00.000Z'); // 白名单内,被改
 
       // 2. 状态锁：published 状态拒绝
       await prisma.post.update({
@@ -497,7 +502,8 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       // 关键断言：从 DB 读 publishedAt，应该是服务端时间，不是 1 小时前
       const updated = await prisma.post.findUnique({ where: { id: v53PostSuccessId } });
       expect(updated).not.toBeNull();
-      const publishedAtMs = updated!.publishedAt!.getTime();
+      // SQLite/Prisma 返回的是字符串，normalize to Date 再比较
+      const publishedAtMs = new Date(updated!.publishedAt as unknown as string).getTime();
       const oneHourAgoMs = new Date(oneHourAgo).getTime();
 
       // 绝对不能是 1 小时前
@@ -526,7 +532,8 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(data.postStatus).toBe('published');
 
       const updated = await prisma.post.findUnique({ where: { id: v53PostPartialId } });
-      const publishedAtMs = updated!.publishedAt!.getTime();
+      // SQLite/Prisma 返回的是字符串，normalize to Date 再比较
+      const publishedAtMs = new Date(updated!.publishedAt as unknown as string).getTime();
       const twoHoursAgoMs = new Date(twoHoursAgo).getTime();
 
       // 关键：不是 2 小时前

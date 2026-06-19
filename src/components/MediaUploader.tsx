@@ -179,16 +179,20 @@ export function MediaUploader({
           continue;
         }
 
-        // 生成本地预览缩略图
+        // 生成本地预览缩略图（立即显示，提升 UX）
         const thumbnail = await generateThumbnail(file);
+        const itemId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const newItem: MediaItem = {
-          id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: itemId,
           preview: thumbnail,
           file,
           type,
           name: file.name,
           size: file.size,
         };
+
+        // 后台上传，上传成功后用服务端 URL 替换预览
+        uploadToServer(file, itemId);
 
         newItems.push(newItem);
         // 更新动态计数
@@ -202,6 +206,36 @@ export function MediaUploader({
       setMediaItems((prev) => [...prev, ...newItems]);
     },
     [mediaItems, platformConfig, maxFileSize, generateThumbnail, addToast]
+  );
+
+  // 后台上传文件到服务器，上传成功后更新 item.preview 为服务端 URL
+  // 这样 img src 会从 base64 data URL 切换到 /api/uploads/...，便于 E2E 测试验证
+  const uploadToServer = useCallback(
+    (file: File, itemId: string) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      fetch("/api/media/upload", { method: "POST", body: formData })
+        .then((res) => {
+          if (!res.ok) throw new Error("上传失败");
+          return res.json() as Promise<{ url: string; thumbnailUrl: string }>;
+        })
+        .then((data) => {
+          // 上传成功：用服务端 URL 替换本地 base64 预览
+          setMediaItems((prev) =>
+            prev.map((item) =>
+              item.id === itemId
+                ? { ...item, preview: data.url, url: data.url, thumbnailUrl: data.thumbnailUrl }
+                : item
+            )
+          );
+        })
+        .catch((err) => {
+          console.error("媒体上传失败:", err);
+          addToast({ type: "error", message: "媒体上传失败" });
+        });
+    },
+    [addToast]
   );
 
   // 删除媒体项

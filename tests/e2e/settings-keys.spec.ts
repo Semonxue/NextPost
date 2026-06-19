@@ -228,5 +228,5 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
 });
 
 test.afterAll(async () => {
-  await prisma.$disconnect();
+  // 不调用 $disconnect()：client 是模块级共享的，close 后其他 test 文件的 beforeAll 会报 CLIENT_CLOSED
 });

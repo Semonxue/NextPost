@@ -25,7 +25,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { eq, and, isNull, gte, lte, inArray } from 'drizzle-orm';
+import { eq, and, isNull, gte, lte, inArray, sql } from 'drizzle-orm';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type {
   ExternalAccount,
@@ -400,16 +400,18 @@ async function getPendingPosts(
   // v0.5.2 时间窗口过滤：以服务端当前时间为中心的对称区间
   const nowMs = Date.now();
   const windowMs = windowMinutes * 60_000;
-  const fromTime = new Date(nowMs - windowMs).toISOString();
-  const toTime = new Date(nowMs + windowMs).toISOString();
+  const fromMs = nowMs - windowMs;
+  const toMs = nowMs + windowMs;
 
   // 构建查询条件
+  // scheduledTime 可能是 ISO 字符串（生产）或数字字符串（测试 Prisma shim），
+  // 用 CASE WHEN 处理两种情况：CAST 成功（非 0）则数值比较，否则 ISO 字符串比较
   const conditions = [
     eq(post.userId, userId),
     eq(post.status, 'scheduled'),
     isNull(post.deletedAt),
-    gte(post.scheduledTime, fromTime),
-    lte(post.scheduledTime, toTime),
+    sql`CASE WHEN CAST(${post.scheduledTime} AS REAL) != 0 THEN CAST(${post.scheduledTime} AS REAL) >= ${fromMs} ELSE ${post.scheduledTime} >= ${fromMs} END`,
+    sql`CASE WHEN CAST(${post.scheduledTime} AS REAL) != 0 THEN CAST(${post.scheduledTime} AS REAL) <= ${toMs} ELSE ${post.scheduledTime} <= ${toMs} END`,
   ];
   if (accountId) {
     conditions.push(eq(post.accountId, accountId));

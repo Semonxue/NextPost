@@ -53,6 +53,23 @@ function project<T extends Record<string, any>>(row: T, select?: Record<string, 
   return out;
 }
 
+/** 带退避重试的 SQLite 执行（处理 SQLITE_BUSY 锁竞争） */
+async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const e = err as { code?: string; rawCode?: number };
+      if ((e.code === "SQLITE_BUSY" || e.rawCode === 5) && i < retries - 1) {
+        await new Promise((r) => setTimeout(r, 100 * Math.pow(2, i)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("unreachable");
+}
+
 class TableShim {
   constructor(private table: AnyTable) {}
 
@@ -63,7 +80,7 @@ class TableShim {
     // 自动填充 createdAt / updatedAt 如果 schema 定义了
     if ("createdAt" in this.table && !insertData.createdAt) insertData.createdAt = now;
     if ("updatedAt" in this.table && !insertData.updatedAt) insertData.updatedAt = now;
-    await db.insert(this.table).values(insertData).execute();
+    await withRetry(() => db.insert(this.table).values(insertData).execute());
     return insertData;
   }
 
@@ -84,10 +101,10 @@ class TableShim {
     create: Record<string, any>;
   }): Promise<any> {
     const w = buildWhere(this.table, where);
-    const existing = await db.select().from(this.table).where(w).get();
+    const existing = await withRetry(() => db.select().from(this.table).where(w).get());
     if (existing) {
       if (Object.keys(update).length > 0) {
-        await db.update(this.table).set(update).where(w).execute();
+        await withRetry(() => db.update(this.table).set(update).where(w).execute());
         return { ...existing, ...update };
       }
       return existing;
@@ -103,7 +120,7 @@ class TableShim {
     select?: Record<string, 1 | true>;
   }): Promise<any> {
     const w = buildWhere(this.table, where);
-    const row = await db.select().from(this.table).where(w).get();
+    const row = await withRetry(() => db.select().from(this.table).where(w).get());
     return row ? project(row, select) : null;
   }
 
@@ -115,7 +132,7 @@ class TableShim {
     select?: Record<string, 1 | true>;
   }): Promise<any> {
     const w = buildWhere(this.table, where);
-    const row = await db.select().from(this.table).where(w).get();
+    const row = await withRetry(() => db.select().from(this.table).where(w).get());
     return row ? project(row, select) : null;
   }
 
@@ -127,7 +144,7 @@ class TableShim {
     select?: Record<string, 1 | true>;
   }): Promise<any[]> {
     const w = buildWhere(this.table, where);
-    const rows = await db.select().from(this.table).where(w).all();
+    const rows = await withRetry(() => db.select().from(this.table).where(w).all());
     return select ? rows.map((r: any) => project(r, select)) : rows;
   }
 
@@ -140,20 +157,20 @@ class TableShim {
   }): Promise<any> {
     const w = buildWhere(this.table, where);
     if ("updatedAt" in this.table) data.updatedAt = new Date().toISOString();
-    await db.update(this.table).set(data).where(w).execute();
-    const updated = await db.select().from(this.table).where(w).get();
+    await withRetry(() => db.update(this.table).set(data).where(w).execute());
+    const updated = await withRetry(() => db.select().from(this.table).where(w).get());
     return updated ?? { ...where, ...data };
   }
 
   async delete({ where }: { where: Record<string, any> }): Promise<any> {
     const w = buildWhere(this.table, where);
-    await db.delete(this.table).where(w).execute();
+    await withRetry(() => db.delete(this.table).where(w).execute());
     return where;
   }
 
   async deleteMany({ where }: { where?: Record<string, any> } = {}): Promise<{ count: number }> {
     const w = buildWhere(this.table, where);
-    const result = await db.delete(this.table).where(w).run();
+    const result = await withRetry(() => db.delete(this.table).where(w).run());
     return { count: (result as any).changes ?? 0 };
   }
 }

@@ -5,10 +5,10 @@ const APP_URL = process.env.APP_URL || 'http://localhost:3456'
 
 export default defineConfig({
   testDir: './tests/e2e',
-  fullyParallel: true,
+  fullyParallel: false, // 禁用并行：SQLite 不支持多 writer 同时写，会导致 DB LOCK 错误
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1, // 强制单 worker，与 fullyParallel: false 配合避免 SQLite DB 锁
   reporter: 'html',
   use: {
     baseURL: APP_URL,
