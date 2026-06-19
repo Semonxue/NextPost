@@ -14,10 +14,15 @@ import { StorageEngine } from './types';
 export class R2StorageEngine implements StorageEngine {
   private bucket: R2Bucket;
   private bucketName: string;
-  
-  constructor(bucket: R2Bucket, bucketName: string = 'nextpost-media') {
+  private bucketId: string;
+
+  constructor(bucket: R2Bucket, bucketName: string = 'nextpost-media', bucketId?: string) {
     this.bucket = bucket;
     this.bucketName = bucketName;
+    // R2 公开访问 URL 格式: https://pub-{bucket_id}.r2.dev/{path}
+    // bucket_id 是 CF 后台分配的唯一 ID（不是 bucket 名字）
+    // 优先读 R2_BUCKET_ID env var，否则从 bucket 名拼接（不一定准）
+    this.bucketId = bucketId || process.env.R2_BUCKET_ID || bucketName;
   }
   
   /**
@@ -92,8 +97,8 @@ export class R2StorageEngine implements StorageEngine {
    */
   getUrl(path: string): string {
     // 使用 Cloudflare R2 的公开访问 URL 格式
-    // 注意：需要配置 R2 bucket 的公开访问或使用自定义域名
-    return `https://pub-${this.bucketName}.r2.dev/${path}`;
+    // pub-{bucket_id}.r2.dev — bucket_id 是 CF 分配的唯一 ID，不是 bucket 名
+    return `https://pub-${this.bucketId}.r2.dev/${path}`;
   }
   
   /**

@@ -33,13 +33,15 @@
     },
   ],
   // Environment variables (set in CF dashboard > Workers & Pages > your worker > Settings > Variables)
-  // Required: AUTH_SECRET, NEXT_PUBLIC_BASE_URL, STORAGE_ENGINE=r2, R2_BUCKET_NAME=nextpost-media
+  // Required: AUTH_SECRET, NEXT_PUBLIC_BASE_URL, STORAGE_ENGINE=r2, R2_BUCKET_NAME=nextpost-media, R2_BUCKET_ID
   // Note: NEXTAUTH_URL 和 AUTH_TRUST_HOST 不需要在此配置
   // - AUTH_TRUST_HOST: true 已在 auth.ts NextAuth 配置中硬编码
   // - NEXTAUTH_URL: 在 auth.ts 中自动从 NEXT_PUBLIC_BASE_URL 推导
+  // R2_BUCKET_ID: R2 公开 URL 格式是 pub-{bucket_id}.r2.dev，bucket_id 是 CF 分配的唯一 ID
   "vars": {
     "NEXT_PUBLIC_BASE_URL": "https://nextpost.semonxue.workers.dev",
     "STORAGE_ENGINE": "r2",
     "R2_BUCKET_NAME": "nextpost-media",
+    "R2_BUCKET_ID": "3b7abbd268e8422481072ca021e32531"
   },
 }
