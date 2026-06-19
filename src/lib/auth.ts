@@ -5,7 +5,14 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { getDb, user } from "./db";
 
+// NEXTAUTH_URL 优先读环境变量，未设置时自动从 NEXT_PUBLIC_BASE_URL 推导
+// 这样 Cloudflare Workers 部署时只需配置 NEXT_PUBLIC_BASE_URL（同一个值）
+if (!process.env.NEXTAUTH_URL && process.env.NEXT_PUBLIC_BASE_URL) {
+  process.env.NEXTAUTH_URL = process.env.NEXT_PUBLIC_BASE_URL;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       name: "credentials",
