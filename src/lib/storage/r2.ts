@@ -115,18 +115,5 @@ export class R2StorageEngine implements StorageEngine {
   }
 }
 
-/**
- * 获取 R2 存储引擎实例
- * 在 Cloudflare Pages Functions 中，从环境变量获取绑定
- */
-export function getR2Storage(): R2StorageEngine | null {
-  // 在 Cloudflare Pages Functions 中，R2 bucket 通过环境变量绑定
-  if (typeof MEDIA !== 'undefined' && MEDIA) {
-    const bucketName = process.env.R2_BUCKET_NAME || 'nextpost-media';
-    return new R2StorageEngine(MEDIA as unknown as R2Bucket, bucketName);
-  }
-  return null;
-}
-
 // 默认导出
 export default R2StorageEngine;
