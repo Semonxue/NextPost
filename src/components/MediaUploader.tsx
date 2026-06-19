@@ -118,23 +118,36 @@ export function MediaUploader({
     []
   );
 
-  // 用 ref 记录上一次的 mediaItems，避免 useEffect 初始化时重复通知
+  // 用 ref 记录上一次的 mediaItems（用于比较是否真的变了）
   const prevMediaItemsRef = useRef<MediaItem[] | null>(null);
+  // 跳过首次渲染的初始化通知
+  const isInitialRef = useRef<boolean>(true);
 
-  // 当 mediaItems 变化时，通过 useEffect 通知父组件（避免在 setState updater 中触发父组件更新）
+  // 当 mediaItems 或 platformConfig 变化时，通知父组件
   useEffect(() => {
-    // 跳过首次渲染（初始化不需要通知父组件）
-    if (prevMediaItemsRef.current === null) {
+    if (isInitialRef.current) {
+      isInitialRef.current = false;
       prevMediaItemsRef.current = mediaItems;
-      return;
+      return; // 初始化不通知
     }
+
+    // 比较 items 是否真的变了（排除 config 变化导致的无效触发）
+    const prev = prevMediaItemsRef.current;
+    const trulyChanged =
+      !prev ||
+      prev.length !== mediaItems.length ||
+      !prev.every((m, i) => m.id === mediaItems[i]?.id);
+
     prevMediaItemsRef.current = mediaItems;
+
+    if (!trulyChanged) return; // items 没变，跳过通知
+
     const uploadedUrls = mediaItems.filter((m) => m.url).map((m) => m.url as string);
     const uploadedThumbnails = mediaItems.filter((m) => m.url).map((m) => (m.thumbnailUrl ?? m.url) as string);
     // 只传还没有 URL 的文件（已上传的不要在提交时重复上传）
     const pendingFiles = mediaItems.filter((m) => m.file && !m.url).map((m) => m.file!);
     onChange(uploadedUrls, uploadedThumbnails, pendingFiles);
-  }, [mediaItems, onChange]);
+  }, [mediaItems, platformConfig, onChange]);
 
   // 处理文件选择
   const handleFiles = useCallback(
