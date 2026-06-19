@@ -72,6 +72,40 @@ pnpm dev
 
 > 想换端口？只需修改 `.env` 里的 `APP_URL`，dev.mjs 会自动解析端口并启动。
 
+### 环境变量配置说明
+
+NextPost 的环境变量分为两类，**不要混淆**：
+
+#### 本地开发（`.env`）
+
+`.env` 文件**仅用于本地 `pnpm dev`**，不参与 CI/CD 构建。
+
+```bash
+AUTH_SECRET=your-secret-key
+DATABASE_URL="file:./data/nextpost.db"
+APP_URL=http://localhost:3456
+```
+
+#### Cloudflare Workers 部署（GitHub Secrets + `wrangler.jsonc`）
+
+GitHub Actions 构建时**不使用 `.env`**，需要通过以下两个渠道配置：
+
+| 类型 | 配置位置 | 示例值 |
+|------|---------|--------|
+| **敏感数据**（密钥、Token） | GitHub Settings → Secrets and variables → Actions → **New repository secret** | `AUTH_SECRET`、`CLOUDFLARE_API_TOKEN` |
+| **非敏感数据**（URL、开关） | `wrangler.jsonc` 的 `vars` 字段（进 bundle 也无所谓） | `NEXT_PUBLIC_BASE_URL`、`STORAGE_ENGINE` |
+
+必须设置的 GitHub Secrets：
+
+| Secret Name | 说明 |
+|------------|------|
+| `AUTH_SECRET` | NextAuth 会话密钥：`openssl rand -base64 32` 生成 |
+| `NEXT_PUBLIC_BASE_URL` | 部署后的公网地址，如 `https://nextpost.semonxue.workers.dev` |
+| `CLOUDFLARE_API_TOKEN` | CF API Token（Dashboard → My Profile → API Tokens → Create Token → Edit Cloudflare Workers） |
+| `CLOUDFLARE_ACCOUNT_ID` | CF Account ID（Dashboard Overview 右侧可见） |
+
+详细部署步骤见 [docs/CLOUDFLARE_DEPLOY.md](./docs/CLOUDFLARE_DEPLOY.md)。
+
 ## 🤖 AI 助手集成
 
 NextPost 支持通过 MCP 协议连接 AI 助手（如 Claude Desktop），实现智能化的社交媒体管理。
