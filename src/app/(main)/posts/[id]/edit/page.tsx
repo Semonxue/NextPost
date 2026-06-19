@@ -67,7 +67,8 @@ export default function EditPostPage() {
     ...DEFAULT_PLATFORM_CONFIG.Twitter,
   };
   // 将 UTC Date 对象转换为指定时区的 datetime-local 格式字符串
-  const formatDateTimeLocal = (date: Date, timezone: string): string => {
+  const formatDateTimeLocal = (date: Date | null | undefined, timezone: string): string => {
+    if (!date || isNaN(date.getTime())) return "";
     try {
       const formatter = new Intl.DateTimeFormat("en-CA", {
         timeZone: timezone,
@@ -88,7 +89,9 @@ export default function EditPostPage() {
       return `${year}-${month}-${day}T${hour}:${minute}`;
     } catch {
       // 如果时区转换失败，使用本地时间
-      return date.toISOString().slice(0, 16);
+      const iso = date.toISOString();
+      if (iso === "Invalid Date") return "";
+      return iso.slice(0, 16);
     }
   };
   useEffect(() => {
