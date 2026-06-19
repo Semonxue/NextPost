@@ -50,11 +50,13 @@ export class R2StorageEngine implements StorageEngine {
    * 上传文件并生成缩略图（云端处理）
    * 注意：Cloudflare Workers 环境中无法使用 Sharp，
    * 缩略图需要在上传前在客户端预处理，或使用 Cloudflare Images
+   * @param thumbnailBase64 可选，客户端预生成的 base64 缩略图（如 canvas 生成的预览图）
    */
   async uploadWithThumbnail(
-    file: Buffer, 
-    filename: string, 
-    mimeType: string
+    file: Buffer,
+    filename: string,
+    mimeType: string,
+    thumbnailBase64?: string
   ): Promise<{
     url: string;
     thumbnailUrl: string;
@@ -67,9 +69,22 @@ export class R2StorageEngine implements StorageEngine {
     // 上传原文件
     const url = await this.upload(file, filename, mimeType);
     const key = this.getKeyFromUrl(url) || '';
-    
-    // R2 不支持在服务端生成缩略图
-    // 返回相同 URL，客户端可使用 next/image 组件进行图片优化
+
+    // 如果有客户端预生成的缩略图 base64，上传到 R2
+    if (thumbnailBase64) {
+      const thumbnailUrl = await this.uploadThumbnail(thumbnailBase64, key);
+      return {
+        url,
+        thumbnailUrl,
+        path: key,
+        filename,
+        mimeType,
+        size: file.length,
+        thumbnailSize: Buffer.from(thumbnailBase64.split(',')[1] || '', 'base64').length,
+      };
+    }
+
+    // 没有缩略图时返回原图 URL
     return {
       url,
       thumbnailUrl: url,
@@ -79,6 +94,32 @@ export class R2StorageEngine implements StorageEngine {
       size: file.length,
       thumbnailSize: 0,
     };
+  }
+
+  /**
+   * 将 base64 图片数据上传为 R2 中的缩略图
+   * 存储路径 = originalKey 替换文件名部分加 -thumb 前缀
+   * 例: uploads/2026-06-20/abc.png → uploads/2026-06-20/abc-thumb.png
+   */
+  async uploadThumbnail(base64Data: string, originalKey: string): Promise<string> {
+    // base64 格式: "data:image/jpeg;base64,/9j/4AAQ..."
+    const parts = base64Data.match(/^data:([^;]+);base64,(.+)$/);
+    if (!parts) {
+      // 非标准 base64，直接用原图
+      return this.getUrl(originalKey);
+    }
+    const mimeType = parts[1];
+    const base64Content = parts[2];
+    const buffer = Buffer.from(base64Content, 'base64');
+
+    // 构造缩略图 key：把文件名部分加 -thumb
+    const thumbKey = originalKey.replace(/(\.[^.]+)$/, '-thumb$1');
+    await this.bucket.put(thumbKey, buffer, {
+      httpMetadata: { contentType: mimeType },
+      customMetadata: { originalKey, isThumbnail: 'true' },
+    });
+
+    return this.getUrl(thumbKey);
   }
   
   /**

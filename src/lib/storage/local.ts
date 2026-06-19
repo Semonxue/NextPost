@@ -46,7 +46,7 @@ export class LocalStorageEngine implements StorageEngine {
    * 上传图片并生成缩略图
    * @returns 上传结果，包含 originalUrl 和 thumbnailUrl
    */
-  async uploadWithThumbnail(file: Buffer, filename: string, mimeType: string): Promise<{
+  async uploadWithThumbnail(file: Buffer, filename: string, mimeType: string, _thumbnailBase64?: string): Promise<{
     url: string;
     thumbnailUrl: string;
     path: string;

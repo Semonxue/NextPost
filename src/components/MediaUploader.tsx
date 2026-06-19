@@ -194,7 +194,7 @@ export function MediaUploader({
         };
 
         // 后台上传，上传成功后用服务端 URL 替换预览
-        uploadToServer(file, itemId);
+        uploadToServer(file, itemId, thumbnail);
 
         newItems.push(newItem);
         // 更新动态计数
@@ -213,9 +213,13 @@ export function MediaUploader({
   // 后台上传文件到服务器，上传成功后更新 item.preview 为服务端 URL
   // 这样 img src 会从 base64 data URL 切换到 /api/uploads/...，便于 E2E 测试验证
   const uploadToServer = useCallback(
-    (file: File, itemId: string) => {
+    (file: File, itemId: string, thumbnail: string) => {
       const formData = new FormData();
       formData.append("file", file);
+      // 客户端预生成的 base64 缩略图（images 有 canvas 生成，videos 无）
+      if (thumbnail && thumbnail.startsWith("data:")) {
+        formData.append("thumbnail", thumbnail);
+      }
 
       fetch("/api/media/upload", { method: "POST", body: formData })
         .then((res) => {

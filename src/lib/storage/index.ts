@@ -90,12 +90,14 @@ export async function uploadFile(
 /**
  * 上传文件并生成缩略图
  * - 本地存储：使用 Sharp 生成缩略图
- * - R2 存储：不支持服务端缩略图，返回原图 URL
+ * - R2 存储：使用客户端预提供的 base64 缩略图
+ * @param thumbnailBase64 可选，客户端预生成的 canvas base64 缩略图
  */
 export async function uploadFileWithThumbnail(
   file: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  thumbnailBase64?: string
 ): Promise<{
   url: string;
   thumbnailUrl: string;
@@ -106,17 +108,25 @@ export async function uploadFileWithThumbnail(
   thumbnailSize: number;
 }> {
   const engineType = getStorageEngineType();
-  
-  // 本地存储支持缩略图
+
+  // 本地存储：Sharp 服务端生成缩略图，thumbnailBase64 忽略
   if (engineType === 'local' && localStorage instanceof LocalStorageEngine) {
     return localStorage.uploadWithThumbnail(file, filename, mimeType);
   }
-  
-  // R2 不支持服务端缩略图
+
+  // R2：使用客户端预提供的 base64 缩略图上传到 R2
+  if (engineType === 'r2') {
+    const r2Engine = getR2Engine();
+    if (r2Engine) {
+      return r2Engine.uploadWithThumbnail(file, filename, mimeType, thumbnailBase64);
+    }
+  }
+
+  // fallback
   const url = await uploadFile(file, filename, mimeType);
   return {
     url: url.url,
-    thumbnailUrl: url.url, // R2 返回相同 URL
+    thumbnailUrl: url.url,
     path: url.path,
     filename: url.filename,
     mimeType: url.mimeType,
