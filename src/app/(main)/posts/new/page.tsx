@@ -91,9 +91,9 @@ function NewPostContent() {
       if (res.ok) {
         const data = await res.json() as { accounts: Account[] };
         setAccounts(data.accounts || []);
-        if (data.length > 0) {
-          setFormData((prev) => ({ ...prev, accountId: data[0].id }));
-          fetchPlatformConfig(data[0].id);
+        if (data.accounts.length > 0) {
+          setFormData((prev) => ({ ...prev, accountId: data.accounts[0].id }));
+          fetchPlatformConfig(data.accounts[0].id);
         }
       }
     } catch (error) {

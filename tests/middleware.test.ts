@@ -110,4 +110,17 @@ describe('middleware', () => {
     const result = await middleware(fakeReq('http://localhost/register'))
     expect((result as Response).status).toBe(200)
   })
+
+  // --- /api/uploads/ 放行（无需登录） ---
+  it('未登录访问 /api/uploads/... → 通过（不在 auth middleware 层拦截）', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/api/uploads/2026-06-03/b671f926-d122-471a-a6e4-d758bb52fee8.jpg'))
+    expect((result as Response).status).toBe(200)
+  })
+
+  it('未登录访问 /api/uploads/2026-06-01/test.png → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/api/uploads/2026-06-01/test.png'))
+    expect((result as Response).status).toBe(200)
+  })
 })

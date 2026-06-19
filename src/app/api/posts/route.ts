@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
+    // 支持 accountId (单选) 和 accountIds[] (多选)
     const accountId = searchParams.get("accountId");
+    const accountIds = searchParams.getAll("accountIds");
     const platformId = searchParams.get("platformId");
     const search = searchParams.get("search");
     const sort = searchParams.get("sort") || "createdAt";
@@ -37,6 +39,7 @@ export async function GET(request: NextRequest) {
     if (status) conditions.push(eq(post.status, status));
     if (search) conditions.push(or(like(post.content, '%' + search + '%'), like(post.title, '%' + search + '%')));
     if (accountId) conditions.push(eq(post.accountId, accountId));
+    else if (accountIds.length > 0) conditions.push(inArray(post.accountId, accountIds));
     if (platformId) {
       const platformAccounts = await db.select({ id: account.id }).from(account).where(eq(account.platformId, platformId)).all();
       if (platformAccounts.length > 0) conditions.push(inArray(post.accountId, platformAccounts.map(a => a.id)));

@@ -256,4 +256,60 @@ test.describe('筛选状态持久化', () => {
       await expect(page.locator('table')).toBeVisible({ timeout: 5000 })
     })
   })
+
+  // ============================================================
+  // 账号多选筛选：验证 /api/posts 支持 accountIds[] 参数（fix: 前端发 accountIds[]，API 读 accountId）
+  // ============================================================
+  test.describe('TC-FILTER-ACCOUNT-IDS: 账号多选筛选 - API accountIds[] 参数', () => {
+    test('帖子列表：多账号筛选后刷新页面，accountIds[] 参数应继续生效', async ({ page }) => {
+      // 先登录，在列表页操作
+      await page.goto('/posts')
+      await page.waitForLoadState('networkidle')
+
+      // 等账号下拉加载
+      await page.getByRole('button', { name: '账号' }).first().click()
+      await page.waitForTimeout(1000)
+      const allLabels = page.locator('label:has(input[type="checkbox"])')
+      const count = await allLabels.count()
+      expect(count).toBeGreaterThanOrEqual(2)
+
+      // 选 2 个账号（多选）
+      await allLabels.nth(0).locator('input[type="checkbox"]').check()
+      await allLabels.nth(1).locator('input[type="checkbox"]').check()
+      // 关下拉
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500)
+
+      // 刷新页面
+      await page.reload()
+      await page.waitForLoadState('networkidle')
+      // 等数据异步加载
+      await page.waitForTimeout(500)
+
+      // 验证 badge 显示 2（多选状态保持）
+      const badge = page.getByRole('button', { name: '账号' }).first().locator('span').filter({ hasText: /^2$/ })
+      await expect(badge).toBeVisible({ timeout: 5000 })
+
+      // 页面主体仍可交互（不管有没有数据）
+      await expect(page.getByRole('button', { name: '账号' }).first()).toBeVisible({ timeout: 3000 })
+    })
+
+    test('日历视图：账号筛选后页面正常加载，不崩溃', async ({ page }) => {
+      await page.goto('/calendar')
+      await page.waitForLoadState('networkidle')
+      await page.waitForTimeout(500)
+
+      // 选第一个账号
+      await page.getByRole('button', { name: '账号' }).first().click()
+      await page.waitForTimeout(500)
+      const firstLabel = page.locator('label:has(input[type="checkbox"])').first()
+      await expect(firstLabel).toBeVisible({ timeout: 5000 })
+      await firstLabel.locator('input[type="checkbox"]').check()
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500)
+
+      // 验证页面主体仍可交互，不崩溃
+      await expect(page.getByRole('button', { name: '账号' }).first()).toBeVisible({ timeout: 3000 })
+    })
+  })
 })

@@ -197,4 +197,71 @@ test.describe('媒体上传模块', () => {
       unlinkSync(testImagePath2)
     })
   })
+
+  // ============================================================
+  // TC-MEDIA-AUTH: /api/uploads/ 公开访问（修复: middleware 白名单）
+  // ============================================================
+  test.describe('TC-MEDIA-AUTH: 图片无需登录', () => {
+    test('上传图片后，图片 URL 应在未登录态下返回 200', async ({ page }) => {
+      // 上传图片并创建帖子
+      const testImagePath = '/tmp/test-upload-auth.png'
+      const buffer = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      )
+      writeFileSync(testImagePath, buffer)
+
+      await page.goto('/posts/new')
+      await page.waitForLoadState('networkidle')
+      await page.locator('textarea').fill('公开图片测试')
+      await page.locator('input[type="file"]').setInputFiles(testImagePath)
+      await expect(page.locator('img')).toBeVisible({ timeout: 5000 })
+
+      // 保存帖子，拿到 mediaUrl
+      await page.getByRole('button', { name: '保存草稿' }).click()
+      await expect(page.getByText('草稿已保存').first()).toBeVisible({ timeout: 5000 })
+
+      // 从 DOM 获取 img 的 src（完整 URL）
+      const imgSrc = await page.locator('img').first().getAttribute('src')
+      expect(imgSrc).toBeTruthy()
+      expect(imgSrc).toContain('/api/uploads/')
+
+      // 用 Node.js fetch 模拟未登录请求（不带任何 cookie）
+      const baseUrl = process.env.APP_URL || 'http://localhost:3456'
+      const imgUrl = imgSrc?.startsWith('http') ? imgSrc : `${baseUrl}${imgSrc}`
+      const response = await fetch(imgUrl, { redirect: 'manual' })
+      // 应该返回 200（不是 307 重定向到 /login）
+      expect(response.status).toBe(200)
+
+      unlinkSync(testImagePath)
+    })
+  })
+
+  // ============================================================
+  // TC-FORMAT-DATETIME: 空 scheduledTime 不崩溃（修复: formatDateTimeLocal 保护）
+  // ============================================================
+  test.describe('TC-FORMAT-DATETIME: 编辑 scheduledTime 为空的帖子', () => {
+    test('编辑 scheduledTime 为空字符串的帖子不应崩溃', async ({ page }) => {
+      // 创建一个 scheduledTime 为空的帖子（via API）
+      // 先确保登录
+      await page.goto('/posts/new')
+      await page.waitForLoadState('networkidle')
+      await page.locator('textarea').fill('空时间帖子')
+      await page.getByRole('button', { name: '保存草稿' }).click()
+      await expect(page.getByText('草稿已保存').first()).toBeVisible({ timeout: 5000 })
+
+      // 找刚创建的帖子并编辑（URL 形如 /posts/:id/edit）
+      await page.goto('/posts')
+      await page.waitForLoadState('networkidle')
+      const row = page.locator('tbody tr').filter({ hasText: '空时间帖子' }).first()
+      await row.locator('a[href*="/edit"]').click()
+      await page.waitForLoadState('networkidle')
+
+      // 如果 formatDateTimeLocal 没有保护，这里会 RangeError: Invalid time value
+      // 页面应正常渲染（input 有值或为空，不崩溃）
+      const textarea = page.locator('textarea')
+      await expect(textarea).toBeVisible()
+      await expect(textarea).toHaveValue('空时间帖子')
+    })
+  })
 })
