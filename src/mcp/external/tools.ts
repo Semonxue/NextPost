@@ -25,7 +25,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { eq, and, isNull, gte, lte, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, gte, lte, inArray, sql } from 'drizzle-orm';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type {
   ExternalAccount,
@@ -404,14 +404,25 @@ async function getPendingPosts(
   const toMs = nowMs + windowMs;
 
   // 构建查询条件
-  // scheduledTime 可能是 ISO 字符串（生产）或数字字符串（测试 Prisma shim），
-  // 用 CASE WHEN 处理两种情况：CAST 成功（非 0）则数值比较，否则 ISO 字符串比较
+  // scheduledTime 可能是 ISO 字符串（生产 Prisma）或数字字符串（测试 Prisma shim）。
+  // 用 OR 组合两种比较路径：
+  //   1. 纯数字字符串 → CAST(AS REAL) 数值比较
+  //   2. ISO 字符串 → 字典序比较
+  // SQLite 的 CASE WHEN 只在 THEN/ELSE 分支求值，无法实现 per-row 切换；
+  // 所以用 NOT LIKE 检测数值格式，满足则数值比较，否则 ISO 比较。
+  const fromISO = new Date(fromMs).toISOString();
+  const toISO = new Date(toMs).toISOString();
+  const timeCondition = or(
+    // 路径 1：数值字符串
+    sql`${post.scheduledTime} NOT LIKE '%[^0-9.]%' AND CAST(${post.scheduledTime} AS REAL) BETWEEN ${fromMs} AND ${toMs}`,
+    // 路径 2：ISO 字符串（或其他非纯数字）
+    sql`${post.scheduledTime} LIKE '%-%' AND ${post.scheduledTime} BETWEEN ${fromISO} AND ${toISO}`,
+  );
   const conditions = [
     eq(post.userId, userId),
     eq(post.status, 'scheduled'),
     isNull(post.deletedAt),
-    sql`CASE WHEN CAST(${post.scheduledTime} AS REAL) != 0 THEN CAST(${post.scheduledTime} AS REAL) >= ${fromMs} ELSE ${post.scheduledTime} >= ${fromMs} END`,
-    sql`CASE WHEN CAST(${post.scheduledTime} AS REAL) != 0 THEN CAST(${post.scheduledTime} AS REAL) <= ${toMs} ELSE ${post.scheduledTime} <= ${toMs} END`,
+    timeCondition,
   ];
   if (accountId) {
     conditions.push(eq(post.accountId, accountId));

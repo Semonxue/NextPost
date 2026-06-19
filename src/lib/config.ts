@@ -93,20 +93,19 @@ export const PUBLISH_TOKEN_PREFIX = "tok_";
 export const API_KEY_PREFIX = "npk_";
 
 // ============ 应用 URL 配置（单一 source of truth）============
-/** 默认应用 URL（仅本地开发用，生产环境由部署平台注入 APP_URL） */
-const DEFAULT_APP_URL = "http://localhost:3456";
 
 /**
  * 获取应用对外 URL（含 scheme + host + port）
  * 单一 source of truth：所有需要拼完整 URL 的地方都从这里读
  *
- * 优先级：process.env.APP_URL > 默认值（仅 dev）
+ * 优先级：process.env.APP_URL > NEXT_PUBLIC_BASE_URL > localhost:3456
  *
- * 生产部署：必须通过部署平台设置 APP_URL（如 https://nextpost.example.com），
- *          dev.mjs 会自动派生 NEXTAUTH_URL / NEXT_PUBLIC_BASE_URL。
+ * - 本地开发：APP_URL 未设置 → NEXT_PUBLIC_BASE_URL 未设置 → localhost:3456
+ * - CF Workers 部署：wrangler.jsonc vars 设置 NEXT_PUBLIC_BASE_URL
+ * - 需要单独覆盖时：设置 APP_URL（如有特殊路由需求）
  */
 export function getAppUrl(): string {
-  return process.env.APP_URL || DEFAULT_APP_URL;
+  return process.env.APP_URL || process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3456";
 }
 
 /**

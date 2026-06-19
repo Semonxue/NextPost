@@ -78,6 +78,20 @@ jobs:
           STORAGE_ENGINE: r2
           R2_BUCKET_NAME: nextpost-media
 
+      # opennextjs-cloudflare generates .open-next/worker.js but does NOT expose
+      # R2/MEDIA and D1/DB bindings to globalThis. The init.js populateProcessEnv()
+      # only copies string env vars; R2Bucket and D1Database are objects.
+      # This step injects globalThis.MEDIA = env.MEDIA etc. into the generated file.
+      - name: Patch worker.js for CF bindings
+        run: |
+          WORKER=.open-next/worker.js
+          if [ -f "$WORKER" ]; then
+            # Match the specific "return runWithCloudflareRequestContext" line inside
+            # fetch() and insert globalThis bindings BEFORE that return statement.
+            sed -i 's/return runWithCloudflareRequestContext(request, env, ctx, async () => {/globalThis.MEDIA = env.MEDIA;\n        globalThis.DB = env.DB;\n        return runWithCloudflareRequestContext(request, env, ctx, async () => {/' "$WORKER"
+            echo "Patched $WORKER: added globalThis.MEDIA/DB bindings"
+          fi
+
       - name: Deploy to Cloudflare Workers
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
