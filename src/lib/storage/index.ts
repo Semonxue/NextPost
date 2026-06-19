@@ -8,7 +8,7 @@ let r2StorageInstance: R2StorageEngine | null = null;
 // OpenNext Cloudflare adapter 在 init.js 中通过 AsyncLocalStorage
 // 把 CF env（包含 R2/MEDIA 绑定）存在 globalThis[Symbol.for("__cloudflare-context__")]
 // 参考: node_modules/@opennextjs/cloudflare/dist/cli/templates/init.js
-const CLOUDFLARE_CONTEXT_SYMBOL = Symbol.for('__cloudflare-context__');
+const CLOUDFLARE_CONTEXT_KEY = '__cloudflare-context__';
 
 /**
  * 获取 R2 存储引擎实例
@@ -16,9 +16,10 @@ const CLOUDFLARE_CONTEXT_SYMBOL = Symbol.for('__cloudflare-context__');
  * - 本地开发: globalThis 上没有 CF context，返回 null，由调用方 fallback
  */
 function getR2Engine(): R2StorageEngine | null {
-  const ctx = (globalThis as Record<string, unknown>)[CLOUDFLARE_CONTEXT_SYMBOL];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ctx = (globalThis as any)[CLOUDFLARE_CONTEXT_KEY];
   if (ctx && typeof ctx === 'object' && ctx !== null) {
-    const env = (ctx as { env?: Record<string, unknown> }).env;
+    const env = ctx.env as Record<string, unknown> | undefined;
     const media = env?.MEDIA as R2Bucket | undefined;
     if (media) {
       if (!r2StorageInstance) {
