@@ -35,8 +35,10 @@
   // Environment variables (set in CF dashboard > Workers & Pages > your worker > Settings > Variables)
   // Required: AUTH_SECRET, NEXT_PUBLIC_BASE_URL, STORAGE_ENGINE=r2, R2_BUCKET_NAME=nextpost-media
   "vars": {
-    "NEXT_PUBLIC_BASE_URL": "https://nextpost.semonxue.workers.dev",
+    " ": "https://nextpost.semonxue.workers.dev",
     "STORAGE_ENGINE": "r2",
     "R2_BUCKET_NAME": "nextpost-media",
+    "NEXTAUTH_URL": "https://nextpost.semonxue.workers.dev",
+    "AUTH_TRUST_HOST": "true",
   },
 }

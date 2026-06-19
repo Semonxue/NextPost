@@ -75,6 +75,8 @@ jobs:
           DATABASE_URL: "file:./data/nextpost.db"
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          AUTH_TRUST_HOST: "true"
           STORAGE_ENGINE: r2
           R2_BUCKET_NAME: nextpost-media
 
@@ -97,6 +99,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          AUTH_TRUST_HOST: "true"
           STORAGE_ENGINE: r2
           R2_BUCKET_NAME: nextpost-media
 
