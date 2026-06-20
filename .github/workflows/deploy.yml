@@ -16,7 +16,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: dev
+    environment: cloudflare
     permissions:
       contents: read
       deployments: write
