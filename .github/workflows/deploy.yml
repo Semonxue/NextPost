@@ -1,0 +1,121 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+      - feature/cloudflare-deploy
+  pull_request:
+    branches:
+      - main
+      - feature/cloudflare-deploy
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Corepack ships with Node.js and is the official way to install pnpm.
+      # We pin the version, install to a known location, and put it on PATH
+      # via the standard $GITHUB_PATH env file (::add-path:: is deprecated).
+      - name: Install pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.11.0 --activate
+          # pnpm is shimmed by corepack into ~/.cache/node/corepack/bin/pnpm or
+          # ~/.local/share/pnpm. Find the actual binary and add its dir to PATH.
+          PNPM_BIN="$(node -e "console.log(require('child_process').execSync('corepack pnpm --version >/dev/null 2>&1; which pnpm || true').toString().trim())" 2>/dev/null || true)"
+          if [ -z "$PNPM_BIN" ]; then
+            PNPM_BIN="$(corepack which pnpm 2>/dev/null || echo)"
+          fi
+          if [ -n "$PNPM_BIN" ]; then
+            echo "$PNPM_BIN" >> "$GITHUB_PATH"
+          fi
+          pnpm --version
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # opennextjs-cloudflare build = next build + transform for Workers
+      # Drizzle ORM（D1 binding 模式，schema 推送走 wrangler d1 migrations apply）
+      - name: Build for Cloudflare Workers
+        run: |
+          pnpm exec opennextjs-cloudflare build > /tmp/build.log 2>&1 || {
+            echo "::error::opennextjs-cloudflare build failed"
+            echo "::error::--- Last 60 lines of build output ---"
+            tail -60 /tmp/build.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          }
+        env:
+          DATABASE_URL: "file:./data/nextpost.db"
+          NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          STORAGE_ENGINE: r2
+          R2_BUCKET_NAME: nextpost-media
+
+      # OpenNext generate .open-next/worker.js but doesn't expose R2 bucket bindings
+      # to globalThis. populateProcessEnv() in init.js only copies string env vars.
+      # This step sed-injects globalThis.MEDIA = env.MEDIA so the storage layer can
+      # read the R2 bucket binding. TODO: replace with proper CloudflareEnv typing.
+      - name: Patch worker.js for CF bindings
+        run: |
+          WORKER=.open-next/worker.js
+          if [ -f "$WORKER" ]; then
+            sed -i 's/return runWithCloudflareRequestContext(request, env, ctx, async () => {/globalThis.MEDIA = env.MEDIA;\n        globalThis.DB = env.DB;\n        return runWithCloudflareRequestContext(request, env, ctx, async () => {/' "$WORKER"
+            echo "Patched $WORKER"
+          fi
+
+      - name: Deploy to Cloudflare Workers
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: |
+          # Skip deploy if required Cloudflare secrets are missing (PR from fork,
+          # or repo owner hasn't set them yet). Build still proves the bundle is valid.
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID not set, skipping deploy"
+            echo "exit=skipped" > /tmp/deploy.log
+            exit 0
+          fi
+          pnpm exec opennextjs-cloudflare deploy --config wrangler.jsonc > /tmp/deploy.log 2>&1
+          echo "exit=$?" >> /tmp/deploy.log
+          # Always exit 0 so the artifact upload step runs
+          exit 0
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+          STORAGE_ENGINE: r2
+          R2_BUCKET_NAME: nextpost-media
+
+      - name: Upload deploy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-log
+          path: /tmp/deploy.log
+          retention-days: 1

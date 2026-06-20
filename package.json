@@ -1,10 +1,12 @@
 {
   "name": "nextpost",
-  "version": "0.5.3",
+  "version": "0.6.2",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "next build",
+    "build": "next build --webpack",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
@@ -13,18 +15,27 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "mcp:external": "node --import tsx src/mcp/external/server.ts"
+    "mcp:external": "node --import tsx src/mcp/external/server.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "drizzle-kit migrate",
+    "db:reset:local": "rm -f data/nextpost.db && drizzle-kit migrate",
+    "db:seed": "node --import tsx src/lib/db/seed.ts",
+    "db:seed:local": "node --import tsx src/lib/db/seed.ts --local",
+    "db:seed:d1": "node --import tsx src/lib/db/seed.ts --d1",
+    "db:studio": "drizzle-kit studio",
+    "db:migrate:remote": "wrangler d1 migrations apply nextpost-db --remote"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@prisma/client": "^5.22.0",
+    "@opennextjs/cloudflare": "^1.0.0",
     "@types/bcryptjs": "^3.0.0",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.17.0",
     "next": "16.2.6",
     "next-auth": "5.0.0-beta.31",
-    "prisma": "^5.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "scheduler": "^0.27.0",
@@ -33,6 +44,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260617.1",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
@@ -43,12 +55,14 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^11.0.0",
     "@vitest/coverage-v8": "4.1.7",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "^16.2.6",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5",
-    "vitest": "^4.1.7"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7",
+    "wrangler": "^4.0.0"
   }
 }

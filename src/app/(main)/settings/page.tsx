@@ -6,6 +6,7 @@ import { Key, User, Plus, Trash2, Copy, Eye, Pencil, Check, Filter, BarChart3, S
 import { Button } from "@/components/ui/Button";
 import { useUIStore } from "@/stores/uiStore";
 import { COOKIE_SETTINGS_TAB } from "@/lib/config";
+import { formatBytes } from "@/lib/utils";
 
 type TabType = "profile" | "apikeys" | "maintenance" | "stats";
 const VALID_TABS: TabType[] = ["profile", "apikeys", "maintenance", "stats"];
@@ -59,15 +60,6 @@ interface Stats {
     name: string;
     count: number;
   }[];
-}
-
-// 格式化字节大小
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 // 归一化 permissions 字段到 3 值之一
@@ -149,7 +141,7 @@ export default function SettingsPage() {
     try {
       const keysRes = await fetch("/api/settings/external-keys");
       if (keysRes.ok) {
-        const keysData = await keysRes.json();
+        const keysData = await keysRes.json() as { keys?: ExternalApiKey[] };
         setExternalKeys(keysData.keys || []);
       }
     } catch (error) {
@@ -164,8 +156,29 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/stats");
       if (res.ok) {
-        const data = await res.json();
-        setStats(data);
+        // /api/stats 当前只返回基础 5 个计数；把缺失字段补成空默认值，
+        // 避免 stats tab 渲染时拿到 undefined 字段（prisma → drizzle 迁移遗留）。
+        const data = await res.json() as {
+          totalPosts?: number;
+          draftPosts?: number;
+          scheduledPosts?: number;
+          publishedPosts?: number;
+          totalAccounts?: number;
+        };
+        setStats({
+          accounts: data.totalAccounts ?? 0,
+          posts: data.totalPosts ?? 0,
+          postsByStatus: {
+            draft: data.draftPosts ?? 0,
+            scheduled: data.scheduledPosts ?? 0,
+            published: data.publishedPosts ?? 0,
+            failed: 0,
+          },
+          media: 0,
+          mediaStats: { totalSize: 0, images: { count: 0, size: 0 }, videos: { count: 0, size: 0 } },
+          thumbnailStats: { count: 0, size: 0 },
+          categories: [],
+        });
       }
     } catch (error) {
       console.error("获取统计失败:", error);
@@ -193,8 +206,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ name: newKeyName, scope: newKeyScope }),
       });
       if (res.ok) {
-        const data = await res.json();
-        setShowNewKey(data.key);
+        const data = await res.json() as { key?: string };
+        setShowNewKey(data.key || null);
         setNewKeyName("");
         addToast({
           type: "success",
@@ -230,8 +243,8 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`/api/settings/external-keys/reveal?id=${id}`);
       if (res.ok) {
-        const data = await res.json();
-        setShowNewKey(data.key);
+        const data = await res.json() as { key?: string };
+        setShowNewKey(data.key || null);
         addToast({ type: "info", message: `正在查看 ${name} 的完整 Key` });
       } else {
         addToast({ type: "error", message: "获取 Key 失败" });
@@ -257,7 +270,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ force: forceRegenerate })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { message?: string; processed?: number; skipped?: number; failed?: number };
         setRegenerateProgress(100);
         addToast({ 
           type: "success", 

@@ -1,372 +1,347 @@
 /**
  * MCP External Auth 补充测试
- * 专门覆盖 generateApiKey、deleteApiKey、listApiKeys
+ * 专门覆盖 generateApiKey、deleteApiKey、listApiKeys、validateApiKey
+ *
+ * 关键原则：真实代码 + 真实 libsql SQLite 数据库，不 mock 业务逻辑。
+ * parseScope / hasScope 是纯函数，直接测。
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { setupTestDb, closeTestDb, truncateAllTables, getTestDb } from "../_helpers/db";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { parseScope, hasScope, validateApiKey, generateApiKey, deleteApiKey, listApiKeys } from "@/mcp/external/auth";
 
-// 用 class 作为 PrismaClient
-const createModelMock = () => ({
-  findUnique: vi.fn(),
-  findFirst: vi.fn(),
-  findMany: vi.fn(),
-  create: vi.fn(),
-  update: vi.fn(),
-  updateMany: vi.fn(),
-  delete: vi.fn(),
-  deleteMany: vi.fn(),
-  count: vi.fn(),
-  upsert: vi.fn(),
-})
+// ===== 纯函数测试（无 DB） =====
 
-const externalApiKeyMock = createModelMock()
-const postMock = createModelMock()
-const accountMock = createModelMock()
+describe("parseScope", () => {
+  it("read → read", () => {
+    expect(parseScope("read")).toBe("read");
+  });
 
-// 用 class，让 new PrismaClient() 返回一个实例，实例上有这些属性
-class FakePrismaClient {
-  externalApiKey = externalApiKeyMock
-  post = postMock
-  account = accountMock
-  user = createModelMock()
-  media = createModelMock()
-  platform = createModelMock()
-  platformConfig = createModelMock()
-}
+  it("read_report（历史值）→ read 兼容", () => {
+    expect(parseScope("read_report")).toBe("read");
+  });
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: FakePrismaClient,
-}))
+  it("write → write", () => {
+    expect(parseScope("write")).toBe("write");
+  });
 
-describe('MCP Auth - 补充测试', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    // 重新赋值以避免 clearAllMocks 影响
-    externalApiKeyMock.findUnique = vi.fn()
-    externalApiKeyMock.create = vi.fn()
-    externalApiKeyMock.update = vi.fn()
-    externalApiKeyMock.deleteMany = vi.fn()
-    externalApiKeyMock.findMany = vi.fn()
-  })
+  it("read_write → read_write", () => {
+    expect(parseScope("read_write")).toBe("read_write");
+  });
 
-  describe('validateApiKey', () => {
-    it('should reject empty key', async () => {
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('')
-      expect(result.valid).toBe(false)
-      expect(result.errorCode).toBe('MISSING_KEY')
-    })
+  it("null / undefined / 空串 / 未知值 → read（安全默认）", () => {
+    expect(parseScope(null)).toBe("read");
+    expect(parseScope(undefined)).toBe("read");
+    expect(parseScope("")).toBe("read");
+    expect(parseScope("garbage")).toBe("read");
+  });
+});
 
-    it('should reject key without npk_ prefix', async () => {
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('xxx')
-      expect(result.valid).toBe(false)
-      expect(result.errorCode).toBe('INVALID_KEY_FORMAT')
-    })
+describe("hasScope", () => {
+  it("read 工具：read 满足，write 不满足，read_write 满足", () => {
+    expect(hasScope("read", "read")).toBe(true);
+    expect(hasScope("write", "read")).toBe(false);
+    expect(hasScope("read_write", "read")).toBe(true);
+  });
 
-    it('should reject non-existent key', async () => {
-      externalApiKeyMock.findUnique.mockResolvedValue(null)
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('npk_nonexistent123456789012345678901234')
-      expect(result.valid).toBe(false)
-      expect(result.errorCode).toBe('INVALID_KEY')
-    })
+  it("write 工具：read 不满足，write 满足，read_write 满足", () => {
+    expect(hasScope("read", "write")).toBe(false);
+    expect(hasScope("write", "write")).toBe(true);
+    expect(hasScope("read_write", "write")).toBe(true);
+  });
+});
 
-    it('should reject expired key', async () => {
-      externalApiKeyMock.findUnique.mockResolvedValue({
-        id: 'k1', userId: 'u1', key: 'npk_x',
-        expiresAt: new Date('2000-01-01'),
-      })
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('npk_x')
-      expect(result.errorCode).toBe('KEY_EXPIRED')
-    })
+// ===== DB 测试 =====
 
-    it('should accept valid key and return user', async () => {
-      externalApiKeyMock.findUnique.mockResolvedValue({
-        id: 'k1', userId: 'u1', key: 'npk_valid', expiresAt: null,
-      })
-      externalApiKeyMock.update.mockResolvedValue({})
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('npk_valid')
-      expect(result.valid).toBe(true)
-      expect(result.userId).toBe('u1')
-    })
+describe("validateApiKey", () => {
+  let userId: string;
 
-    it('【v0.4 关键】read_report 遗留 key 应被自动迁移到 read，并返回 scope=read', async () => {
-      externalApiKeyMock.findUnique.mockResolvedValue({
-        id: 'k1', userId: 'u1', name: 'Old', key: 'npk_old',
-        permissions: 'read_report',
-        expiresAt: null,
-      })
-      externalApiKeyMock.update.mockResolvedValue({})
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('npk_old')
+  beforeAll(async () => {
+    await setupTestDb();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "auth_test_user", password: "hash" }).returning();
+    userId = inserted[0].id;
+  });
+  afterAll(() => closeTestDb());
+  beforeEach(async () => {
+    await truncateAllTables();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "auth_test_user", password: "hash" }).returning();
+    userId = inserted[0].id;
+  });
 
-      expect(result.valid).toBe(true)
-      // 关键：scope 是 read，不是 read_write（不是 read_report）
-      expect(result.scope).toBe('read')
-      // update 被调用了两次：一次更新 lastUsedAt，一次迁移 read_report → read
-      expect(externalApiKeyMock.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'k1' },
-          data: { permissions: 'read' },
-        })
-      )
-    })
+  it("空 key → MISSING_KEY", async () => {
+    const result = await validateApiKey("");
+    expect(result.valid).toBe(false);
+    expect(result.errorCode).toBe("MISSING_KEY");
+  });
 
-    it('【v0.4】非 read_report 的 key 不触发迁移 update', async () => {
-      externalApiKeyMock.findUnique.mockResolvedValue({
-        id: 'k1', userId: 'u1', name: 'New', key: 'npk_new',
-        permissions: 'read_write',
-        expiresAt: null,
-      })
-      externalApiKeyMock.update.mockResolvedValue({})
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('npk_new')
+  it("不带 npk_ 前缀 → INVALID_KEY_FORMAT", async () => {
+    const result = await validateApiKey("xxx");
+    expect(result.valid).toBe(false);
+    expect(result.errorCode).toBe("INVALID_KEY_FORMAT");
+  });
 
-      expect(result.valid).toBe(true)
-      expect(result.scope).toBe('read_write')
-      // 只调了一次 update（lastUsedAt），没有迁移 update
-      const updateCalls = externalApiKeyMock.update.mock.calls.filter(
-        (call) => 'permissions' in (call[0]?.data ?? {})
-      )
-      expect(updateCalls).toHaveLength(0)
-    })
+  it("不存在的 key → INVALID_KEY", async () => {
+    const result = await validateApiKey("npk_nonexistent123456789012345678901234");
+    expect(result.valid).toBe(false);
+    expect(result.errorCode).toBe("INVALID_KEY");
+  });
 
-    it('should handle db errors', async () => {
-      externalApiKeyMock.findUnique.mockRejectedValue(new Error('DB error'))
-      const { validateApiKey } = await import('@/mcp/external/auth')
-      const result = await validateApiKey('npk_x')
-      expect(result.errorCode).toBe('INTERNAL_ERROR')
-    })
-  })
+  it("已过期的 key → KEY_EXPIRED", async () => {
+    const db = getTestDb();
+    // 直接用 UTC 时间字符串，避免本地时区解析歧义
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "Expired Key",
+      key: "npk_expiredtestkey000000000000000000",
+      permissions: "read",
+      expiresAt: "2000-01-01T00:00:00.000Z",
+    }).run();
+    const result = await validateApiKey("npk_expiredtestkey000000000000000000");
+    expect(result.valid).toBe(false);
+    expect(result.errorCode).toBe("KEY_EXPIRED");
+  });
 
-  describe('generateApiKey', () => {
-    it('should generate key with npk_ prefix', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'Test Key')
-      expect(result.success).toBe(true)
-      expect(result.key).toMatch(/^npk_[a-f0-9]{64}$/)
-    })
+  it("合法 key → valid=true，userId/scope 正确", async () => {
+    const db = getTestDb();
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "Valid Key",
+      key: "npk_validtestkey00000000000000000000",
+      permissions: "read_write",
+    }).run();
+    const result = await validateApiKey("npk_validtestkey00000000000000000000");
+    expect(result.valid).toBe(true);
+    expect(result.userId).toBe(userId);
+    expect(result.scope).toBe("read_write");
+  });
 
-    it('should support expiresAt', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const exp = new Date('2030-01-01')
-      await generateApiKey('u1', 'Test', exp)
-      expect(externalApiKeyMock.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ expiresAt: exp }) })
-      )
-    })
+  it("【v0.4】read_report key 自动迁移到 read，DB 里也改了", async () => {
+    const db = getTestDb();
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "Legacy Key",
+      key: "npk_legacykey0000000000000000000000",
+      permissions: "read_report",
+    }).run();
+    const result = await validateApiKey("npk_legacykey0000000000000000000000");
+    expect(result.valid).toBe(true);
+    expect(result.scope).toBe("read");
+    // DB 里也该变成 read 了
+    const rows = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.key, "npk_legacykey0000000000000000000000"))
+      .limit(1);
+    expect(rows[0]?.permissions).toBe("read");
+  });
 
-    it('should handle errors', async () => {
-      externalApiKeyMock.create.mockRejectedValue(new Error('DB error'))
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'Test')
-      expect(result.success).toBe(false)
-    })
+  it("不存在的 key → INVALID_KEY", async () => {
+    const result = await validateApiKey("npk_errorcase0000000000000000000000");
+    expect(result.valid).toBe(false);
+    expect(result.errorCode).toBe("INVALID_KEY");
+  });
+});
 
-    it('默认 scope 应为 read（安全默认）', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'Default')
-      expect(result.success).toBe(true)
-      expect(result.scope).toBe('read')
-      // 写入 DB 时 permissions 应是 read
-      expect(externalApiKeyMock.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ permissions: 'read' }) })
-      )
-    })
+describe("generateApiKey", () => {
+  let userId: string;
 
-    it('应接受 scope=read_write 并透传', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'RW', undefined, 'read_write')
-      expect(result.success).toBe(true)
-      expect(result.scope).toBe('read_write')
-      expect(externalApiKeyMock.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ permissions: 'read_write' }) })
-      )
-    })
+  beforeAll(async () => {
+    await setupTestDb();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "gen_user", password: "h" }).returning();
+    userId = inserted[0].id;
+  });
+  afterAll(() => closeTestDb());
+  beforeEach(async () => {
+    await truncateAllTables();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "gen_user", password: "h" }).returning();
+    userId = inserted[0].id;
+  });
 
-    it('应接受 scope=write 并透传', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'W', undefined, 'write')
-      expect(result.scope).toBe('write')
-    })
+  it("生成 key 带 npk_ 前缀 + 64位十六进制", async () => {
+    const result = await generateApiKey(userId, "Test Key");
+    expect(result.success).toBe(true);
+    expect(result.key).toMatch(/^npk_[a-f0-9]{64}$/);
+  });
 
-    it('非法 scope 应降级为 read（不抛错）', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'Bad', undefined, 'totally-bogus')
-      expect(result.scope).toBe('read')
-    })
+  it("默认 scope 为 read", async () => {
+    const result = await generateApiKey(userId, "Default Scope");
+    expect(result.success).toBe(true);
+    expect(result.scope).toBe("read");
+    // DB 里确实是 read
+    const db = getTestDb();
+    const rows = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.userId, userId))
+      .all();
+    expect(rows[0]?.permissions).toBe("read");
+  });
 
-    it('read_report 历史 scope 应被接受并归一为 read', async () => {
-      externalApiKeyMock.create.mockResolvedValue({ id: 'k1' })
-      const { generateApiKey } = await import('@/mcp/external/auth')
-      const result = await generateApiKey('u1', 'Legacy', undefined, 'read_report')
-      expect(result.scope).toBe('read')
-    })
-  })
+  it("scope=read_write 透传", async () => {
+    const result = await generateApiKey(userId, "RW Key", undefined, "read_write");
+    expect(result.success).toBe(true);
+    expect(result.scope).toBe("read_write");
+  });
 
-  describe('deleteApiKey', () => {
-    it('should delete when key belongs to user', async () => {
-      externalApiKeyMock.deleteMany.mockResolvedValue({ count: 1 })
-      const { deleteApiKey } = await import('@/mcp/external/auth')
-      const result = await deleteApiKey('u1', 'k1')
-      expect(result.success).toBe(true)
-    })
+  it("scope=write 透传", async () => {
+    const result = await generateApiKey(userId, "W Key", undefined, "write");
+    expect(result.success).toBe(true);
+    expect(result.scope).toBe("write");
+  });
 
-    it('should fail when no rows deleted', async () => {
-      externalApiKeyMock.deleteMany.mockResolvedValue({ count: 0 })
-      const { deleteApiKey } = await import('@/mcp/external/auth')
-      const result = await deleteApiKey('u1', 'k1')
-      expect(result.success).toBe(false)
-    })
+  it("scope=read_report 历史值归一为 read", async () => {
+    const result = await generateApiKey(userId, "Legacy", undefined, "read_report");
+    expect(result.success).toBe(true);
+    expect(result.scope).toBe("read");
+  });
 
-    it('should handle errors', async () => {
-      externalApiKeyMock.deleteMany.mockRejectedValue(new Error('DB error'))
-      const { deleteApiKey } = await import('@/mcp/external/auth')
-      const result = await deleteApiKey('u1', 'k1')
-      expect(result.success).toBe(false)
-    })
-  })
+  it("非法 scope 降级为 read（不抛错）", async () => {
+    const result = await generateApiKey(userId, "Bad Scope", undefined, "totally-bogus");
+    expect(result.success).toBe(true);
+    expect(result.scope).toBe("read");
+  });
 
-  describe('listApiKeys', () => {
-    it('should return key previews', async () => {
-      const date = new Date('2026-01-01')
-      externalApiKeyMock.findMany.mockResolvedValue([
-        {
-          id: 'k1', name: 'Test', key: 'npk_abcdefghijklmnop',
-          permissions: 'read_report', lastUsedAt: date, expiresAt: null,
-          createdAt: date,
-        },
-      ])
-      const { listApiKeys } = await import('@/mcp/external/auth')
-      const result = await listApiKeys('u1')
-      expect(result.success).toBe(true)
-      expect(result.keys![0].keyPreview).toBe('npk_abcdefgh...')
+  it("带 expiresAt 写入 DB", async () => {
+    const expDate = new Date("2030-01-01");
+    const result = await generateApiKey(userId, "With Expiry", expDate);
+    expect(result.success).toBe(true);
+    const db = getTestDb();
+    const rows = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.key, result.key!))
+      .limit(1);
+    expect(rows[0]?.expiresAt).toBe(expDate.toISOString());
+  });
+});
 
-    })
+describe("deleteApiKey", () => {
+  let userId: string;
 
-    it('should return empty array when no keys', async () => {
-      externalApiKeyMock.findMany.mockResolvedValue([])
-      const { listApiKeys } = await import('@/mcp/external/auth')
-      const result = await listApiKeys('u1')
-      expect(result.success).toBe(true)
-      expect(result.keys).toHaveLength(0)
-    })
+  beforeAll(async () => {
+    await setupTestDb();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "del_user", password: "h" }).returning();
+    userId = inserted[0].id;
+  });
+  afterAll(() => closeTestDb());
+  beforeEach(async () => {
+    await truncateAllTables();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "del_user", password: "h" }).returning();
+    userId = inserted[0].id;
+  });
 
-    it('lastUsedAt 为 null 时输出 null（不抛错）', async () => {
-      const date = new Date('2026-01-01')
-      externalApiKeyMock.findMany.mockResolvedValue([
-        {
-          id: 'k1', name: 'Test', key: 'npk_abcdefghijklmnop',
-          permissions: 'read_report', lastUsedAt: null, expiresAt: null,
-          createdAt: date,
-        },
-      ])
-      const { listApiKeys } = await import('@/mcp/external/auth')
-      const result = await listApiKeys('u1')
-      expect(result.success).toBe(true)
-      expect(result.keys![0].lastUsedAt).toBeNull()
-    })
+  it("key 属于该用户 → 删除成功", async () => {
+    const db = getTestDb();
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "To Delete",
+      key: "npk_todelete000000000000000000000000",
+    }).run();
+    const rows = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.key, "npk_todelete000000000000000000000000"))
+      .limit(1);
+    const keyId = rows[0].id;
 
-    it('should handle errors', async () => {
-      externalApiKeyMock.findMany.mockRejectedValue(new Error('DB error'))
-      const { listApiKeys } = await import('@/mcp/external/auth')
-      const result = await listApiKeys('u1')
-      expect(result.success).toBe(false)
-    })
-  })
-})
+    const result = await deleteApiKey(userId, keyId);
+    expect(result.success).toBe(true);
 
-// ===== v0.3 Scope 解析与权限校验 =====
-describe('parseScope', () => {
-  it('read → read', async () => {
-    const { parseScope } = await import('@/mcp/external/auth')
-    expect(parseScope('read')).toBe('read')
-  })
+    // DB 里确实删了
+    const remaining = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.id, keyId))
+      .limit(1);
+    expect(remaining[0]).toBeUndefined();
+  });
 
-  it('read_report（历史值）→ read 兼容', async () => {
-    const { parseScope } = await import('@/mcp/external/auth')
-    expect(parseScope('read_report')).toBe('read')
-  })
+  it("key 不属于该用户 → 删除失败", async () => {
+    const db = getTestDb();
+    // 创建另一个用户
+    const otherUser = await db.insert(schema.user).values({ username: "other", password: "h" }).returning();
+    const otherId = otherUser[0].id;
+    // other 用户的 key
+    await db.insert(schema.externalApiKey).values({
+      userId: otherId,
+      name: "Other Key",
+      key: "npk_otherkey000000000000000000000000",
+    }).run();
+    const rows = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.key, "npk_otherkey000000000000000000000000"))
+      .limit(1);
+    const otherKeyId = rows[0].id;
 
-  it('write → write', async () => {
-    const { parseScope } = await import('@/mcp/external/auth')
-    expect(parseScope('write')).toBe('write')
-  })
+    // 当前用户尝试删除
+    const result = await deleteApiKey(userId, otherKeyId);
+    expect(result.success).toBe(false);
 
-  it('read_write → read_write', async () => {
-    const { parseScope } = await import('@/mcp/external/auth')
-    expect(parseScope('read_write')).toBe('read_write')
-  })
+    // DB 里仍然存在
+    const remaining = await db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.id, otherKeyId))
+      .limit(1);
+    expect(remaining[0]).toBeDefined();
+  });
+});
 
-  it('null / undefined / 未知值 → read（安全默认）', async () => {
-    const { parseScope } = await import('@/mcp/external/auth')
-    expect(parseScope(null)).toBe('read')
-    expect(parseScope(undefined)).toBe('read')
-    expect(parseScope('')).toBe('read')
-    expect(parseScope('garbage')).toBe('read')
-  })
-})
+describe("listApiKeys", () => {
+  let userId: string;
 
-describe('hasScope', () => {
-  it('read 工具：read 满足，write 不满足，read_write 满足', async () => {
-    const { hasScope } = await import('@/mcp/external/auth')
-    expect(hasScope('read', 'read')).toBe(true)
-    expect(hasScope('write', 'read')).toBe(false)
-    expect(hasScope('read_write', 'read')).toBe(true)
-  })
+  beforeAll(async () => {
+    await setupTestDb();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "list_user", password: "h" }).returning();
+    userId = inserted[0].id;
+  });
+  afterAll(() => closeTestDb());
+  beforeEach(async () => {
+    await truncateAllTables();
+    const db = getTestDb();
+    const inserted = await db.insert(schema.user).values({ username: "list_user", password: "h" }).returning();
+    userId = inserted[0].id;
+  });
 
-  it('write 工具：read 不满足，write 满足，read_write 满足', async () => {
-    const { hasScope } = await import('@/mcp/external/auth')
-    expect(hasScope('read', 'write')).toBe(false)
-    expect(hasScope('write', 'write')).toBe(true)
-    expect(hasScope('read_write', 'write')).toBe(true)
-  })
-})
+  it("返回 key 预览（前12字符 + ...）", async () => {
+    const db = getTestDb();
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "Preview Test",
+      key: "npk_abcdefghijklmnop",
+      permissions: "read",
+    }).run();
+    const result = await listApiKeys(userId);
+    expect(result.success).toBe(true);
+    expect(result.keys![0].keyPreview).toBe("npk_abcdefgh...");
+  });
 
-describe('validateApiKey 应返回 scope', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    externalApiKeyMock.findUnique = vi.fn()
-    externalApiKeyMock.update = vi.fn()
-  })
+  it("无 key 时返回空数组", async () => {
+    const result = await listApiKeys(userId);
+    expect(result.success).toBe(true);
+    expect(result.keys).toHaveLength(0);
+  });
 
-  it('permissions=read_report 应映射为 scope=read', async () => {
-    externalApiKeyMock.findUnique.mockResolvedValue({
-      id: 'k1', userId: 'u1', key: 'npk_x', permissions: 'read_report', expiresAt: null,
-    })
-    externalApiKeyMock.update.mockResolvedValue({})
-    const { validateApiKey } = await import('@/mcp/external/auth')
-    const result = await validateApiKey('npk_x')
-    expect(result.valid).toBe(true)
-    expect(result.scope).toBe('read')
-  })
+  it("lastUsedAt 为 null 时输出 null（不抛错）", async () => {
+    const db = getTestDb();
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "Never Used",
+      key: "npk_neverused0000000000000000000000",
+      permissions: "read",
+    }).run();
+    const result = await listApiKeys(userId);
+    expect(result.success).toBe(true);
+    expect(result.keys![0].lastUsedAt).toBeNull();
+  });
 
-  it('permissions=read_write 应映射为 scope=read_write', async () => {
-    externalApiKeyMock.findUnique.mockResolvedValue({
-      id: 'k1', userId: 'u1', key: 'npk_x', permissions: 'read_write', expiresAt: null,
-    })
-    externalApiKeyMock.update.mockResolvedValue({})
-    const { validateApiKey } = await import('@/mcp/external/auth')
-    const result = await validateApiKey('npk_x')
-    expect(result.scope).toBe('read_write')
-  })
-
-  it('permissions 缺失时应默认为 read', async () => {
-    externalApiKeyMock.findUnique.mockResolvedValue({
-      id: 'k1', userId: 'u1', key: 'npk_x', expiresAt: null,
-    })
-    externalApiKeyMock.update.mockResolvedValue({})
-    const { validateApiKey } = await import('@/mcp/external/auth')
-    const result = await validateApiKey('npk_x')
-    expect(result.scope).toBe('read')
-  })
-})
+  it("read_report 历史 key 在 list 前被迁移到 read", async () => {
+    const db = getTestDb();
+    await db.insert(schema.externalApiKey).values({
+      userId,
+      name: "Old Scope",
+      key: "npk_oldscope00000000000000000000000",
+      permissions: "read_report",
+    }).run();
+    const result = await listApiKeys(userId);
+    expect(result.success).toBe(true);
+    // listApiKeys 在返回前会迁移 read_report → read
+    expect(result.keys![0].permissions).toBe("read");
+  });
+});

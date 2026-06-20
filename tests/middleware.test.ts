@@ -1,41 +1,24 @@
 /**
  * middleware 单元测试
  *
- * 验证：
- * - /api 路径不拦截
- * - 未登录访问受保护页面 → 重定向 /login
- * - 已登录访问 /login /register → 重定向 /
- * - 已登录访问受保护页面 → 通过
- * - 未登录访问 /login → 通过
+ * 策略：只 mock next-auth/jwt，不 mock next/server，
+ * 让 middleware 用真实的 NextResponse。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock next/server —— 在 import middleware 之前
-vi.mock('next/server', () => ({
-  NextResponse: {
-    next: vi.fn(() => ({ type: 'next' })),
-    redirect: vi.fn((url: URL) => ({ type: 'redirect', url: url.toString() })),
-  },
+// Mock next-auth/jwt（不在 Edge 环境运行）
+vi.mock('next-auth/jwt', () => ({
+  getToken: vi.fn(),
 }))
 
-// Mock @/lib/auth —— middleware 用 `import { auth }` named import
-// 这里让 auth 直接返回原 handler，方便测试直接调用
-vi.mock('@/lib/auth', () => ({
-  auth: (handler: unknown) => handler,
-  signIn: vi.fn(),
-  signOut: vi.fn(),
-  handlers: { GET: vi.fn(), POST: vi.fn() },
-}))
+import { getToken } from 'next-auth/jwt'
+import { middleware } from '@/middleware'
 
-import middleware from '@/middleware'
-
-function fakeReq(opts: { pathname: string; isLoggedIn: boolean; url?: string }) {
-  const baseUrl = opts.url ?? 'http://localhost:3456'
+// Helper: 构造一个 minimal Request-like 对象
+function fakeReq(url: string) {
   return {
-    nextUrl: new URL(opts.pathname, baseUrl),
-    url: baseUrl,
-    auth: opts.isLoggedIn ? { user: { id: 'u1' } } : null,
-  }
+    url,
+  } as unknown as Request
 }
 
 describe('middleware', () => {
@@ -43,43 +26,101 @@ describe('middleware', () => {
     vi.clearAllMocks()
   })
 
-  it('API 路径直接通过（不拦截）', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/api/mcp', isLoggedIn: false }))
-    expect(result).toEqual({ type: 'next' })
+  // --- 放行路由 ---
+  it('GET /api/mcp → 通过（不放行）', async () => {
+    // middleware 的 matcher 包含 /api/mcp，但代码里单独判断了 /api/mcp 放行
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/api/mcp'))
+    expect(result).toBeInstanceOf(Response) // NextResponse.next() 返回真实 Response
+    expect((result as Response).status).toBe(200)
   })
 
-  it('未登录访问根路径 → 重定向 /login', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/', isLoggedIn: false }))
-    expect(result).toEqual(expect.objectContaining({ type: 'redirect', url: expect.stringContaining('/login') }))
+  it('GET /api/auth/... → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/api/auth/session'))
+    expect((result as Response).status).toBe(200)
   })
 
-  it('未登录访问 /posts → 重定向 /login', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/posts', isLoggedIn: false }))
-    expect(result).toEqual(expect.objectContaining({ type: 'redirect', url: expect.stringContaining('/login') }))
+  it('GET /favicon → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/favicon.ico'))
+    expect((result as Response).status).toBe(200)
   })
 
-  it('已登录访问 /login → 重定向 /', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/login', isLoggedIn: true }))
-    expect(result).toEqual(expect.objectContaining({ type: 'redirect', url: expect.stringContaining('/') }))
+  // --- 未登录重定向 ---
+  it('未登录访问 / → 重定向 /login', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/'))
+    expect((result as Response).status).toBe(307)
+    // NextResponse.redirect with base URL produces full URL: "http://localhost/login"
+    expect((result as Response).headers.get('location')).toMatch(/\/login$/)
   })
 
-  it('已登录访问 /register → 重定向 /', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/register', isLoggedIn: true }))
-    expect(result).toEqual(expect.objectContaining({ type: 'redirect', url: expect.stringContaining('/') }))
+  it('未登录访问 /posts → 重定向 /login', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/posts'))
+    expect((result as Response).status).toBe(307)
+    expect((result as Response).headers.get('location')).toMatch(/\/login$/)
   })
 
-  it('已登录访问根路径 → 通过', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/', isLoggedIn: true }))
-    expect(result).toEqual({ type: 'next' })
+  it('未登录访问 /dashboard → 重定向 /login', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/dashboard'))
+    expect((result as Response).status).toBe(307)
+    expect((result as Response).headers.get('location')).toMatch(/\/login$/)
   })
 
-  it('未登录访问 /login → 通过', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/login', isLoggedIn: false }))
-    expect(result).toEqual({ type: 'next' })
+  // --- 已登录访问 auth 页面 → 重定向 / ---
+  it('已登录访问 /login → 重定向 /', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'u1', name: 'test' })
+    const result = await middleware(fakeReq('http://localhost/login'))
+    expect((result as Response).status).toBe(307)
+    expect((result as Response).headers.get('location')).toMatch(/\/$/)
   })
 
-  it('未登录访问 /register → 通过', () => {
-    const result = (middleware as unknown as (req: unknown) => unknown)(fakeReq({ pathname: '/register', isLoggedIn: false }))
-    expect(result).toEqual({ type: 'next' })
+  it('已登录访问 /register → 重定向 /', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'u1', name: 'test' })
+    const result = await middleware(fakeReq('http://localhost/register'))
+    expect((result as Response).status).toBe(307)
+    expect((result as Response).headers.get('location')).toMatch(/\/$/)
+  })
+
+  // --- 已登录访问受保护页面 → 通过 ---
+  it('已登录访问 / → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'u1', name: 'test' })
+    const result = await middleware(fakeReq('http://localhost/'))
+    expect((result as Response).status).toBe(200)
+  })
+
+  it('已登录访问 /posts → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'u1', name: 'test' })
+    const result = await middleware(fakeReq('http://localhost/posts'))
+    expect((result as Response).status).toBe(200)
+  })
+
+  // --- 未登录访问 auth 页面 → 通过 ---
+  it('未登录访问 /login → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/login'))
+    expect((result as Response).status).toBe(200)
+  })
+
+  it('未登录访问 /register → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/register'))
+    expect((result as Response).status).toBe(200)
+  })
+
+  // --- /api/uploads/ 放行（无需登录） ---
+  it('未登录访问 /api/uploads/... → 通过（不在 auth middleware 层拦截）', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/api/uploads/2026-06-03/b671f926-d122-471a-a6e4-d758bb52fee8.jpg'))
+    expect((result as Response).status).toBe(200)
+  })
+
+  it('未登录访问 /api/uploads/2026-06-01/test.png → 通过', async () => {
+    ;(getToken as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+    const result = await middleware(fakeReq('http://localhost/api/uploads/2026-06-01/test.png'))
+    expect((result as Response).status).toBe(200)
   })
 })

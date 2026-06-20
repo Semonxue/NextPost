@@ -10,7 +10,7 @@ interface MediaUploaderProps {
   platformConfig: PlatformConfig;
   initialUrls?: string[];
   initialThumbnails?: string[]; // 服务端生成的缩略图 URL 数组
-  onChange: (urls: string[], files: File[]) => void;
+  onChange: (uploadedUrls: string[], uploadedThumbnails: string[], pendingFiles: File[]) => void;
   maxFileSize?: number; // 默认 10MB
 }
 
@@ -118,21 +118,36 @@ export function MediaUploader({
     []
   );
 
-  // 用 ref 记录上一次的 mediaItems，避免 useEffect 初始化时重复通知
+  // 用 ref 记录上一次的 mediaItems（用于比较是否真的变了）
   const prevMediaItemsRef = useRef<MediaItem[] | null>(null);
+  // 跳过首次渲染的初始化通知
+  const isInitialRef = useRef<boolean>(true);
 
-  // 当 mediaItems 变化时，通过 useEffect 通知父组件（避免在 setState updater 中触发父组件更新）
+  // 当 mediaItems 或 platformConfig 变化时，通知父组件
   useEffect(() => {
-    // 跳过首次渲染（初始化不需要通知父组件）
-    if (prevMediaItemsRef.current === null) {
+    if (isInitialRef.current) {
+      isInitialRef.current = false;
       prevMediaItemsRef.current = mediaItems;
-      return;
+      return; // 初始化不通知
     }
+
+    // 比较 items 是否真的变了（排除 config 变化导致的无效触发）
+    const prev = prevMediaItemsRef.current;
+    const trulyChanged =
+      !prev ||
+      prev.length !== mediaItems.length ||
+      !prev.every((m, i) => m.id === mediaItems[i]?.id);
+
     prevMediaItemsRef.current = mediaItems;
-    const urls = mediaItems.filter((m) => m.url).map((m) => m.url!);
-    const files = mediaItems.filter((m) => m.file).map((m) => m.file!);
-    onChange(urls, files);
-  }, [mediaItems, onChange]);
+
+    if (!trulyChanged) return; // items 没变，跳过通知
+
+    const uploadedUrls = mediaItems.filter((m) => m.url).map((m) => m.url as string);
+    const uploadedThumbnails = mediaItems.filter((m) => m.url).map((m) => (m.thumbnailUrl ?? m.url) as string);
+    // 只传还没有 URL 的文件（已上传的不要在提交时重复上传）
+    const pendingFiles = mediaItems.filter((m) => m.file && !m.url).map((m) => m.file!);
+    onChange(uploadedUrls, uploadedThumbnails, pendingFiles);
+  }, [mediaItems, platformConfig, onChange]);
 
   // 处理文件选择
   const handleFiles = useCallback(
@@ -179,16 +194,20 @@ export function MediaUploader({
           continue;
         }
 
-        // 生成本地预览缩略图
+        // 生成本地预览缩略图（立即显示，提升 UX）
         const thumbnail = await generateThumbnail(file);
+        const itemId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const newItem: MediaItem = {
-          id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: itemId,
           preview: thumbnail,
           file,
           type,
           name: file.name,
           size: file.size,
         };
+
+        // 后台上传，上传成功后用服务端 URL 替换预览
+        uploadToServer(file, itemId, thumbnail);
 
         newItems.push(newItem);
         // 更新动态计数
@@ -202,6 +221,40 @@ export function MediaUploader({
       setMediaItems((prev) => [...prev, ...newItems]);
     },
     [mediaItems, platformConfig, maxFileSize, generateThumbnail, addToast]
+  );
+
+  // 后台上传文件到服务器，上传成功后更新 item.preview 为服务端 URL
+  // 这样 img src 会从 base64 data URL 切换到 /api/uploads/...，便于 E2E 测试验证
+  const uploadToServer = useCallback(
+    (file: File, itemId: string, thumbnail: string) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      // 客户端预生成的 base64 缩略图（images 有 canvas 生成，videos 无）
+      if (thumbnail && thumbnail.startsWith("data:")) {
+        formData.append("thumbnail", thumbnail);
+      }
+
+      fetch("/api/media/upload", { method: "POST", body: formData })
+        .then((res) => {
+          if (!res.ok) throw new Error("上传失败");
+          return res.json() as Promise<{ url: string; thumbnailUrl: string }>;
+        })
+        .then((data) => {
+          // 上传成功：用服务端 URL 替换本地 base64 预览
+          setMediaItems((prev) =>
+            prev.map((item) =>
+              item.id === itemId
+                ? { ...item, preview: data.url, url: data.url, thumbnailUrl: data.thumbnailUrl }
+                : item
+            )
+          );
+        })
+        .catch((err) => {
+          console.error("媒体上传失败:", err);
+          addToast({ type: "error", message: "媒体上传失败" });
+        });
+    },
+    [addToast]
   );
 
   // 删除媒体项

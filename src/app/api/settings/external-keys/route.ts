@@ -1,16 +1,15 @@
 /**
  * 外部 API Key 管理接口
- * 
+ *
  * GET  /api/settings/external-keys     - 获取 Key 列表
  * POST /api/settings/external-keys    - 创建新的 Key
- * POST /api/settings/external-keys/reveal - 查看完整 Key（需要验证）
  * DELETE /api/settings/external-keys/:id - 删除 Key
+ * GET  /api/settings/external-keys/reveal - 查看完整 Key（见 reveal/route.ts）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { generateApiKey, deleteApiKey, listApiKeys } from '@/mcp/external/auth';
-import prisma from '@/lib/prisma';
 
 // GET 获取 Key 列表
 export async function GET(request: NextRequest) {
@@ -40,7 +39,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
+    const body = await request.json() as { name?: unknown; expiresAt?: string | number | Date; scope?: string };
     const { name, expiresAt, scope } = body;
 
     if (!name || typeof name !== 'string') {
@@ -102,41 +101,4 @@ export async function DELETE(request: NextRequest) {
   }
   
   return NextResponse.json({ success: true });
-}
-
-// GET /api/settings/external-keys/reveal?id=xxx - 获取完整 Key（需要再次认证）
-export async function REVEAL(request: NextRequest) {
-  const session = await auth();
-  
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  
-  const { searchParams } = new URL(request.url);
-  const keyId = searchParams.get('id');
-  
-  if (!keyId) {
-    return NextResponse.json({ error: 'Key ID is required' }, { status: 400 });
-  }
-  
-  try {
-    const apiKey = await prisma.externalApiKey.findFirst({
-      where: {
-        id: keyId,
-        userId: session.user.id
-      }
-    });
-    
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Key not found' }, { status: 404 });
-    }
-    
-    return NextResponse.json({
-      key: apiKey.key,
-      name: apiKey.name
-    });
-  } catch (error) {
-    console.error('Error revealing API Key:', error);
-    return NextResponse.json({ error: 'Failed to reveal key' }, { status: 500 });
-  }
 }

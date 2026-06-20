@@ -57,17 +57,18 @@ export default function EditPostPage() {
   });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
-  const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
-  // 默认平台配置
+  const [uploadedThumbnails, setUploadedThumbnails] = useState<string[]>([]);
+  const [pendingMediaFiles, setPendingMediaFiles] = useState<File[]>([]);
+  // 默认平台配置（key 使用小写，对齐 new page 写法）
   const defaultConfig: PlatformConfig = {
     platformId: "",
-    platformName: "Twitter",
-    ...DEFAULT_PLATFORM_CONFIG.Twitter,
+    platformName: "twitter",
+    ...DEFAULT_PLATFORM_CONFIG.twitter,
   };
   // 将 UTC Date 对象转换为指定时区的 datetime-local 格式字符串
-  const formatDateTimeLocal = (date: Date, timezone: string): string => {
+  const formatDateTimeLocal = (date: Date | null | undefined, timezone: string): string => {
+    if (!date || isNaN(date.getTime())) return "";
     try {
       const formatter = new Intl.DateTimeFormat("en-CA", {
         timeZone: timezone,
@@ -88,7 +89,9 @@ export default function EditPostPage() {
       return `${year}-${month}-${day}T${hour}:${minute}`;
     } catch {
       // 如果时区转换失败，使用本地时间
-      return date.toISOString().slice(0, 16);
+      const iso = date.toISOString();
+      if (iso === "Invalid Date") return "";
+      return iso.slice(0, 16);
     }
   };
   useEffect(() => {
@@ -106,11 +109,11 @@ export default function EditPostPage() {
         fetch(`/api/posts/${params.id}`),
       ]);
       if (accountsRes.ok) {
-        const accountsData = await accountsRes.json();
-        setAccounts(accountsData);
+        const accountsData = await accountsRes.json() as { accounts?: Account[] };
+        setAccounts(accountsData.accounts || []);
       }
       if (postRes.ok) {
-        const postData = await postRes.json();
+        const postData = await postRes.json() as Post;
         setPost(postData);
         setFormData({
           accountId: postData.accountId,
@@ -128,10 +131,10 @@ export default function EditPostPage() {
           setExistingMediaUrls(urls);
         }
         
-        // 解析已有缩略图
+        // 解析已有缩略图（同时用于 MediaUploader 初始化和提交时保存）
         if (postData.mediaThumbnails) {
           const thumbnails = JSON.parse(postData.mediaThumbnails);
-          setMediaThumbnails(thumbnails);
+          setUploadedThumbnails(thumbnails);
         }
         
         // 获取平台配置
@@ -151,16 +154,16 @@ export default function EditPostPage() {
     try {
       const res = await fetch(`/api/accounts/${accountId}/config`);
       if (res.ok) {
-        const config = await res.json();
+        const config = await res.json() as PlatformConfig;
         setPlatformConfig(config);
       } else {
-        // 使用默认配置
+        // 使用默认配置（key 使用小写，对齐 DEFAULT_PLATFORM_CONFIG）
         const account = accounts.find((a) => a.id === accountId);
-        const platformName = account?.platform?.name || "Twitter";
+        const platformName = account?.platform?.name?.toLowerCase() || "twitter";
         setPlatformConfig({
           platformId: account?.platform?.id || "",
           platformName,
-          ...DEFAULT_PLATFORM_CONFIG[platformName as keyof typeof DEFAULT_PLATFORM_CONFIG] || DEFAULT_PLATFORM_CONFIG.Twitter,
+          ...DEFAULT_PLATFORM_CONFIG[platformName as keyof typeof DEFAULT_PLATFORM_CONFIG] || DEFAULT_PLATFORM_CONFIG.twitter,
         });
       }
     } catch (error) {
@@ -173,9 +176,13 @@ export default function EditPostPage() {
     fetchPlatformConfig(accountId);
   };
   // 媒体变更处理
-  const handleMediaChange = useCallback((urls: string[], files: File[]) => {
-    setExistingMediaUrls(urls);
-    setMediaFiles(files);
+  // - uploadedUrls: 已上传的 R2 URL（后台自动上传完成的）
+  // - uploadedThumbnails: 已上传项对应的缩略图 URL
+  // - pendingFiles: 还没上传的新文件
+  const handleMediaChange = useCallback((uploadedUrls: string[], uploadedThumbnails: string[], pendingFiles: File[]) => {
+    setExistingMediaUrls(uploadedUrls);
+    setUploadedThumbnails(uploadedThumbnails);
+    setPendingMediaFiles(pendingFiles);
   }, []);
   const handleSubmit = async () => {
     if (!formData.accountId) {
@@ -197,11 +204,11 @@ export default function EditPostPage() {
     }
     setSaving(true);
     try {
-      // 如果有新文件，先上传
+      // 如果有新文件，先上传（已有 URL 的不要重复上传）
       let mediaUrls: string[] = [...existingMediaUrls];
-      let mediaThumbnailsResult: string[] = [...mediaThumbnails];
+      let mediaThumbnailsResult: string[] = [...uploadedThumbnails];
       
-      for (const file of mediaFiles) {
+      for (const file of pendingMediaFiles) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", file);
         
@@ -211,14 +218,14 @@ export default function EditPostPage() {
         });
         
         if (!uploadRes.ok) {
-          const error = await uploadRes.json();
+          const error = await uploadRes.json() as { error?: string };
           addToast({ type: "error", message: error.error || "上传失败" });
           setSaving(false);
           return;
         }
         
-        const uploadData = await uploadRes.json();
-        mediaUrls.push(uploadData.url);
+        const uploadData = await uploadRes.json() as { url?: string; thumbnailUrl?: string };
+        if (uploadData.url) mediaUrls.push(uploadData.url);
         // 保存服务端生成的缩略图 URL
         if (uploadData.thumbnailUrl) {
           mediaThumbnailsResult.push(uploadData.thumbnailUrl);
@@ -249,7 +256,7 @@ export default function EditPostPage() {
         addToast({ type: "success", message: "帖子已更新" });
         router.push(backUrl);
       } else {
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         addToast({ type: "error", message: data.error || "更新失败" });
       }
     } catch {
@@ -370,7 +377,7 @@ export default function EditPostPage() {
           <MediaUploader
             platformConfig={platformConfig || defaultConfig}
             initialUrls={existingMediaUrls}
-            initialThumbnails={mediaThumbnails}
+            initialThumbnails={uploadedThumbnails}
             onChange={handleMediaChange}
           />
         </div>

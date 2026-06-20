@@ -62,9 +62,8 @@ test.describe('账号管理模块', () => {
       // 等待卡片出现
       await page.waitForTimeout(1000)
 
-      // 点击第一个卡片的编辑图标按钮
-      const firstCard = page.locator('.bg-white.dark\\:bg-gray-800.rounded-xl').first()
-      await firstCard.locator('button').first().click()
+      // 直接找编辑按钮（aria-label="编辑账号"）
+      await page.locator('[aria-label="编辑账号"]').click()
 
       // 等待 Modal 打开
       await page.waitForTimeout(500)
@@ -94,8 +93,8 @@ test.describe('账号管理模块', () => {
 
       // 点击第一个卡片的删除图标按钮 - 先注册 dialog handler
       page.on('dialog', dialog => dialog.accept())
-      const firstCard = page.locator('.bg-white.dark\\:bg-gray-800.rounded-xl').first()
-      await firstCard.locator('button').last().click()
+      // 用 aria-label 精确定位删除按钮
+      await page.locator('[aria-label="删除账号"]').click()
 
       // 等待 toast 出现
       await expect(page.locator('.fixed.bottom-4.right-4').getByText('账号已删除').first()).toBeVisible({ timeout: 10000 })

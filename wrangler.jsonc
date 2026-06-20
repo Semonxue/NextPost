@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "nextpost",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public",
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "nextpost",
+    },
+  ],
+  // D1 Database binding — database already exists in CF dashboard
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nextpost-db",
+      "database_id": "acfaa8c9-2b80-4348-854d-1d7444e892f8",
+    },
+  ],
+  // R2 Media bucket binding — already exists in CF dashboard
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "nextpost-media",
+    },
+  ],
+  // Environment variables (set in CF dashboard > Workers & Pages > your worker > Settings > Variables)
+  // Required: AUTH_SECRET, NEXT_PUBLIC_BASE_URL, STORAGE_ENGINE=r2, R2_BUCKET_NAME=nextpost-media, R2_BUCKET_ID
+  // Note: NEXTAUTH_URL 和 AUTH_TRUST_HOST 不需要在此配置
+  // - AUTH_TRUST_HOST: true 已在 auth.ts NextAuth 配置中硬编码
+  // - NEXTAUTH_URL: 在 auth.ts 中自动从 NEXT_PUBLIC_BASE_URL 推导
+  // R2_BUCKET_ID: R2 公开 URL 格式是 pub-{bucket_id}.r2.dev，bucket_id 是 CF 分配的唯一 ID
+  "vars": {
+    "NEXT_PUBLIC_BASE_URL": "https://nextpost.semonxue.workers.dev",
+    "STORAGE_ENGINE": "r2",
+    "R2_BUCKET_NAME": "nextpost-media",
+    "R2_BUCKET_ID": "3b7abbd268e8422481072ca021e32531"
+  },
+}

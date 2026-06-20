@@ -37,11 +37,11 @@ export default function DashboardPage() {
         fetch("/api/posts?limit=5"),
       ]);
       if (statsRes.ok) {
-        const statsData = await statsRes.json();
+        const statsData = await statsRes.json() as Stats;
         setStats(statsData);
       }
       if (postsRes.ok) {
-        const postsData = await postsRes.json();
+        const postsData = await postsRes.json() as { posts?: RecentPost[] };
         setRecentPosts(postsData.posts || []);
       }
     } catch (error) {

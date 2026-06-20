@@ -36,9 +36,9 @@ function NewPostContent() {
     timezone: "Asia/Shanghai",
   });
   const [saving, setSaving] = useState(false);
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
-  const [mediaThumbnails, setMediaThumbnails] = useState<string[]>([]);
+  const [uploadedThumbnails, setUploadedThumbnails] = useState<string[]>([]);
+  const [pendingMediaFiles, setPendingMediaFiles] = useState<File[]>([]);
   
   // 根据来源决定返回路径
   const fromCalendar = searchParams.get("from") === "calendar";
@@ -89,11 +89,11 @@ function NewPostContent() {
     try {
       const res = await fetch("/api/accounts");
       if (res.ok) {
-        const data = await res.json();
-        setAccounts(data);
-        if (data.length > 0) {
-          setFormData((prev) => ({ ...prev, accountId: data[0].id }));
-          fetchPlatformConfig(data[0].id);
+        const data = await res.json() as { accounts: Account[] };
+        setAccounts(data.accounts || []);
+        if (data.accounts.length > 0) {
+          setFormData((prev) => ({ ...prev, accountId: data.accounts[0].id }));
+          fetchPlatformConfig(data.accounts[0].id);
         }
       }
     } catch (error) {
@@ -105,7 +105,7 @@ function NewPostContent() {
     try {
       const res = await fetch(`/api/accounts/${accountId}/config`);
       if (res.ok) {
-        const config = await res.json();
+        const config = await res.json() as PlatformConfig;
         setPlatformConfig(config);
       } else {
         // 使用默认配置
@@ -127,9 +127,13 @@ function NewPostContent() {
     fetchPlatformConfig(accountId);
   };
   // 媒体变更处理
-  const handleMediaChange = useCallback((urls: string[], files: File[]) => {
-    setExistingMediaUrls(urls);
-    setMediaFiles(files);
+  // - uploadedUrls: 已上传的 R2 URL（后台自动上传完成的）
+  // - uploadedThumbnails: 已上传项对应的缩略图 URL
+  // - pendingFiles: 还没上传的新文件
+  const handleMediaChange = useCallback((uploadedUrls: string[], uploadedThumbnails: string[], pendingFiles: File[]) => {
+    setExistingMediaUrls(uploadedUrls);
+    setUploadedThumbnails(uploadedThumbnails);
+    setPendingMediaFiles(pendingFiles);
   }, []);
   const handleSubmit = async (asDraft: boolean) => {
     if (!formData.accountId) {
@@ -153,9 +157,9 @@ function NewPostContent() {
     try {
       // 如果有新文件，先上传
       let mediaUrls: string[] = [...existingMediaUrls];
-      let mediaThumbnailsResult: string[] = [...mediaThumbnails];
+      let mediaThumbnailsResult: string[] = [...uploadedThumbnails];
       
-      for (const file of mediaFiles) {
+      for (const file of pendingMediaFiles) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", file);
         
@@ -165,14 +169,14 @@ function NewPostContent() {
         });
         
         if (!uploadRes.ok) {
-          const error = await uploadRes.json();
+          const error = await uploadRes.json() as { error?: string };
           addToast({ type: "error", message: error.error || "上传失败" });
           setSaving(false);
           return;
         }
         
-        const uploadData = await uploadRes.json();
-        mediaUrls.push(uploadData.url);
+        const uploadData = await uploadRes.json() as { url?: string; thumbnailUrl?: string };
+        if (uploadData.url) mediaUrls.push(uploadData.url);
         // 保存服务端生成的缩略图 URL
         if (uploadData.thumbnailUrl) {
           mediaThumbnailsResult.push(uploadData.thumbnailUrl);
@@ -194,7 +198,7 @@ function NewPostContent() {
         addToast({ type: "success", message: asDraft ? "草稿已保存" : "帖子已创建" });
         router.push(backUrl);
       } else {
-        const data = await res.json();
+        const data = await res.json() as { error?: string };
         addToast({ type: "error", message: data.error || "创建失败" });
       }
     } catch {

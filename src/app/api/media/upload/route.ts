@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
 
     // 读取文件并上传（自动生成缩略图）
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await uploadFileWithThumbnail(buffer, file.name, file.type);
+    // 客户端预生成的缩略图（canvas base64）
+    const thumbnailBase64 = formData.get("thumbnail") as string | null;
+    const result = await uploadFileWithThumbnail(buffer, file.name, file.type, thumbnailBase64 || undefined);
 
     return NextResponse.json({
       url: result.url,

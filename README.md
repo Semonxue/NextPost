@@ -38,8 +38,8 @@ cd nextpost
 pnpm install
 
 # 初始化数据库
-pnpm prisma generate
-pnpm prisma db push
+pnpm db:generate
+pnpm db:migrate:local && pnpm db:seed
 ```
 
 ### 配置环境变量
@@ -51,7 +51,7 @@ pnpm prisma db push
 AUTH_SECRET=your-secret-key
 
 # 数据库
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="file:./data/nextpost.db"
 
 # 文件存储
 UPLOAD_DIR=./uploads
@@ -71,6 +71,40 @@ pnpm dev
 访问 [http://localhost:3456](http://localhost:3456)
 
 > 想换端口？只需修改 `.env` 里的 `APP_URL`，dev.mjs 会自动解析端口并启动。
+
+### 环境变量配置说明
+
+NextPost 的环境变量分为两类，**不要混淆**：
+
+#### 本地开发（`.env`）
+
+`.env` 文件**仅用于本地 `pnpm dev`**，不参与 CI/CD 构建。
+
+```bash
+AUTH_SECRET=your-secret-key
+DATABASE_URL="file:./data/nextpost.db"
+APP_URL=http://localhost:3456
+```
+
+#### Cloudflare Workers 部署（GitHub Secrets + `wrangler.jsonc`）
+
+GitHub Actions 构建时**不使用 `.env`**，需要通过以下两个渠道配置：
+
+| 类型 | 配置位置 | 示例值 |
+|------|---------|--------|
+| **敏感数据**（密钥、Token） | GitHub Settings → Secrets and variables → Actions → **New repository secret** | `AUTH_SECRET`、`CLOUDFLARE_API_TOKEN` |
+| **非敏感数据**（URL、开关） | `wrangler.jsonc` 的 `vars` 字段（进 bundle 也无所谓） | `NEXT_PUBLIC_BASE_URL`、`STORAGE_ENGINE` |
+
+必须设置的 GitHub Secrets：
+
+| Secret Name | 说明 |
+|------------|------|
+| `AUTH_SECRET` | NextAuth 会话密钥：`openssl rand -base64 32` 生成 |
+| `NEXT_PUBLIC_BASE_URL` | 部署后的公网地址，如 `https://nextpost.semonxue.workers.dev` |
+| `CLOUDFLARE_API_TOKEN` | CF API Token（Dashboard → My Profile → API Tokens → Create Token → Edit Cloudflare Workers） |
+| `CLOUDFLARE_ACCOUNT_ID` | CF Account ID（Dashboard Overview 右侧可见） |
+
+详细部署步骤见 [docs/CLOUDFLARE_DEPLOY.md](./docs/CLOUDFLARE_DEPLOY.md)。
 
 ## 🤖 AI 助手集成
 
@@ -134,7 +168,7 @@ nextpost/
 ├── mcp/           # 外部 MCP 工具实现
 ├── stores/        # Zustand 状态管理
 ├── scripts/       # 启动脚本（dev.mjs：env 解析 + 启动 next dev）
-├── prisma/        # 数据库配置
+├── src/lib/db/    # 数据库（schema + drizzle client）
 ├── tests/         # 测试（vitest + playwright）
 └── docs/          # 文档
 ```
@@ -158,7 +192,7 @@ pnpm mcp:external  # 启动独立外部 MCP Server
 
 | 层级 | 命令 | 数量 | 说明 |
 |---|---|---|---|
-| 单元 | `pnpm test` | 671 tests | vitest 覆盖 stores / middleware / components / page / API |
+| 单元 | `pnpm test` | 754 tests | vitest 覆盖 stores / middleware / components / page / API |
 | 覆盖率 | `pnpm test:coverage` | — | 40 个被覆盖源文件全部 ≥ 80% |
 | E2E | `pnpm test:e2e` | 96 passed, 0 skipped | Playwright 真实浏览器 |
 
@@ -179,4 +213,4 @@ MIT License
 
 ---
 
-*Last updated: 2026-06-04 (v0.4.8)*
+*Last updated: 2026-06-18 (v0.6.0)*

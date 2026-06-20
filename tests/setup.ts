@@ -1,3 +1,4 @@
+// @ts-nocheck
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
@@ -15,53 +16,6 @@ vi.mock('@/lib/auth', () => ({
   handlers: {
     GET: vi.fn(),
     POST: vi.fn(),
-  },
-}))
-
-// Mock Prisma
-vi.mock('@/lib/prisma', () => ({
-  __esModule: true,
-  default: {
-    user: {
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-    account: {
-      findMany: vi.fn(),
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-    post: {
-      findMany: vi.fn(),
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      count: vi.fn(),
-    },
-    platform: {
-      findUnique: vi.fn(),
-      upsert: vi.fn(),
-    },
-    media: {
-      create: vi.fn(),
-      delete: vi.fn(),
-    },
-    conversation: {
-      findMany: vi.fn(),
-      create: vi.fn(),
-      delete: vi.fn(),
-    },
-    message: {
-      findMany: vi.fn(),
-      create: vi.fn(),
-    },
   },
 }))
 

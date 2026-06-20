@@ -1,22 +1,72 @@
 import { localStorage, LocalStorageEngine } from './local';
+import { R2StorageEngine } from './r2';
 import { StorageEngine, StorageEngineType, UploadResult } from './types';
 
-// 根据配置选择存储引擎
+// R2 存储引擎单例
+let r2StorageInstance: R2StorageEngine | null = null;
+
+/**
+ * 获取 R2 存储引擎实例
+ * 在 Cloudflare Pages Functions 中可用
+ */
+function getR2Engine(): R2StorageEngine | null {
+  // 延迟初始化，只在需要时获取
+  if (typeof globalThis.MEDIA !== 'undefined') {
+    if (!r2StorageInstance) {
+      const bucketName = process.env.R2_BUCKET_NAME || 'nextpost-media';
+      const bucketId = process.env.R2_BUCKET_ID;
+      r2StorageInstance = new R2StorageEngine(
+        globalThis.MEDIA as unknown as R2Bucket,
+        bucketName,
+        bucketId
+      );
+    }
+    return r2StorageInstance;
+  }
+  return null;
+}
+
+/**
+ * 获取当前配置的存储引擎
+ */
 function getStorageEngine(): StorageEngine {
   const engineType = (process.env.STORAGE_ENGINE || 'local') as StorageEngineType;
   
   switch (engineType) {
     case 'local':
       return localStorage;
+    case 'r2':
+      // 尝试获取 R2 引擎
+      const r2Engine = getR2Engine();
+      if (r2Engine) {
+        return r2Engine;
+      }
+      // 如果在非 CF 环境中，回退到本地存储
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[Storage] R2 not available in local development, falling back to local storage');
+        return localStorage;
+      }
+      throw new Error('R2 storage not configured');
     case 's3':
       // TODO: 实现 S3 存储引擎
       throw new Error('S3 storage not implemented yet');
-    case 'r2':
-      // TODO: 实现 R2 存储引擎
-      throw new Error('R2 storage not implemented yet');
     default:
       return localStorage;
   }
+}
+
+/**
+ * 检查当前存储引擎类型
+ */
+export function getStorageEngineType(): StorageEngineType {
+  return (process.env.STORAGE_ENGINE || 'local') as StorageEngineType;
+}
+
+/**
+ * 检查是否使用 R2 存储
+ */
+export function isUsingR2(): boolean {
+  return getStorageEngineType() === 'r2';
 }
 
 // 统一的上传接口
@@ -37,11 +87,17 @@ export async function uploadFile(
   };
 }
 
-// 上传文件并生成缩略图（仅本地存储支持）
+/**
+ * 上传文件并生成缩略图
+ * - 本地存储：使用 Sharp 生成缩略图
+ * - R2 存储：使用客户端预提供的 base64 缩略图
+ * @param thumbnailBase64 可选，客户端预生成的 canvas base64 缩略图
+ */
 export async function uploadFileWithThumbnail(
   file: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  thumbnailBase64?: string
 ): Promise<{
   url: string;
   thumbnailUrl: string;
@@ -51,10 +107,22 @@ export async function uploadFileWithThumbnail(
   size: number;
   thumbnailSize: number;
 }> {
-  if (localStorage instanceof LocalStorageEngine) {
+  const engineType = getStorageEngineType();
+
+  // 本地存储：Sharp 服务端生成缩略图，thumbnailBase64 忽略
+  if (engineType === 'local' && localStorage instanceof LocalStorageEngine) {
     return localStorage.uploadWithThumbnail(file, filename, mimeType);
   }
-  // 其他存储引擎回退到普通上传
+
+  // R2：使用客户端预提供的 base64 缩略图上传到 R2
+  if (engineType === 'r2') {
+    const r2Engine = getR2Engine();
+    if (r2Engine) {
+      return r2Engine.uploadWithThumbnail(file, filename, mimeType, thumbnailBase64);
+    }
+  }
+
+  // fallback
   const url = await uploadFile(file, filename, mimeType);
   return {
     url: url.url,
@@ -81,4 +149,11 @@ export function getFileUrl(path: string): string {
 
 // 导出存储引擎实例和类型
 export { localStorage } from './local';
+export { R2StorageEngine } from './r2';
 export type { StorageEngine, StorageEngineType, UploadResult } from './types';
+
+// Cloudflare 运行时类型声明
+declare global {
+  // eslint-disable-next-line no-var
+  var MEDIA: R2Bucket | undefined;
+}

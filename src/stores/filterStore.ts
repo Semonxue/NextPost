@@ -43,6 +43,12 @@ function setCookie(name: string, value: string, days: number = 30) {
   document.cookie = `${name}=${encodeURIComponent(value)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
 }
 
+// 删除 cookie（将过期时间设为过去时间，浏览器自动清除）
+function deleteCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Lax`;
+}
+
 // 解析 cookie 中的数组
 function parseArrayCookie(value: string | null): string[] {
   if (!value) return [];
@@ -132,9 +138,10 @@ export const useFilterStore = create<FilterState>((set, get) => ({
   },
 
   clearAll: () => {
-    setCookie(COOKIE_FILTER_ACCOUNTS, "[]");
-    setCookie(COOKIE_FILTER_PLATFORMS, "[]");
-    setCookie(COOKIE_FILTER_STATUS, "all");
+    // 真正删除 cookie，而非写入 "[]"（旧值会残留导致下次打开仍有筛选）
+    deleteCookie(COOKIE_FILTER_ACCOUNTS);
+    deleteCookie(COOKIE_FILTER_PLATFORMS);
+    deleteCookie(COOKIE_FILTER_STATUS);
     set({
       selectedAccounts: [],
       selectedPlatforms: [],

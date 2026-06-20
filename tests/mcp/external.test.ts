@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../e2e/_db';
 
 // Mock Prisma
 const prisma = new PrismaClient();

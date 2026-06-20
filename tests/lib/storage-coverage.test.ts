@@ -8,7 +8,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'fs';
 import path from 'path';
-import os from 'os';
+
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 
 // Mock uuid for predictable filenames
 vi.mock('uuid', () => ({
@@ -29,16 +30,16 @@ import { LocalStorageEngine } from '@/lib/storage/local';
 import { uploadFile, deleteFile, getFileUrl, uploadFileWithThumbnail } from '@/lib/storage';
 
 describe('thumbnail.ts coverage', () => {
-  let tempDir: string;
+  let testDir: string;
 
   beforeEach(async () => {
-    tempDir = path.join(os.tmpdir(), 'nextpost-thumb-test-' + Date.now());
-    await fs.mkdir(tempDir, { recursive: true });
+    testDir = `thumb-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await fs.mkdir(path.join(UPLOADS_DIR, testDir), { recursive: true });
   });
 
   afterEach(async () => {
     try {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(path.join(UPLOADS_DIR, testDir), { recursive: true, force: true });
     } catch {
       // ignore
     }
@@ -46,7 +47,7 @@ describe('thumbnail.ts coverage', () => {
 
   describe('needsThumbnail', () => {
     it('should return true for file > 30KB', async () => {
-      const bigFile = path.join(tempDir, 'big.jpg');
+      const bigFile = path.join(UPLOADS_DIR, testDir, 'big.jpg');
       // Create a 50KB file
       const buffer = Buffer.alloc(50 * 1024, 0xff);
       await fs.writeFile(bigFile, buffer);
@@ -56,7 +57,7 @@ describe('thumbnail.ts coverage', () => {
     });
 
     it('should return false for file <= 30KB', async () => {
-      const smallFile = path.join(tempDir, 'small.jpg');
+      const smallFile = path.join(UPLOADS_DIR, testDir, 'small.jpg');
       const buffer = Buffer.alloc(10 * 1024, 0xff);
       await fs.writeFile(smallFile, buffer);
 
@@ -70,7 +71,7 @@ describe('thumbnail.ts coverage', () => {
     });
 
     it('should return true for file exactly > 30KB', async () => {
-      const exactFile = path.join(tempDir, 'exact.jpg');
+      const exactFile = path.join(UPLOADS_DIR, testDir, 'exact.jpg');
       const buffer = Buffer.alloc(30 * 1024 + 1, 0xff);
       await fs.writeFile(exactFile, buffer);
 
@@ -79,7 +80,7 @@ describe('thumbnail.ts coverage', () => {
     });
 
     it('should return false for file exactly 30KB', async () => {
-      const exactFile = path.join(tempDir, 'exact30.jpg');
+      const exactFile = path.join(UPLOADS_DIR, testDir, 'exact30.jpg');
       const buffer = Buffer.alloc(30 * 1024, 0xff);
       await fs.writeFile(exactFile, buffer);
 
@@ -132,7 +133,7 @@ describe('storage/index.ts coverage', () => {
 
     it('should throw error for "r2" engine', async () => {
       process.env.STORAGE_ENGINE = 'r2';
-      await expect(uploadFile(Buffer.from('test'), 'test.jpg', 'image/jpeg')).rejects.toThrow('R2 storage not implemented yet');
+      await expect(uploadFile(Buffer.from('test'), 'test.jpg', 'image/jpeg')).rejects.toThrow('R2 storage not configured');
     });
 
     it('should fallback to localStorage for unknown engine', async () => {
@@ -209,17 +210,18 @@ describe('storage/index.ts coverage', () => {
 
 describe('LocalStorageEngine uploadWithThumbnail', () => {
   let engine: LocalStorageEngine;
-  let tempDir: string;
+  // unique subdirectory for test isolation
+  let testDir: string;
 
   beforeEach(async () => {
-    tempDir = path.join(os.tmpdir(), 'nextpost-upload-thumb-' + Date.now());
-    await fs.mkdir(tempDir, { recursive: true });
-    engine = new LocalStorageEngine(tempDir);
+    testDir = `test-thumb-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await fs.mkdir(path.join(UPLOADS_DIR, testDir), { recursive: true });
+    engine = new LocalStorageEngine();
   });
 
   afterEach(async () => {
     try {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await fs.rm(path.join(UPLOADS_DIR, testDir), { recursive: true, force: true });
     } catch {
       // ignore
     }
@@ -235,9 +237,9 @@ describe('LocalStorageEngine uploadWithThumbnail', () => {
     expect(result.mimeType).toBe('image/jpeg');
     expect(result.size).toBe(buffer.length);
 
-    // Verify original file exists
+    // Verify original file exists in uploads dir
     const relPath = result.url.replace('/api/uploads/', '');
-    await expect(fs.access(path.join(tempDir, relPath))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(UPLOADS_DIR, relPath))).resolves.toBeUndefined();
   });
 
   it('should upload video without thumbnail', async () => {

@@ -57,7 +57,7 @@ export default function TrashPage() {
       params.set("accountsOffset", ((currentPage - 1) * pageSize).toString());
       const res = await fetch(`/api/trash?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { posts?: TrashPost[]; accounts?: TrashAccount[]; totalPosts?: number; totalAccounts?: number };
         setPosts(data.posts || []);
         setAccounts(data.accounts || []);
         setTotalPosts(data.totalPosts || 0);
@@ -93,8 +93,8 @@ export default function TrashPage() {
         addToast({ type: "success", message: "已恢复" });
         fetchTrash();
       } else {
-        const data = await res.json();
-        addToast({ type: "error", message: data.error || "恢复失败" });
+        const data = await res.json() as { posts?: TrashPost[]; accounts?: TrashAccount[]; totalPosts?: number; totalAccounts?: number };
+        addToast({ type: "error", message: (data as { error?: string }).error || "恢复失败" });
       }
     } catch {
       addToast({ type: "error", message: "网络错误" });
@@ -116,8 +116,8 @@ export default function TrashPage() {
         addToast({ type: "success", message: "已永久删除" });
         fetchTrash();
       } else {
-        const data = await res.json();
-        addToast({ type: "error", message: data.error || "删除失败" });
+        const data = await res.json() as { posts?: TrashPost[]; accounts?: TrashAccount[]; totalPosts?: number; totalAccounts?: number };
+        addToast({ type: "error", message: (data as { error?: string }).error || "删除失败" });
       }
     } catch {
       addToast({ type: "error", message: "网络错误" });
@@ -135,14 +135,14 @@ export default function TrashPage() {
     try {
       const res = await fetch("/api/trash", { method: "DELETE" });
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { posts?: TrashPost[]; accounts?: TrashAccount[]; totalPosts?: number; totalAccounts?: number; deletedPosts?: number; deletedAccounts?: number };
         addToast({ 
           type: "success", 
           message: `已清空回收站，删除了 ${data.deletedPosts} 条帖子和 ${data.deletedAccounts} 个账号` 
         });
         fetchTrash();
       } else {
-        const data = await res.json();
+        const data = await res.json() as { posts?: TrashPost[]; accounts?: TrashAccount[]; totalPosts?: number; totalAccounts?: number; error?: string };
         addToast({ type: "error", message: data.error || "清空失败" });
       }
     } catch {

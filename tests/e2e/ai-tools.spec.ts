@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from './_db';
 
 const prisma = new PrismaClient();
 const genUser = () => `aitools_${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
@@ -167,5 +167,5 @@ test.describe('AI tools 页面', () => {
 });
 
 test.afterAll(async () => {
-  await prisma.$disconnect();
+  // 不调用 $disconnect()：client 是模块级共享的，close 后其他 test 文件的 beforeAll 会报 CLIENT_CLOSED
 });

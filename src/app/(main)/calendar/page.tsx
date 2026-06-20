@@ -39,6 +39,7 @@ export default function CalendarPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showAccountFilter, setShowAccountFilter] = useState(false);
@@ -88,7 +89,8 @@ export default function CalendarPage() {
       }
       
       const queryString = params.toString();
-      const postsUrl = queryString ? `/api/posts?${queryString}` : "/api/posts";
+      const CALENDAR_LIMIT = 200;
+      const postsUrl = queryString ? `/api/posts?${queryString}&limit=${CALENDAR_LIMIT}` : `/api/posts?limit=${CALENDAR_LIMIT}`;
       
       const [postsRes, accountsRes] = await Promise.all([
         fetch(postsUrl),
@@ -96,20 +98,21 @@ export default function CalendarPage() {
       ]);
       
       if (postsRes.ok) {
-        const postsData = await postsRes.json();
+        const postsData = await postsRes.json() as { posts?: Post[]; total?: number };
         setPosts(postsData.posts || []);
+        setTotalCount(postsData.total ?? 0);
       }
       
       if (accountsRes.ok) {
-        const accountsData = await accountsRes.json();
-        setAccounts(Array.isArray(accountsData) ? accountsData : accountsData.accounts || []);
+        const accountsData = await accountsRes.json() as Account[] | { accounts?: Account[] };
+        setAccounts(Array.isArray(accountsData) ? accountsData : (accountsData as { accounts?: Account[] }).accounts || []);
         
         // 提取所有平台（从 /api/platforms 拿全量，不依赖账号）
         // 注意：accountsData 可能是数组或 {accounts: []} 包装，accountsData.accounts?.forEach 永远空
         try {
           const platformsRes = await fetch('/api/platforms')
           if (platformsRes.ok) {
-            const platformsData = await platformsRes.json()
+            const platformsData = await platformsRes.json() as { platforms?: Platform[] }
             setPlatforms(platformsData.platforms || [])
           }
         } catch {
@@ -144,12 +147,14 @@ export default function CalendarPage() {
       }
       
       const queryString = params.toString();
-      const url = queryString ? `/api/posts?${queryString}` : "/api/posts";
+      const CALENDAR_LIMIT = 200;
+      const url = queryString ? `/api/posts?${queryString}&limit=${CALENDAR_LIMIT}` : `/api/posts?limit=${CALENDAR_LIMIT}`;
       
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { posts?: Post[]; total?: number };
         setPosts(data.posts || []);
+        setTotalCount(data.total ?? 0);
       }
     } catch (error) {
       console.error("获取帖子失败:", error);
@@ -299,7 +304,14 @@ export default function CalendarPage() {
             </Button>
           </Link>
         </div>
-        
+
+        {/* 数量超限提示 */}
+        {totalCount > 200 && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            仅显示最近 200 条（共 {totalCount} 条），请使用筛选缩小范围
+          </p>
+        )}
+
         {/* 筛选按钮区域 - 右侧 */}
         <div className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
           {/* 账号筛选 */}

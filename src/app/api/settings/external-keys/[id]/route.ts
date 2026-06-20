@@ -12,9 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { eq, and } from 'drizzle-orm';
 import { auth } from '@/lib/auth';
 import { deleteApiKey } from '@/mcp/external/auth';
-import prisma from '@/lib/prisma';
+import { getDb, externalApiKey } from '@/lib/db';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -62,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   let body: { name?: unknown; scope?: unknown };
   try {
-    body = await request.json();
+    body = (await request.json()) as { name?: unknown; scope?: unknown };
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
@@ -92,36 +93,30 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const data: { name: string } = { name: body.name.trim() };
 
   try {
+    const db = await getDb();
     // 验证归属：只能改自己的 key
-    const existing = await prisma.externalApiKey.findFirst({
-      where: { id, userId: session.user.id },
-    });
+    const existing = await db.select().from(externalApiKey)
+      .where(and(eq(externalApiKey.id, id), eq(externalApiKey.userId, session.user.id)))
+      .get();
     if (!existing) {
       return NextResponse.json({ error: 'Key not found' }, { status: 404 });
     }
 
-    const updated = await prisma.externalApiKey.update({
-      where: { id },
-      data,
-      select: {
-        id: true,
-        name: true,
-        permissions: true,
-        lastUsedAt: true,
-        expiresAt: true,
-        createdAt: true,
-      },
-    });
+    await db.update(externalApiKey).set(data).where(eq(externalApiKey.id, id)).execute();
+
+    const updated = await db.select().from(externalApiKey)
+      .where(eq(externalApiKey.id, id))
+      .get();
 
     return NextResponse.json({
       success: true,
       key: {
-        id: updated.id,
-        name: updated.name,
-        permissions: updated.permissions,
-        lastUsedAt: updated.lastUsedAt?.toISOString() ?? null,
-        expiresAt: updated.expiresAt?.toISOString() ?? null,
-        createdAt: updated.createdAt.toISOString(),
+        id: updated!.id,
+        name: updated!.name,
+        permissions: updated!.permissions,
+        lastUsedAt: updated!.lastUsedAt || null,
+        expiresAt: updated!.expiresAt || null,
+        createdAt: updated!.createdAt,
       },
     });
   } catch (error) {

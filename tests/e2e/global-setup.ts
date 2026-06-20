@@ -7,63 +7,92 @@
  *
  * 幂等：每次 e2e 跑都会跑；如果 testuser 已存在则跳过创建。
  */
-import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { eq, and } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import * as schema from "../../src/lib/db/schema";
 
 export default async function globalSetup() {
-  const prisma = new PrismaClient()
+  const dbPath = (process.env.DATABASE_URL ?? "file:./data/nextpost.db").replace("file:", "");
+  const client = createClient({ url: `file:${dbPath}` });
+  const db = drizzle(client, { schema });
+
   try {
     // 确保 Twitter 平台存在（register API 会做，但 globalSetup 早于 webServer）
-    await prisma.platform.upsert({
-      where: { name: 'Twitter' },
-      update: {},
-      create: { name: 'Twitter', icon: '/icons/twitter.svg' },
-    })
+    const existingTwitter = await db
+      .select()
+      .from(schema.platform)
+      .where(eq(schema.platform.name, "Twitter"))
+      .limit(1);
+
+    if (existingTwitter.length === 0) {
+      await db.insert(schema.platform).values({
+        name: "Twitter",
+        icon: "/icons/twitter.svg",
+      });
+    }
 
     // 确保 testuser 账号存在
-    const existing = await prisma.user.findUnique({
-      where: { username: 'testuser' },
-    })
-    let testuserId: string
-    if (!existing) {
-      const hashed = await bcrypt.hash('password123', 10)
-      const user = await prisma.user.create({
-        data: {
-          username: 'testuser',
+    const existingUsers = await db
+      .select()
+      .from(schema.user)
+      .where(eq(schema.user.username, "testuser"))
+      .limit(1);
+
+    let testuserId: string;
+    if (existingUsers.length === 0) {
+      const hashed = await bcrypt.hash("password123", 10);
+      const inserted = await db
+        .insert(schema.user)
+        .values({
+          username: "testuser",
           password: hashed,
-          email: 'testuser@example.com',
-        },
-      })
-      testuserId = user.id
-      console.log('[e2e globalSetup] Created testuser account')
+          email: "testuser@example.com",
+        })
+        .returning({ id: schema.user.id });
+      testuserId = inserted[0].id;
+      console.log("[e2e globalSetup] Created testuser account");
     } else {
-      testuserId = existing.id
-      console.log('[e2e globalSetup] testuser already exists, skip')
+      testuserId = existingUsers[0].id;
+      console.log("[e2e globalSetup] testuser already exists, skip");
     }
 
     // 给 testuser 创建一个 Twitter 账号（用于 posts-platform-config.spec.ts 里的下拉框断言）
-    const twitter = await prisma.platform.findUnique({ where: { name: 'Twitter' } })
+    const twitterRows = await db
+      .select()
+      .from(schema.platform)
+      .where(eq(schema.platform.name, "Twitter"))
+      .limit(1);
+    const twitter = twitterRows[0];
+
     if (twitter) {
-      const existingAccount = await prisma.account.findFirst({
-        where: { userId: testuserId, platformId: twitter.id },
-      })
-      if (!existingAccount) {
-        await prisma.account.create({
-          data: {
-            userId: testuserId,
-            platformId: twitter.id,
-            name: 'Test Twitter Account',
-            handle: '@testuser',
-            description: 'E2E 测试账号',
-          },
-        })
-        console.log('[e2e globalSetup] Created testuser Twitter account')
+      const existingAccounts = await db
+        .select()
+        .from(schema.account)
+        .where(
+          and(
+            eq(schema.account.userId, testuserId),
+            eq(schema.account.platformId, twitter.id),
+          ),
+        )
+        .limit(1);
+
+      if (existingAccounts.length === 0) {
+        await db.insert(schema.account).values({
+          userId: testuserId,
+          platformId: twitter.id,
+          name: "Test Twitter Account",
+          handle: "@testuser",
+          description: "E2E 测试账号",
+        });
+        console.log("[e2e globalSetup] Created testuser Twitter account");
       }
     }
   } catch (err) {
-    console.error('[e2e globalSetup] Failed:', err)
-    throw err
+    console.error("[e2e globalSetup] Failed:", err);
+    throw err;
   } finally {
-    await prisma.$disconnect()
+    client.close();
   }
 }
