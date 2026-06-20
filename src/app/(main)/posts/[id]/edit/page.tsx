@@ -60,11 +60,11 @@ export default function EditPostPage() {
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
   const [uploadedThumbnails, setUploadedThumbnails] = useState<string[]>([]);
   const [pendingMediaFiles, setPendingMediaFiles] = useState<File[]>([]);
-  // 默认平台配置
+  // 默认平台配置（key 使用小写，对齐 new page 写法）
   const defaultConfig: PlatformConfig = {
     platformId: "",
-    platformName: "Twitter",
-    ...DEFAULT_PLATFORM_CONFIG.Twitter,
+    platformName: "twitter",
+    ...DEFAULT_PLATFORM_CONFIG.twitter,
   };
   // 将 UTC Date 对象转换为指定时区的 datetime-local 格式字符串
   const formatDateTimeLocal = (date: Date | null | undefined, timezone: string): string => {
@@ -157,13 +157,13 @@ export default function EditPostPage() {
         const config = await res.json() as PlatformConfig;
         setPlatformConfig(config);
       } else {
-        // 使用默认配置
+        // 使用默认配置（key 使用小写，对齐 DEFAULT_PLATFORM_CONFIG）
         const account = accounts.find((a) => a.id === accountId);
-        const platformName = account?.platform?.name || "Twitter";
+        const platformName = account?.platform?.name?.toLowerCase() || "twitter";
         setPlatformConfig({
           platformId: account?.platform?.id || "",
           platformName,
-          ...DEFAULT_PLATFORM_CONFIG[platformName as keyof typeof DEFAULT_PLATFORM_CONFIG] || DEFAULT_PLATFORM_CONFIG.Twitter,
+          ...DEFAULT_PLATFORM_CONFIG[platformName as keyof typeof DEFAULT_PLATFORM_CONFIG] || DEFAULT_PLATFORM_CONFIG.twitter,
         });
       }
     } catch (error) {
