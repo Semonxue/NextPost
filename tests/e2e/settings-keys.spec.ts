@@ -10,9 +10,10 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from './_db';
-
-const prisma = new PrismaClient();
+import {
+  findUser, deleteExternalApiKeys, deleteUser,
+  createExternalApiKey, createManyExternalApiKeys, findFirstExternalApiKey,
+} from './_db';
 const genUser = () => `settings_keys_${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 test.describe('Settings 页面 — 外部 API Key + scope', () => {
@@ -32,14 +33,14 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     await page.getByRole('button', { name: '登录' }).click();
     await expect(page).toHaveURL('/', { timeout: 15000 });
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    const user = await findUser({ username });
     userId = user!.id;
   });
 
   test.afterEach(async () => {
     if (userId) {
-      await prisma.externalApiKey.deleteMany({ where: { userId } });
-      await prisma.user.delete({ where: { id: userId } });
+      await deleteExternalApiKeys({ userId });
+      await deleteUser({ id: userId });
     }
   });
 
@@ -76,9 +77,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     await expect(page.getByText(/唯一一次显示完整 Key/)).toBeVisible({ timeout: 5000 });
 
     // 验证 DB 真实写入
-    const dbKey = await prisma.externalApiKey.findFirst({
-      where: { userId, name: 'Claude Desktop Test' },
-    });
+    const dbKey = await findFirstExternalApiKey({ userId, name: 'Claude Desktop Test' });
     expect(dbKey).toBeDefined();
     expect(dbKey?.permissions).toBe('read_write');
   });
@@ -92,7 +91,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
 
     // 等 DB 落库（轮询避免和 toast 竞争）
     await expect.poll(async () => {
-      const k = await prisma.externalApiKey.findFirst({ where: { userId, name: 'Read Only' } });
+      const k = await findFirstExternalApiKey({ userId, name: 'Read Only' });
       return k?.permissions;
     }, { timeout: 5000 }).toBe('read');
   });
@@ -102,9 +101,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await prisma.externalApiKey.create({
-      data: { userId, name: 'Display Test', key: keyValue, permissions: 'read_write' },
-    });
+    await createExternalApiKey({ userId, name: 'Display Test', key: keyValue, permissions: 'read_write' });
 
     await gotoApiKeysTab(page);
     // 列表里能看到 key 名称
@@ -120,9 +117,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await prisma.externalApiKey.create({
-      data: { userId, name: 'Read Only Test', key: keyValue, permissions: 'read' },
-    });
+    await createExternalApiKey({ userId, name: 'Read Only Test', key: keyValue, permissions: 'read' });
 
     await gotoApiKeysTab(page);
     const row = page.getByTestId('external-key-row').first();
@@ -136,12 +131,10 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     const keyA = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
     crypto.getRandomValues(randomBytes);
     const keyB = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await prisma.externalApiKey.createMany({
-      data: [
-        { userId, name: 'Only Read', key: keyA, permissions: 'read' },
-        { userId, name: 'Full Access', key: keyB, permissions: 'read_write' },
-      ],
-    });
+    await createManyExternalApiKeys([
+      { userId, name: 'Only Read', key: keyA, permissions: 'read' },
+      { userId, name: 'Full Access', key: keyB, permissions: 'read_write' },
+    ]);
 
     await gotoApiKeysTab(page);
 
@@ -171,13 +164,11 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
       crypto.getRandomValues(bytes);
       return 'npk_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
     };
-    await prisma.externalApiKey.createMany({
-      data: [
-        { userId, name: 'R1', key: mkKey(), permissions: 'read' },
-        { userId, name: 'RW1', key: mkKey(), permissions: 'read_write' },
-        { userId, name: 'RW2', key: mkKey(), permissions: 'read_write' },
-      ],
-    });
+    await createManyExternalApiKeys([
+      { userId, name: 'R1', key: mkKey(), permissions: 'read' },
+      { userId, name: 'RW1', key: mkKey(), permissions: 'read_write' },
+      { userId, name: 'RW2', key: mkKey(), permissions: 'read_write' },
+    ]);
 
     await gotoApiKeysTab(page);
     await expect(page.getByTestId('filter-all')).toContainText('3');
@@ -190,9 +181,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await prisma.externalApiKey.create({
-      data: { userId, name: 'Immutable', key: keyValue, permissions: 'read' },
-    });
+    await createExternalApiKey({ userId, name: 'Immutable', key: keyValue, permissions: 'read' });
 
     await gotoApiKeysTab(page);
 
@@ -212,9 +201,7 @@ test.describe('Settings 页面 — 外部 API Key + scope', () => {
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     const keyValue = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    await prisma.externalApiKey.create({
-      data: { userId, name: 'Persist Me', key: keyValue, permissions: 'read_write' },
-    });
+    await createExternalApiKey({ userId, name: 'Persist Me', key: keyValue, permissions: 'read_write' });
 
     await gotoApiKeysTab(page);
     await expect(page.getByTestId('external-keys-list').getByText('Persist Me')).toBeVisible();

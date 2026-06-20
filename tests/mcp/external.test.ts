@@ -4,13 +4,9 @@
  * 测试 API Key 认证和工具函数
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { PrismaClient } from '../e2e/_db';
+import { describe, it, expect } from 'vitest';
 
-// Mock Prisma
-const prisma = new PrismaClient();
-
-// 测试数据
+// 测试数据（纯 mock，不依赖真实 DB）
 const testUser = {
   id: 'test-user-id',
   username: 'testuser',

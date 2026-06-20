@@ -6,9 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from './_db';
-
-const prisma = new PrismaClient();
+import {
+  createUser, upsertPlatform, createAccount, createPost, createExternalApiKey,
+  findPost, findPosts, deletePost, deletePosts, deleteAccount, deleteAccounts,
+  deleteExternalApiKey, deleteUser, deletePlatform, deletePlatforms,
+} from './_db';
 
 test.describe('外部 MCP Server E2E', () => {
   let testUser: { id: string; username: string };
@@ -19,38 +21,28 @@ test.describe('外部 MCP Server E2E', () => {
 
   test.beforeAll(async () => {
     // 创建测试数据
-    testUser = await prisma.user.create({
-      data: {
-        username: `mcp_test_${Date.now()}`,
-        password: '$2a$10$test',
-      }
+    testUser = await createUser({
+      username: `mcp_test_${Date.now()}`,
+      password: '$2a$10$test',
     });
 
-    // 用 upsert 而非 create，避免 dev.db 残留带 timestamp 的 Platform 行
-    testPlatform = await prisma.platform.upsert({
-      where: { name: 'Twitter' },
-      update: {},
-      create: { name: 'Twitter', icon: '/icons/twitter.svg' }
+    // 用 upsert 而非 create，避免残留 Platform 行冲突
+    testPlatform = await upsertPlatform({ name: 'Twitter', icon: '/icons/twitter.svg' });
+
+    testAccount = await createAccount({
+      userId: testUser.id,
+      platformId: testPlatform.id,
+      name: '测试账号',
+      handle: '@test',
     });
 
-    testAccount = await prisma.account.create({
-      data: {
-        userId: testUser.id,
-        platformId: testPlatform.id,
-        name: '测试账号',
-        handle: '@test'
-      }
-    });
-
-    testPost = await prisma.post.create({
-      data: {
-        userId: testUser.id,
-        accountId: testAccount.id,
-        content: '测试帖子内容',
-        status: 'scheduled',
-        scheduledTime: new Date('2026-06-01T15:00:00+08:00'),
-        publishToken: `tok_${Date.now()}_test`
-      }
+    testPost = await createPost({
+      userId: testUser.id,
+      accountId: testAccount.id,
+      content: '测试帖子内容',
+      status: 'scheduled',
+      scheduledTime: new Date('2026-06-01T15:00:00+08:00'),
+      publishToken: `tok_${Date.now()}_test`,
     });
 
     // 创建 API Key
@@ -61,13 +53,11 @@ test.describe('外部 MCP Server E2E', () => {
       .join('');
     apiKey = `npk_${keyValue}`;
 
-    await prisma.externalApiKey.create({
-      data: {
-        userId: testUser.id,
-        name: 'Test Key',
-        key: apiKey,
-        permissions: 'read_report'
-      }
+    await createExternalApiKey({
+      userId: testUser.id,
+      name: 'Test Key',
+      key: apiKey,
+      permissions: 'read_report',
     });
   });
 
@@ -75,11 +65,11 @@ test.describe('外部 MCP Server E2E', () => {
     // 清理测试数据
     if (!testUser?.id) return; // beforeAll 失败时 testUser 未定义，直接返回
     try {
-      await prisma.post.deleteMany({ where: { userId: testUser.id } });
-      await prisma.account.deleteMany({ where: { userId: testUser.id } });
-      await prisma.externalApiKey.deleteMany({ where: { userId: testUser.id } });
-      await prisma.user.delete({ where: { id: testUser.id } });
-      await prisma.platform.delete({ where: { id: testPlatform.id } });
+      await deletePosts({ userId: testUser.id });
+      await deleteAccounts({ userId: testUser.id });
+      await deleteExternalApiKeys({ userId: testUser.id });
+      await deleteUser({ id: testUser.id });
+      await deletePlatform({ id: testPlatform.id });
     } catch (e) {
       // 忽略清理错误
     }
@@ -143,19 +133,14 @@ test.describe('外部 MCP Server E2E', () => {
 
   test.describe('发布结果回传', () => {
     test('测试数据准备正确', async () => {
-      const post = await prisma.post.findUnique({
-        where: { id: testPost.id }
-      });
+      const post = await findPost({ id: testPost.id });
       expect(post).toBeDefined();
       expect(post?.status).toBe('scheduled');
       expect(post?.publishToken).toBeDefined();
     });
 
     test('publishToken 字段存在', async () => {
-      const post = await prisma.post.findUnique({
-        where: { id: testPost.id },
-        select: { publishToken: true }
-      });
+      const post = await findPost({ id: testPost.id });
       expect(post?.publishToken).toBeDefined();
     });
   });
@@ -163,25 +148,12 @@ test.describe('外部 MCP Server E2E', () => {
   test.describe('数据库模型', () => {
     test('ExternalApiKey 模型字段正确', async () => {
       // 验证 ExternalApiKey 表结构
-      const keys = await prisma.externalApiKey.findMany({
-        where: { userId: testUser.id }
-      });
-      
+      const keys = await findExternalApiKeys({ userId: testUser.id });
       expect(Array.isArray(keys)).toBe(true);
     });
 
     test('Post 模型包含发布相关字段', async () => {
-      const post = await prisma.post.findUnique({
-        where: { id: testPost.id },
-        select: {
-          publishToken: true,
-          publishedAt: true,
-          externalPostId: true,
-          publishError: true,
-          publishAttempts: true
-        }
-      });
-      
+      const post = await findPost({ id: testPost.id });
       // 这些字段应该在 Post 模型中
       expect(post).toHaveProperty('publishToken');
       expect(post).toHaveProperty('publishAttempts');

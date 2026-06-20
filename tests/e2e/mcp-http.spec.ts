@@ -12,9 +12,11 @@
  */
 
 import { test, expect, request as pwRequest } from '@playwright/test';
-import { PrismaClient } from './_db';
-
-const prisma = new PrismaClient();
+import {
+  createUser, upsertPlatform, createAccount, createPost, createManyExternalApiKeys,
+  findPost, updatePost, deletePost, deletePosts, deleteAccount, deleteAccounts,
+  deleteExternalApiKeys, deleteUser, deletePlatforms,
+} from './_db';
 // 单一 source of truth：与 src/lib/config.ts 的 getAppUrl() 保持一致
 const BASE = process.env.APP_URL || 'http://localhost:3456';
 
@@ -70,56 +72,46 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
 
   test.beforeAll(async () => {
     const ts = Date.now();
-    testUser = await prisma.user.create({
-      data: { username: `mcp_http_${ts}`, password: '$2a$10$test' },
+    testUser = await createUser({
+      username: `mcp_http_${ts}`,
+      password: '$2a$10$test',
     });
-    // 用 upsert 而非 create，避免 dev.db 残留带 timestamp 的 Platform 行
-    testPlatform = await prisma.platform.upsert({
-      where: { name: 'Twitter' },
-      update: {},
-      create: { name: 'Twitter', icon: '/icons/twitter.svg' }
+    // 用 upsert 而非 create，避免残留 Platform 行冲突
+    testPlatform = await upsertPlatform({ name: 'Twitter', icon: '/icons/twitter.svg' });
+    testAccount = await createAccount({
+      userId: testUser.id,
+      platformId: testPlatform.id,
+      name: 'HTTP Test Account',
+      handle: '@http_test',
     });
-    testAccount = await prisma.account.create({
-      data: {
-        userId: testUser.id,
-        platformId: testPlatform.id,
-        name: 'HTTP Test Account',
-        handle: '@http_test',
-      },
-    });
-    testPost = await prisma.post.create({
-      data: {
-        userId: testUser.id,
-        accountId: testAccount.id,
-        content: 'HTTP test post',
-        status: 'scheduled',
-        scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
-        publishToken: `tok_${Date.now()}_http`,
-      },
+    testPost = await createPost({
+      userId: testUser.id,
+      accountId: testAccount.id,
+      content: 'HTTP test post',
+      status: 'scheduled',
+      scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+      publishToken: `tok_${Date.now()}_http`,
     });
 
     readKey = makeKey();
     writeKey = makeKey();
     rwKey = makeKey();
-    await prisma.externalApiKey.createMany({
-      data: [
-        { userId: testUser.id, name: 'read', key: readKey, permissions: 'read' },
-        { userId: testUser.id, name: 'write', key: writeKey, permissions: 'write' },
-        { userId: testUser.id, name: 'read_write', key: rwKey, permissions: 'read_write' },
-      ],
-    });
+    await createManyExternalApiKeys([
+      { userId: testUser.id, name: 'read', key: readKey, permissions: 'read' },
+      { userId: testUser.id, name: 'write', key: writeKey, permissions: 'write' },
+      { userId: testUser.id, name: 'read_write', key: rwKey, permissions: 'read_write' },
+    ]);
   });
 
   test.afterAll(async () => {
     if (!testUser?.id) return; // beforeAll 失败时 testUser 未定义，直接返回
     // 清理顺序：先删依赖多的，最后删 user
-    await prisma.post.deleteMany({ where: { userId: testUser.id } });
-    await prisma.account.deleteMany({ where: { userId: testUser.id } });
-    await prisma.externalApiKey.deleteMany({ where: { userId: testUser.id } });
-    await prisma.user.delete({ where: { id: testUser.id } });
+    await deletePosts({ userId: testUser.id });
+    await deleteAccounts({ userId: testUser.id });
+    await deleteExternalApiKeys({ userId: testUser.id });
+    await deleteUser({ id: testUser.id });
     // Platform 在最后（先确保没残留引用）
-    await prisma.platform.deleteMany({ where: { id: testPlatform.id } }).catch(() => undefined);
-    // 不调用 $disconnect()：client 是模块级共享的，close 后其他 test 文件的 beforeAll 会报 CLIENT_CLOSED
+    await deletePlatforms({ id: testPlatform.id }).catch(() => undefined);
   });
 
   // ============================================================
@@ -181,19 +173,16 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
 
     test('TC-MCP-HTTP-007: get_pending_posts 返回完整 URL', async () => {
       // 改 testPost 的 mediaUrls 为相对路径
-      await prisma.post.update({
-        where: { id: testPost.id },
-        data: { mediaUrls: JSON.stringify(['/api/uploads/test.jpg']) },
-      });
+      await updatePost(
+        { id: testPost.id },
+        { mediaUrls: JSON.stringify(['/api/uploads/test.jpg']) }
+      );
       const data = await callTool(readKey, 'get_pending_posts', { limit: 50, windowMinutes: 43200 });
       const post = data.posts?.find((p: { id: string }) => p.id === testPost.id);
       expect(post).toBeDefined();
       expect(post.mediaUrls[0]).toMatch(/^https?:\/\//);
       // 还原
-      await prisma.post.update({
-        where: { id: testPost.id },
-        data: { mediaUrls: '[]' },
-      });
+      await updatePost({ id: testPost.id }, { mediaUrls: '[]' });
     });
 
     test('TC-MCP-HTTP-008: get_post_detail 返回 publishToken', async () => {
@@ -204,35 +193,32 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
 
     test('TC-MCP-HTTP-009: 数据隔离 - 用户 A 看不到用户 B 的帖子', async () => {
       // 创建另一个用户和帖子
-      const otherUser = await prisma.user.create({
-        data: { username: `other_${Date.now()}`, password: '$2a$10$test' },
+      const otherUser = await createUser({
+        username: `other_${Date.now()}`,
+        password: '$2a$10$test',
       });
-      const otherAccount = await prisma.account.create({
-        data: {
-          userId: otherUser.id,
-          platformId: testPlatform.id,
-          name: 'Other Account',
-          handle: '@other',
-        },
+      const otherAccount = await createAccount({
+        userId: otherUser.id,
+        platformId: testPlatform.id,
+        name: 'Other Account',
+        handle: '@other',
       });
-      const otherPost = await prisma.post.create({
-        data: {
-          userId: otherUser.id,
-          accountId: otherAccount.id,
-          content: 'Other user post',
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() + 5 * 24 * 60 * 60_000),
-          publishToken: `tok_other_${Date.now()}`,
-        },
+      const otherPost = await createPost({
+        userId: otherUser.id,
+        accountId: otherAccount.id,
+        content: 'Other user post',
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() + 5 * 24 * 60 * 60_000),
+        publishToken: `tok_other_${Date.now()}`,
       });
 
       const data = await callTool(readKey, 'get_post_detail', { postId: otherPost.id });
       expect(data.error).toBe('Post not found');
 
       // 清理
-      await prisma.post.delete({ where: { id: otherPost.id } });
-      await prisma.account.delete({ where: { id: otherAccount.id } });
-      await prisma.user.delete({ where: { id: otherUser.id } });
+      await deletePost({ id: otherPost.id });
+      await deleteAccount({ id: otherAccount.id });
+      await deleteUser({ id: otherUser.id });
     });
   });
 
@@ -263,28 +249,27 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(data.post.publishToken).toMatch(/^tok_/);
 
       // 验证 DB 真实记录
-      const dbPost = await prisma.post.findUnique({ where: { id: data.post.id } });
+      const dbPost = await findPost({ id: data.post.id });
       expect(dbPost).toBeDefined();
       expect(dbPost?.content).toBe('Created by E2E test');
       expect(dbPost?.status).toBe('scheduled');
       expect(dbPost?.userId).toBe(testUser.id);
 
       // 清理
-      await prisma.post.delete({ where: { id: data.post.id } });
+      await deletePost({ id: data.post.id });
     });
 
     test('TC-MCP-HTTP-013: create_post 拒绝他人账号', async () => {
       // 创建另一个用户的账号
-      const otherUser = await prisma.user.create({
-        data: { username: `other_acc_${Date.now()}`, password: '$2a$10$test' },
+      const otherUser = await createUser({
+        username: `other_acc_${Date.now()}`,
+        password: '$2a$10$test',
       });
-      const otherAccount = await prisma.account.create({
-        data: {
-          userId: otherUser.id,
-          platformId: testPlatform.id,
-          name: 'Other',
-          handle: '@other',
-        },
+      const otherAccount = await createAccount({
+        userId: otherUser.id,
+        platformId: testPlatform.id,
+        name: 'Other',
+        handle: '@other',
       });
 
       const data = await callTool(rwKey, 'create_post', {
@@ -294,8 +279,8 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       });
       expect(data.errorCode).toBe('ACCOUNT_NOT_FOUND');
 
-      await prisma.account.delete({ where: { id: otherAccount.id } });
-      await prisma.user.delete({ where: { id: otherUser.id } });
+      await deleteAccount({ id: otherAccount.id });
+      await deleteUser({ id: otherUser.id });
     });
 
     test('TC-MCP-HTTP-014: create_post 拒绝过去时间', async () => {
@@ -320,22 +305,19 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       } as never);
       expect(data1.success).toBe(true);
 
-      const dbPost = await prisma.post.findUnique({ where: { id: testPost.id } });
+      const dbPost = await findPost({ id: testPost.id });
       expect(dbPost?.content).toBe('HACKED'); // 白名单内,被改
       expect(dbPost?.mediaUrls).toBe('["/evil.jpg"]'); // 白名单内,被改
       expect(dbPost?.status).toBe('scheduled'); // 名单外,未被改
       expect(dbPost?.accountId).toBe(testAccount.id); // 名单外,未被改
-      // SQLite/Prisma 返回的是字符串，normalize to Date 再比较
+      // SQLite 返回的是字符串，normalize to Date 再比较
       const scheduledTime = dbPost?.scheduledTime
         ? new Date(dbPost.scheduledTime as unknown as string).toISOString()
         : null;
       expect(scheduledTime).toBe('2027-02-01T10:00:00.000Z'); // 白名单内,被改
 
       // 2. 状态锁：published 状态拒绝
-      await prisma.post.update({
-        where: { id: testPost.id },
-        data: { status: 'published' },
-      });
+      await updatePost({ id: testPost.id }, { status: 'published' });
       const data2 = await callTool(rwKey, 'update_post', {
         postId: testPost.id,
         scheduledTime: '2027-03-01T10:00:00Z',
@@ -343,12 +325,11 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(data2.errorCode).toBe('INVALID_STATUS');
 
       // 还原
-      await prisma.post.update({
-        where: { id: testPost.id },
-        data: {
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
-        },
+      await updatePost({
+        id: testPost.id,
+      }, {
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
       });
     });
   });
@@ -363,50 +344,44 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
 
     test.beforeAll(async () => {
       // 创建 ±30min 的帖子（应被默认 60min 窗口命中）
-      const near = await prisma.post.create({
-        data: {
-          userId: testUser.id,
-          accountId: testAccount.id,
-          content: 'near window post',
-          mediaUrls: '[]',
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() + 30 * 60_000),
-          publishToken: `tok_near_${Date.now()}`,
-        },
+      const near = await createPost({
+        userId: testUser.id,
+        accountId: testAccount.id,
+        content: 'near window post',
+        mediaUrls: '[]',
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() + 30 * 60_000),
+        publishToken: `tok_near_${Date.now()}`,
       });
       nearPostId = near.id;
 
       // 创建 +90min 的帖子（应被默认 60min 窗口过滤掉）
-      const far = await prisma.post.create({
-        data: {
-          userId: testUser.id,
-          accountId: testAccount.id,
-          content: 'far future post',
-          mediaUrls: '[]',
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() + 90 * 60_000),
-          publishToken: `tok_far_${Date.now()}`,
-        },
+      const far = await createPost({
+        userId: testUser.id,
+        accountId: testAccount.id,
+        content: 'far future post',
+        mediaUrls: '[]',
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() + 90 * 60_000),
+        publishToken: `tok_far_${Date.now()}`,
       });
       farPostId = far.id;
 
       // 创建 -30min 的帖子（在过去，应被过滤）
-      const past = await prisma.post.create({
-        data: {
-          userId: testUser.id,
-          accountId: testAccount.id,
-          content: 'past post',
-          mediaUrls: '[]',
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() - 300 * 60_000),
-          publishToken: `tok_past_${Date.now()}`,
-        },
+      const past = await createPost({
+        userId: testUser.id,
+        accountId: testAccount.id,
+        content: 'past post',
+        mediaUrls: '[]',
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() - 300 * 60_000),
+        publishToken: `tok_past_${Date.now()}`,
       });
       pastPostId = past.id;
     });
 
     test.afterAll(async () => {
-      await prisma.post.deleteMany({ where: { id: { in: [nearPostId, farPostId, pastPostId] } } });
+      await deletePosts({ id: { in: [nearPostId, farPostId, pastPostId] } });
     });
 
     test('TC-MCP-HTTP-016: 默认 60min 窗口：仅返回 ±30min 内帖子', async () => {
@@ -449,38 +424,34 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
 
     test.beforeAll(async () => {
       // 准备一个 scheduled 帖子用于 success 场景
-      const successPost = await prisma.post.create({
-        data: {
-          userId: testUser.id,
-          accountId: testAccount.id,
-          content: 'v0.5.3 success test post',
-          mediaUrls: '[]',
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
-          publishToken: `tok_v53_success_${Date.now()}`,
-        },
+      const successPost = await createPost({
+        userId: testUser.id,
+        accountId: testAccount.id,
+        content: 'v0.5.3 success test post',
+        mediaUrls: '[]',
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+        publishToken: `tok_v53_success_${Date.now()}`,
       });
       v53PostSuccessId = successPost.id;
       v53PostSuccessToken = successPost.publishToken!;
 
       // 准备一个 scheduled 帖子用于 partial 场景
-      const partialPost = await prisma.post.create({
-        data: {
-          userId: testUser.id,
-          accountId: testAccount.id,
-          content: 'v0.5.3 partial test post',
-          mediaUrls: '[]',
-          status: 'scheduled',
-          scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
-          publishToken: `tok_v53_partial_${Date.now()}`,
-        },
+      const partialPost = await createPost({
+        userId: testUser.id,
+        accountId: testAccount.id,
+        content: 'v0.5.3 partial test post',
+        mediaUrls: '[]',
+        status: 'scheduled',
+        scheduledTime: new Date(Date.now() + 3 * 24 * 60 * 60_000),
+        publishToken: `tok_v53_partial_${Date.now()}`,
       });
       v53PostPartialId = partialPost.id;
       v53PostPartialToken = partialPost.publishToken!;
     });
 
     test.afterAll(async () => {
-      await prisma.post.deleteMany({ where: { id: { in: [v53PostSuccessId, v53PostPartialId] } } });
+      await deletePosts({ id: { in: [v53PostSuccessId, v53PostPartialId] } });
     });
 
     test('TC-MCP-HTTP-020 (v0.5.3): 死机重试场景 — success 时传 1 小时前 publishedAt，断言服务端用 Date.now() 写入', async () => {
@@ -500,9 +471,9 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(data.postStatus).toBe('published');
 
       // 关键断言：从 DB 读 publishedAt，应该是服务端时间，不是 1 小时前
-      const updated = await prisma.post.findUnique({ where: { id: v53PostSuccessId } });
+      const updated = await findPost({ id: v53PostSuccessId });
       expect(updated).not.toBeNull();
-      // SQLite/Prisma 返回的是字符串，normalize to Date 再比较
+      // SQLite 返回的是字符串，normalize to Date 再比较
       const publishedAtMs = new Date(updated!.publishedAt as unknown as string).getTime();
       const oneHourAgoMs = new Date(oneHourAgo).getTime();
 
@@ -531,8 +502,8 @@ test.describe('外部 MCP HTTP 端点 v0.3 E2E', () => {
       expect(data.received).toBe(true);
       expect(data.postStatus).toBe('published');
 
-      const updated = await prisma.post.findUnique({ where: { id: v53PostPartialId } });
-      // SQLite/Prisma 返回的是字符串，normalize to Date 再比较
+      const updated = await findPost({ id: v53PostPartialId });
+      // SQLite 返回的是字符串，normalize to Date 再比较
       const publishedAtMs = new Date(updated!.publishedAt as unknown as string).getTime();
       const twoHoursAgoMs = new Date(twoHoursAgo).getTime();
 

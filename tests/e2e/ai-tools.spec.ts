@@ -10,9 +10,10 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from './_db';
-
-const prisma = new PrismaClient();
+import {
+  findUser, deleteExternalApiKey, deleteExternalApiKeys,
+  createExternalApiKey, deletePosts, deleteAccounts, deleteUser,
+} from './_db';
 const genUser = () => `aitools_${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 test.describe('AI tools 页面', () => {
@@ -37,30 +38,28 @@ test.describe('AI tools 页面', () => {
     await expect(page).toHaveURL('/', { timeout: 15000 });
 
     // 拿 userId
-    const user = await prisma.user.findUnique({ where: { username } });
+    const user = await findUser({ username });
     userId = user!.id;
 
     // 直接造一个 API Key（绕过 UI 创建流程以节省时间）
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
     apiKeyFull = 'npk_' + Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    const created = await prisma.externalApiKey.create({
-      data: {
-        userId,
-        name: 'Test Key',
-        key: apiKeyFull,
-        permissions: 'read_write',
-      },
+    const created = await createExternalApiKey({
+      userId,
+      name: 'Test Key',
+      key: apiKeyFull,
+      permissions: 'read_write',
     });
     apiKeyId = created.id;
   });
 
   test.afterEach(async () => {
     if (userId) {
-      await prisma.externalApiKey.deleteMany({ where: { userId } });
-      await prisma.post.deleteMany({ where: { userId } });
-      await prisma.account.deleteMany({ where: { userId } });
-      await prisma.user.delete({ where: { id: userId } });
+      await deleteExternalApiKeys({ userId });
+      await deletePosts({ userId });
+      await deleteAccounts({ userId });
+      await deleteUser({ id: userId });
     }
   });
 
@@ -127,7 +126,7 @@ test.describe('AI tools 页面', () => {
 
   test('TC-AITOOLS-006: 没有 API Key 时 summary 计数为 0', async ({ page }) => {
     // 删除刚才创建的 key
-    await prisma.externalApiKey.delete({ where: { id: apiKeyId } });
+    await deleteExternalApiKey({ id: apiKeyId });
     // 标记为已删除，避免 afterEach 重复删
     apiKeyId = '';
 

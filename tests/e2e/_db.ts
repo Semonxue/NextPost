@@ -1,22 +1,27 @@
 /**
- * E2E 测试用的 PrismaClient shim
+ * E2E 测试用的 Drizzle test helpers
  *
- * 背景：
- * - v0.6.0 起，业务代码用 Drizzle ORM
- * - 但 e2e 测试里直接操作 DB 的代码用了 `new PrismaClient()` + Prisma API
- * - 为避免逐个改 ~1400 行测试代码，写这个 shim：
- *   - 实现 PrismaClient 表面 API（user.create / findUnique / deleteMany 等）
- *   - 底层用 Drizzle + libsql
- *   - 共享 `data/nextpost.db`
+ * v0.6.2 起：Prisma → Drizzle ORM，e2e 测试直接用 Drizzle API。
+ * 提供带 SQLITE_BUSY 重试的便捷 helper，集中处理：
+ * - UUID / createdAt / updatedAt 自动注入
+ * - SQLite 并发锁重试
+ * - Prisma → Drizzle 语义差异兼容（.returning().get() → 单行）
  *
- * 注意：仅覆盖 e2e 测试**实际用到**的 API 集合（见 grep 结果）。
- * 完整 Prisma 兼容不是目标。
+ * 使用方式（对比）：
+ *   // 旧 Prisma 写法
+ *   const user = await prisma.user.create({ data: { username: 'x', password: 'y' } });
+ *   const post = await prisma.post.findUnique({ where: { id } });
+ *   await prisma.post.update({ where: { id }, data: { status: 'published' } });
+ *
+ *   // 新 Drizzle 写法（导入相同，API 更原生）
+ *   const user = await db.createUser({ username: 'x', password: 'y' });
+ *   const post = await db.findPost({ id });
+ *   await db.updatePost({ id }, { status: 'published' });
  */
 
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { eq, and, inArray, type SQL } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import * as schema from "@/lib/db/schema";
 
 const client = createClient({
@@ -24,37 +29,15 @@ const client = createClient({
     ? (process.env.DATABASE_URL ?? "file:./data/nextpost.db")
     : `file:${process.env.DATABASE_URL ?? "./data/nextpost.db"}`,
 });
-const db = drizzle(client, { schema });
 
-type AnyTable = any;
+export const db = drizzle(client, { schema });
 
-/** 解析 where 子句为 SQL 条件 */
-function buildWhere(table: AnyTable, where?: Record<string, any>): SQL | undefined {
-  if (!where) return undefined;
-  const conds: SQL[] = [];
-  for (const [col, val] of Object.entries(where)) {
-    if (val === undefined) continue;
-    if (val !== null && typeof val === "object" && "in" in val) {
-      conds.push(inArray(table[col], val.in));
-    } else {
-      conds.push(eq(table[col], val));
-    }
-  }
-  return conds.length > 0 ? and(...conds) : undefined;
-}
+/* ------------------------------------------------------------------ */
+/*  Internal utilities (exported for reuse)                           */
+/* ------------------------------------------------------------------ */
 
-/** 过滤 select 字段 */
-function project<T extends Record<string, any>>(row: T, select?: Record<string, 1 | true>): Partial<T> {
-  if (!select) return row;
-  const out: Partial<T> = {};
-  for (const k of Object.keys(select)) {
-    if (k in row) (out as any)[k] = row[k];
-  }
-  return out;
-}
-
-/** 带退避重试的 SQLite 执行（处理 SQLITE_BUSY 锁竞争） */
-async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
+/** 带指数退避的 SQLite 执行（处理 SQLITE_BUSY 锁竞争） */
+export async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
@@ -70,137 +53,267 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5): Promise<T> {
   throw new Error("unreachable");
 }
 
-class TableShim {
-  constructor(private table: AnyTable) {}
-
-  async create({ data }: { data: Record<string, any> }): Promise<any> {
-    const id = data.id ?? randomUUID();
-    const now = new Date().toISOString();
-    const insertData: Record<string, any> = { id, ...data };
-    // 自动填充 createdAt / updatedAt 如果 schema 定义了
-    if ("createdAt" in this.table && !insertData.createdAt) insertData.createdAt = now;
-    if ("updatedAt" in this.table && !insertData.updatedAt) insertData.updatedAt = now;
-    await withRetry(() => db.insert(this.table).values(insertData).execute());
-    return insertData;
-  }
-
-  async createMany({ data }: { data: Record<string, any>[] }): Promise<{ count: number }> {
-    for (const d of data) {
-      await this.create({ data: d });
-    }
-    return { count: data.length };
-  }
-
-  async upsert({
-    where,
-    update = {},
-    create,
-  }: {
-    where: Record<string, any>;
-    update?: Record<string, any>;
-    create: Record<string, any>;
-  }): Promise<any> {
-    const w = buildWhere(this.table, where);
-    const existing = await withRetry(() => db.select().from(this.table).where(w).get());
-    if (existing) {
-      if (Object.keys(update).length > 0) {
-        await withRetry(() => db.update(this.table).set(update).where(w).execute());
-        return { ...existing, ...update };
-      }
-      return existing;
-    }
-    return this.create({ data: create });
-  }
-
-  async findUnique({
-    where,
-    select,
-  }: {
-    where: Record<string, any>;
-    select?: Record<string, 1 | true>;
-  }): Promise<any> {
-    const w = buildWhere(this.table, where);
-    const row = await withRetry(() => db.select().from(this.table).where(w).get());
-    return row ? project(row, select) : null;
-  }
-
-  async findFirst({
-    where,
-    select,
-  }: {
-    where?: Record<string, any>;
-    select?: Record<string, 1 | true>;
-  }): Promise<any> {
-    const w = buildWhere(this.table, where);
-    const row = await withRetry(() => db.select().from(this.table).where(w).get());
-    return row ? project(row, select) : null;
-  }
-
-  async findMany({
-    where,
-    select,
-  }: {
-    where?: Record<string, any>;
-    select?: Record<string, 1 | true>;
-  }): Promise<any[]> {
-    const w = buildWhere(this.table, where);
-    const rows = await withRetry(() => db.select().from(this.table).where(w).all());
-    return select ? rows.map((r: any) => project(r, select)) : rows;
-  }
-
-  async update({
-    where,
-    data,
-  }: {
-    where: Record<string, any>;
-    data: Record<string, any>;
-  }): Promise<any> {
-    const w = buildWhere(this.table, where);
-    if ("updatedAt" in this.table) data.updatedAt = new Date().toISOString();
-    await withRetry(() => db.update(this.table).set(data).where(w).execute());
-    const updated = await withRetry(() => db.select().from(this.table).where(w).get());
-    return updated ?? { ...where, ...data };
-  }
-
-  async delete({ where }: { where: Record<string, any> }): Promise<any> {
-    const w = buildWhere(this.table, where);
-    await withRetry(() => db.delete(this.table).where(w).execute());
-    return where;
-  }
-
-  async deleteMany({ where }: { where?: Record<string, any> } = {}): Promise<{ count: number }> {
-    const w = buildWhere(this.table, where);
-    const result = await withRetry(() => db.delete(this.table).where(w).run());
-    return { count: (result as any).changes ?? 0 };
-  }
+/** 将 Prisma 风格的 { col: { in: [...] } } 转为 Drizzle inArray */
+export function buildInClause<T>(table: any, col: keyof T, val: unknown[]): SQL {
+  return inArray(table[col] as any, val);
 }
 
-export class PrismaClient {
-  user: TableShim;
-  platform: TableShim;
-  platformConfig: TableShim;
-  account: TableShim;
-  post: TableShim;
-  media: TableShim;
-  conversation: TableShim;
-  message: TableShim;
-  externalApiKey: TableShim;
-  aiOperationLog: TableShim;
+/** 将 Prisma 风格的 { col: val } 转为 Drizzle eq */
+export function buildEq<T>(table: any, where: Record<string, unknown>): SQL | undefined {
+  const conds = Object.entries(where).map(([col, val]) => eq((table as any)[col], val));
+  return conds.length > 0 ? and(...conds) : undefined;
+}
 
-  constructor() {
-    this.user = new TableShim(schema.user);
-    this.platform = new TableShim(schema.platform);
-    this.platformConfig = new TableShim(schema.platformConfig);
-    this.account = new TableShim(schema.account);
-    this.post = new TableShim(schema.post);
-    this.media = new TableShim(schema.media);
-    this.conversation = new TableShim(schema.conversation);
-    this.message = new TableShim(schema.message);
-    this.externalApiKey = new TableShim(schema.externalApiKey);
-    this.aiOperationLog = new TableShim(schema.aiOperationLog);
-  }
+/* ------------------------------------------------------------------ */
+/*  Table-level helpers                                               */
+/* ------------------------------------------------------------------ */
 
-  async $disconnect(): Promise<void> {
-    client.close();
+/* ---- User ---- */
+export async function createUser(data: {
+  username: string;
+  password: string;
+  email?: string;
+  id?: string;
+}): Promise<typeof schema.user.$inferSelect> {
+  const id = data.id ?? crypto.randomUUID();
+  const now = new Date().toISOString();
+  await withRetry(() =>
+    db.insert(schema.user).values({ id, ...data, createdAt: now, updatedAt: now }).execute()
+  );
+  return { id, username: data.username, password: data.password, email: data.email ?? null,
+    aiProvider: "openai", aiApiKey: null, aiModel: "gpt-4",
+    createdAt: now, updatedAt: now } as any;
+}
+
+export async function findUser(where: { id?: string; username?: string }):
+  Promise<typeof schema.user.$inferSelect | null> {
+  const w: SQL[] = [];
+  if (where.id) w.push(eq(schema.user.id, where.id));
+  if (where.username) w.push(eq(schema.user.username, where.username));
+  return withRetry(() => db.select().from(schema.user).where(and(...w)).get()) ?? null;
+}
+
+export async function deleteUser(where: { id: string }): Promise<void> {
+  await withRetry(() => db.delete(schema.user).where(eq(schema.user.id, where.id)).run());
+}
+
+/* ---- Platform ---- */
+export async function upsertPlatform(data: {
+  name: string;
+  icon?: string;
+}): Promise<typeof schema.platform.$inferSelect> {
+  const existing = await withRetry(() =>
+    db.select().from(schema.platform).where(eq(schema.platform.name, data.name)).get()
+  );
+  if (existing) return existing;
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await withRetry(() =>
+    db.insert(schema.platform).values({ id, name: data.name, icon: data.icon ?? null, createdAt: now }).execute()
+  );
+  return { id, name: data.name, icon: data.icon ?? null, createdAt: now } as any;
+}
+
+/* ---- Account ---- */
+export async function createAccount(data: {
+  userId: string;
+  platformId: string;
+  name: string;
+  handle: string;
+  description?: string;
+}): Promise<typeof schema.account.$inferSelect> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await withRetry(() =>
+    db.insert(schema.account).values({ id, ...data, description: data.description ?? null,
+      deletedAt: null, deletedBy: null, deleteNote: null, createdAt: now, updatedAt: now }).execute()
+  );
+  return { id, userId: data.userId, platformId: data.platformId, name: data.name,
+    handle: data.handle, description: data.description ?? null,
+    deletedAt: null, deletedBy: null, deleteNote: null, createdAt: now, updatedAt: now } as any;
+}
+
+export async function deleteAccount(where: { id: string }): Promise<void> {
+  await withRetry(() => db.delete(schema.account).where(eq(schema.account.id, where.id)).run());
+}
+
+export async function deleteAccounts(where: { userId: string }): Promise<number> {
+  const result = await withRetry(() =>
+    db.delete(schema.account).where(eq(schema.account.userId, where.userId)).run()
+  );
+  return (result as any).changes ?? 0;
+}
+
+/* ---- Post ---- */
+export async function createPost(data: {
+  userId: string;
+  accountId: string;
+  content: string;
+  title?: string;
+  mediaUrls?: string;
+  mediaThumbnails?: string;
+  scheduledTime?: Date | string;
+  timezone?: string;
+  status?: string;
+  publishToken?: string;
+  publishTokenExp?: string;
+  id?: string;
+}): Promise<typeof schema.post.$inferSelect> {
+  const id = data.id ?? crypto.randomUUID();
+  const now = new Date().toISOString();
+  const scheduled = data.scheduledTime
+    ? (data.scheduledTime instanceof Date ? data.scheduledTime.toISOString() : data.scheduledTime)
+    : null;
+  await withRetry(() =>
+    db.insert(schema.post).values({
+      id, userId: data.userId, accountId: data.accountId, content: data.content,
+      title: data.title ?? null, mediaUrls: data.mediaUrls ?? "[]",
+      mediaThumbnails: data.mediaThumbnails ?? "[]",
+      scheduledTime: scheduled, timezone: data.timezone ?? "Asia/Shanghai",
+      status: data.status ?? "draft",
+      publishToken: data.publishToken ?? null, publishTokenExp: data.publishTokenExp ?? null,
+      publishedAt: null, externalPostId: null, externalPostUrl: null,
+      publishError: null, publishAttempts: 0,
+      deletedAt: null, deletedBy: null, deleteNote: null,
+      createdAt: now, updatedAt: now,
+    }).execute()
+  );
+  return { id, userId: data.userId, accountId: data.accountId, content: data.content,
+    title: data.title ?? null, mediaUrls: data.mediaUrls ?? "[]", mediaThumbnails: data.mediaThumbnails ?? "[]",
+    scheduledTime: scheduled, timezone: data.timezone ?? "Asia/Shanghai", status: data.status ?? "draft",
+    publishToken: data.publishToken ?? null, publishTokenExp: data.publishTokenExp ?? null,
+    publishedAt: null, externalPostId: null, externalPostUrl: null, publishError: null, publishAttempts: 0,
+    deletedAt: null, deletedBy: null, deleteNote: null, createdAt: now, updatedAt: now } as any;
+}
+
+export async function findPost(where: { id: string }):
+  Promise<typeof schema.post.$inferSelect | null> {
+  return withRetry(() =>
+    db.select().from(schema.post).where(eq(schema.post.id, where.id)).get()
+  ) ?? null;
+}
+
+export async function findPosts(where: { userId: string }):
+  Promise<typeof schema.post.$inferSelect[]> {
+  return withRetry(() =>
+    db.select().from(schema.post).where(eq(schema.post.userId, where.userId)).all()
+  );
+}
+
+export async function updatePost(
+  where: { id: string },
+  data: Partial<typeof schema.post.$inferInsert>
+): Promise<typeof schema.post.$inferSelect> {
+  const setData: Record<string, unknown> = { ...data };
+  if ("scheduledTime" in setData && setData.scheduledTime instanceof Date) {
+    setData.scheduledTime = setData.scheduledTime.toISOString();
   }
+  if (!("updatedAt" in setData)) setData.updatedAt = new Date().toISOString();
+  await withRetry(() =>
+    db.update(schema.post).set(setData as any).where(eq(schema.post.id, where.id)).execute()
+  );
+  return (await withRetry(() =>
+    db.select().from(schema.post).where(eq(schema.post.id, where.id)).get())
+  ) as any;
+}
+
+export async function deletePost(where: { id: string }): Promise<void> {
+  await withRetry(() => db.delete(schema.post).where(eq(schema.post.id, where.id)).run());
+}
+
+export async function deletePosts(where: { userId?: string; id?: { in: string[] } }): Promise<number> {
+  const conditions: SQL[] = [];
+  if (where.userId) conditions.push(eq(schema.post.userId, where.userId));
+  if (where.id) conditions.push(buildInClause(schema.post, "id", where.id.in));
+  const result = await withRetry(() =>
+    db.delete(schema.post).where(and(...conditions)).run()
+  );
+  return (result as any).changes ?? 0;
+}
+
+/* ---- ExternalApiKey ---- */
+export async function createExternalApiKey(data: {
+  userId: string;
+  name: string;
+  key: string;
+  permissions: string;
+}): Promise<typeof schema.externalApiKey.$inferSelect> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await withRetry(() =>
+    db.insert(schema.externalApiKey).values({
+      id, userId: data.userId, name: data.name, key: data.key,
+      permissions: data.permissions, lastUsedAt: null, expiresAt: null, createdAt: now,
+    }).execute()
+  );
+  return { id, userId: data.userId, name: data.name, key: data.key,
+    permissions: data.permissions, lastUsedAt: null, expiresAt: null, createdAt: now } as any;
+}
+
+export async function createManyExternalApiKeys(data: Array<{
+  userId: string;
+  name: string;
+  key: string;
+  permissions: string;
+}>): Promise<number> {
+  const now = new Date().toISOString();
+  for (const item of data) {
+    const id = crypto.randomUUID();
+    await withRetry(() =>
+      db.insert(schema.externalApiKey).values({
+        id, userId: item.userId, name: item.name, key: item.key,
+        permissions: item.permissions, lastUsedAt: null, expiresAt: null, createdAt: now,
+      }).execute()
+    );
+  }
+  return data.length;
+}
+
+export async function findFirstExternalApiKey(where: {
+  userId?: string;
+  name?: string;
+  key?: string;
+}): Promise<typeof schema.externalApiKey.$inferSelect | null> {
+  const conditions: SQL[] = [];
+  if (where.userId) conditions.push(eq(schema.externalApiKey.userId, where.userId));
+  if (where.name) conditions.push(eq(schema.externalApiKey.name, where.name));
+  if (where.key) conditions.push(eq(schema.externalApiKey.key, where.key));
+  return withRetry(() =>
+    db.select().from(schema.externalApiKey).where(and(...conditions)).get()
+  ) ?? null;
+}
+
+export async function findExternalApiKeys(where: { userId: string }):
+  Promise<typeof schema.externalApiKey.$inferSelect[]> {
+  return withRetry(() =>
+    db.select().from(schema.externalApiKey)
+      .where(eq(schema.externalApiKey.userId, where.userId)).all()
+  );
+}
+
+export async function deleteExternalApiKey(where: { id: string }): Promise<void> {
+  await withRetry(() =>
+    db.delete(schema.externalApiKey).where(eq(schema.externalApiKey.id, where.id)).run()
+  );
+}
+
+export async function deleteExternalApiKeys(where: { userId: string }): Promise<number> {
+  const result = await withRetry(() =>
+    db.delete(schema.externalApiKey).where(eq(schema.externalApiKey.userId, where.userId)).run()
+  );
+  return (result as any).changes ?? 0;
+}
+
+/* ---- Platform ---- */
+export async function deletePlatform(where: { id: string }): Promise<void> {
+  await withRetry(() =>
+    db.delete(schema.platform).where(eq(schema.platform.id, where.id)).run()
+  );
+}
+
+export async function deletePlatforms(where: { id: string }): Promise<number> {
+  const result = await withRetry(() =>
+    db.delete(schema.platform).where(eq(schema.platform.id, where.id)).run()
+  );
+  return (result as any).changes ?? 0;
 }
