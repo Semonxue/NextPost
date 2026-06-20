@@ -8,7 +8,8 @@
 import { test, expect } from '@playwright/test';
 import {
   createUser, upsertPlatform, createAccount, createPost, createExternalApiKey,
-  findPost, findPosts, deletePost, deletePosts, deleteAccount, deleteAccounts,
+  findPost, findPosts, findExternalApiKeys,
+  deletePost, deletePosts, deleteAccount, deleteAccounts,
   deleteExternalApiKey, deleteUser, deletePlatform, deletePlatforms,
 } from './_db';
 
