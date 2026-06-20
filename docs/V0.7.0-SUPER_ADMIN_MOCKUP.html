@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NextPost 超级管理 — 视觉预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --line: #e9e9ec;
+    --line-soft: #f0f0f3;
+    --text: #14171e;
+    --text-2: #3a4256;
+    --muted: #8a8f9a;
+    --primary: #10b981;          /* 主管线 — 绿色 */
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --info: #6366f1;
+    --admin-accent: #b45309;     /* 管理菜单专属 — 琥珀 */
+    --shadow-1: 0 2px 8px rgba(0,0,0,0.04);
+    --shadow-2: 0 4px 16px -2px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Outfit', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ============== Layout ============== */
+  .app { display: grid; grid-template-columns: 256px 1fr; min-height: 100dvh; }
+  .sidebar {
+    background: var(--surface); border-right: 1px solid var(--line);
+    padding: 20px 14px; display: flex; flex-direction: column;
+  }
+  .brand { padding: 8px 10px 22px; }
+  .brand h1 { margin: 0; font-size: 22px; font-weight: 700; color: #2563eb; letter-spacing: -0.02em; }
+  .brand .ver { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .nav-section { margin-bottom: 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 8px;
+    color: var(--text-2); font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: background .15s;
+  }
+  .nav-item:hover { background: var(--line-soft); }
+  .nav-item.active { background: #ecfdf5; color: #047857; }
+  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .nav-group {
+    margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line);
+  }
+  .nav-group-label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 12px; font-size: 11px; font-weight: 600;
+    color: var(--admin-accent); text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .nav-group-label svg { width: 13px; height: 13px; }
+  .nav-sub {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px 8px 36px; border-radius: 6px;
+    color: var(--text-2); font-size: 13.5px; font-weight: 500;
+    cursor: pointer;
+  }
+  .nav-sub svg { width: 16px; height: 16px; }
+  .nav-sub:hover { background: var(--line-soft); }
+  .nav-sub.active { background: #fef3c7; color: var(--admin-accent); }
+  .user-block {
+    margin-top: auto; padding: 12px;
+    border-top: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #fbbf24, #d97706);
+    display: grid; place-items: center;
+    color: white; font-weight: 600; font-size: 14px;
+  }
+  .user-meta { flex: 1; min-width: 0; }
+  .user-name { font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-role { font-size: 11px; color: var(--admin-accent); font-weight: 600; }
+  .logout-btn { padding: 6px; border-radius: 6px; color: var(--muted); cursor: pointer; }
+  .logout-btn:hover { color: var(--danger); background: #fef2f2; }
+
+  /* ============== Main content ============== */
+  .main { padding: 24px 32px 64px; overflow-x: hidden; }
+  .page-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .page-head h2 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+  .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .crumb { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .crumb code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; }
+
+  /* ============== Tabs ============== */
+  .tabs {
+    display: flex; gap: 4px; padding: 4px;
+    background: var(--line-soft); border-radius: 10px; margin-bottom: 24px;
+    width: max-content;
+  }
+  .tab {
+    padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 500;
+    color: var(--muted); cursor: pointer;
+  }
+  .tab.active { background: white; color: var(--text); box-shadow: var(--shadow-1); }
+  .tab .badge { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--line); color: var(--text-2); margin-left: 4px; }
+
+  /* ============== Cards ============== */
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px 20px;
+    box-shadow: var(--shadow-1);
+  }
+  .card .lbl { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card .num { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
+  .card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card .delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 500; padding: 2px 7px; border-radius: 999px; }
+  .delta.up { background: #d1fae5; color: #047857; }
+  .delta.down { background: #fee2e2; color: #b91c1c; }
+
+  /* ============== Section card ============== */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 20px 24px;
+    box-shadow: var(--shadow-1); margin-bottom: 20px;
+  }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .panel-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .panel-head .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* ============== Filters ============== */
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .input, .select {
+    padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 13px; background: white; color: var(--text);
+    font-family: inherit;
+  }
+  .input { min-width: 220px; }
+  .input:focus, .select:focus { outline: 2px solid #93c5fd; border-color: #3b82f6; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--line-soft); font-size: 12.5px; color: var(--text-2);
+    cursor: pointer;
+  }
+  .chip.active { background: #14171e; color: white; }
+  .chip svg { width: 12px; height: 12px; }
+
+  /* ============== Table ============== */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    text-align: left; padding: 10px 12px;
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 14px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tbody tr:hover { background: var(--line-soft); }
+  tbody tr.deleted { opacity: 0.55; }
+  .handle { font-weight: 600; color: var(--text); }
+  .owner { display: flex; align-items: center; gap: 8px; }
+  .owner .mini-avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center; color: white; font-size: 10px; font-weight: 600;
+  }
+  .platform-tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    background: #eff6ff; color: #1e40af;
+  }
+  .platform-tag.twitter { background: #e0f2fe; color: #075985; }
+  .platform-tag.xiaohongshu { background: #ffe4e6; color: #be123c; }
+  .platform-tag.instagram { background: #fce7f3; color: #be185d; }
+
+  /* ============== Status badges (post status) ============== */
+  .status-group { display: inline-flex; gap: 4px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .status-group span { padding: 2px 7px; border-radius: 5px; font-weight: 500; }
+  .st-draft { background: #f3f4f6; color: #6b7280; }
+  .st-scheduled { background: #dbeafe; color: #1e40af; }
+  .st-published { background: #d1fae5; color: #047857; }
+  .st-failed { background: #fee2e2; color: #b91c1c; }
+  .st-deleted { background: #fde68a; color: #92400e; }
+
+  /* ============== Action buttons ============== */
+  .actions { display: flex; gap: 4px; }
+  .icon-btn {
+    width: 30px; height: 30px; border-radius: 7px;
+    display: grid; place-items: center; cursor: pointer;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); transition: all .15s;
+  }
+  .icon-btn:hover { background: var(--line-soft); color: var(--text); }
+  .icon-btn.danger:hover { background: #fee2e2; color: var(--danger); }
+  .icon-btn.warn:hover { background: #fef3c7; color: var(--admin-accent); }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  /* ============== Failure rate bar ============== */
+  .rate { display: flex; align-items: center; gap: 8px; min-width: 90px; }
+  .rate-bar { width: 60px; height: 6px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+  .rate-fill { height: 100%; background: var(--danger); border-radius: 3px; }
+  .rate-val { font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ============== Mini chart ============== */
+  .chart-box { height: 180px; padding: 8px 0; position: relative; }
+  .chart-grid {
+    position: absolute; inset: 24px 0 28px 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .chart-grid div { border-top: 1px dashed var(--line); height: 0; }
+  .chart-svg { width: 100%; height: 100%; }
+  .chart-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ============== Timeline (logs) ============== */
+  .timeline { list-style: none; padding: 0; margin: 0; position: relative; }
+  .timeline::before {
+    content: ""; position: absolute; left: 14px; top: 6px; bottom: 6px;
+    width: 2px; background: var(--line); border-radius: 1px;
+  }
+  .timeline li {
+    position: relative; padding: 0 0 22px 48px;
+  }
+  .timeline li::before {
+    content: ""; position: absolute; left: 8px; top: 6px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: white; border: 2px solid var(--primary);
+  }
+  .timeline li.update::before { border-color: var(--info); }
+  .timeline li.delete::before { border-color: var(--danger); }
+  .timeline li.restore::before { border-color: var(--primary); }
+  .timeline-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .timeline-title { font-size: 14px; font-weight: 500; }
+  .timeline-meta { font-size: 12px; color: var(--muted); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .timeline-meta code { background: var(--line-soft); padding: 1px 6px; border-radius: 4px; font-size: 11.5px; }
+  .diff {
+    margin-top: 8px; background: var(--line-soft); border-radius: 8px;
+    padding: 8px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    border-left: 3px solid var(--info);
+  }
+  .diff .k { color: var(--muted); }
+  .diff .v-old { color: var(--danger); text-decoration: line-through; opacity: 0.7; }
+  .diff .v-new { color: var(--primary); }
+
+  /* ============== Modal (edit/delete) ============== */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(20, 23, 30, 0.45);
+    display: grid; place-items: center; z-index: 100; padding: 20px;
+  }
+  .modal {
+    background: white; border-radius: 16px; padding: 24px 28px;
+    width: 100%; max-width: 480px; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+  }
+  .modal h4 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+  .modal .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+  .modal .form-row { margin-bottom: 12px; }
+  .modal label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--text-2); }
+  .modal .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; font-family: inherit; }
+  .btn-ghost { background: var(--line-soft); color: var(--text-2); }
+  .btn-primary { background: var(--text); color: white; }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-warn { background: var(--admin-accent); color: white; }
+
+  /* ============== Banner / hint ============== */
+  .banner {
+    display: flex; gap: 10px; padding: 12px 16px;
+    background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 10px; font-size: 13px; color: #78350f;
+    margin-bottom: 16px;
+  }
+  .banner svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--admin-accent); }
+
+  /* ============== Responsive ============== */
+  @media (max-width: 980px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    table { font-size: 12.5px; }
+  }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .main { padding: 16px; }
+    .cards { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ Sidebar ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>NextPost</h1>
+      <div class="ver">v0.7.0 · 超级管理预览</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        仪表盘
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        日历视图
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        帖子列表
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        AI tools
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+        回收站
+      </div>
+    </div>
+
+    <!-- Admin nav group (only shown when role === 'root') -->
+    <div class="nav-group">
+      <div class="nav-group-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        超级管理
+      </div>
+      <div class="nav-sub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        总览
+      </div>
+      <div class="nav-sub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        用户
+      </div>
+      <div class="nav-sub active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>
+        账号
+      </div>
+      <div class="nav-sub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        平台
+      </div>
+      <div class="nav-sub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        帖子
+      </div>
+      <div class="nav-sub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        操作日志
+        <span class="badge" style="margin-left:auto;background:#fde68a;color:#92400e;">NEW</span>
+      </div>
+    </div>
+
+    <div class="user-block">
+      <div class="avatar">A</div>
+      <div class="user-meta">
+        <div class="user-name">admin</div>
+        <div class="user-role">🛡 ROOT</div>
+      </div>
+      <div class="logout-btn" title="退出">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ Main ============ -->
+  <main class="main">
+
+    <!-- 页面切换 tabs（演示用） -->
+    <div class="tabs">
+      <div class="tab" onclick="showPage('overview')">总览</div>
+      <div class="tab active" onclick="showPage('accounts')">账号管理 · 跨用户 <span class="badge" style="background:#fef3c7;color:#92400e;">NEW</span></div>
+      <div class="tab" onclick="showPage('logs')">操作日志 <span class="badge" style="background:#fef3c7;color:#92400e;">NEW</span></div>
+    </div>
+
+    <!-- ============ Page 1: Overview ============ -->
+    <section id="page-overview" style="display:none;">
+      <div class="page-head">
+        <div>
+          <div class="crumb">超级管理 · <code>/admin</code></div>
+          <h2>系统总览</h2>
+          <p>所有用户的全局视图 · 仅 root 可见</p>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="lbl">用户总数</div>
+          <div class="num">12</div>
+          <div class="sub"><span class="delta up">↑ 2</span> 本周新增</div>
+        </div>
+        <div class="card">
+          <div class="lbl">账号总数</div>
+          <div class="num">38</div>
+          <div class="sub"><span class="delta up">↑ 5</span> 本周新增</div>
+        </div>
+        <div class="card">
+          <div class="lbl">帖子总数</div>
+          <div class="num">1,247</div>
+          <div class="sub"><span class="delta up">↑ 184</span> 本周</div>
+        </div>
+        <div class="card">
+          <div class="lbl">本周失败</div>
+          <div class="num" style="color:var(--danger);">23</div>
+          <div class="sub">失败率 <span class="delta down">4.2%</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>最近 7 天发布量</h3>
+            <div class="desc">按 status 拆分的每日发布数</div>
+          </div>
+          <select class="select"><option>最近 7 天</option><option>最近 30 天</option></select>
+        </div>
+        <div class="chart-box">
+          <div class="chart-grid"><div></div><div></div><div></div><div></div></div>
+          <svg class="chart-svg" viewBox="0 0 600 140" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,100 C50,80 100,90 150,70 C200,55 250,60 300,40 C350,30 400,55 450,30 C500,40 550,20 600,25 L600,140 L0,140 Z" fill="url(#g1)"/>
+            <path d="M0,100 C50,80 100,90 150,70 C200,55 250,60 300,40 C350,30 400,55 450,30 C500,40 550,20 600,25" fill="none" stroke="#10b981" stroke-width="2"/>
+          </svg>
+          <div class="chart-labels">
+            <span>06-14</span><span>06-15</span><span>06-16</span><span>06-17</span><span>06-18</span><span>06-19</span><span>06-20</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>平台分布</h3>
+          <span class="chip">按帖子数倒序</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+          <div style="padding:14px;border:1px solid var(--line);border-radius:10px;">
+            <span class="platform-tag twitter">𝕏 Twitter</span>
+            <div style="font-size:24px;font-weight:600;margin-top:8px;">742 <span style="font-size:13px;color:var(--muted);font-weight:400;">帖子</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">18 账号 · 9 用户</div>
+          </div>
+          <div style="padding:14px;border:1px solid var(--line);border-radius:10px;">
+            <span class="platform-tag xiaohongshu">📕 小红书</span>
+            <div style="font-size:24px;font-weight:600;margin-top:8px;">389 <span style="font-size:13px;color:var(--muted);font-weight:400;">帖子</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">14 账号 · 7 用户</div>
+          </div>
+          <div style="padding:14px;border:1px solid var(--line);border-radius:10px;">
+            <span class="platform-tag instagram">📷 Instagram</span>
+            <div style="font-size:24px;font-weight:600;margin-top:8px;">116 <span style="font-size:13px;color:var(--muted);font-weight:400;">帖子</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">6 账号 · 4 用户</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Page 2: Accounts (the important one) ============ -->
+    <section id="page-accounts">
+      <div class="page-head">
+        <div>
+          <div class="crumb">超级管理 · <code>/admin/accounts</code></div>
+          <h2>账号管理</h2>
+          <p>跨用户的账号 CRUD · 共 <strong>38</strong> 个，<strong style="color:var(--warn);">2</strong> 个在回收站</p>
+        </div>
+      </div>
+
+      <div class="banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div>
+          所有 admin 操作会写入 <strong>操作日志</strong>（actor / before / after / IP），
+          用户本人下次登录会看到「你的账号 @xxx 于 06-19 被管理员修改」的提示。
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="filters">
+          <input class="input" placeholder="搜索 handle / 名称 / 描述…" />
+          <select class="select">
+            <option>全部平台</option>
+            <option>Twitter</option>
+            <option>小红书</option>
+            <option>Instagram</option>
+          </select>
+          <select class="select">
+            <option>全部用户</option>
+            <option>alice</option>
+            <option>bob</option>
+            <option>carol</option>
+          </select>
+          <span class="chip active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            活跃
+          </span>
+          <span class="chip">已删除 (2)</span>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Handle</th>
+              <th>平台</th>
+              <th>所属用户</th>
+              <th>状态分布</th>
+              <th>失败率</th>
+              <th>最近活跃</th>
+              <th style="text-align:right;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="handle">@ai__cream</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">AI 奶油</div>
+              </td>
+              <td><span class="platform-tag twitter">𝕏 Twitter</span></td>
+              <td>
+                <div class="owner">
+                  <div class="mini-avatar" style="background:#8b5cf6;">A</div>
+                  alice
+                </div>
+              </td>
+              <td>
+                <div class="status-group">
+                  <span class="st-draft">12</span>
+                  <span class="st-scheduled">38</span>
+                  <span class="st-published">412</span>
+                  <span class="st-failed">3</span>
+                </div>
+              </td>
+              <td>
+                <div class="rate">
+                  <div class="rate-bar"><div class="rate-fill" style="width:8%;"></div></div>
+                  <span class="rate-val" style="color:var(--muted);">0.7%</span>
+                </div>
+              </td>
+              <td style="font-size:12px;color:var(--muted);">2h 前</td>
+              <td>
+                <div class="actions" style="justify-content:flex-end;">
+                  <button class="icon-btn" title="编辑"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                  <button class="icon-btn danger" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg></button>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td>
+                <div class="handle">@2nd_ai50196</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">二号机</div>
+              </td>
+              <td><span class="platform-tag twitter">𝕏 Twitter</span></td>
+              <td>
+                <div class="owner">
+                  <div class="mini-avatar" style="background:#8b5cf6;">A</div>
+                  alice
+                </div>
+              </td>
+              <td>
+                <div class="status-group">
+                  <span class="st-draft">5</span>
+                  <span class="st-scheduled">22</span>
+                  <span class="st-published">183</span>
+                  <span class="st-failed">1</span>
+                </div>
+              </td>
+              <td>
+                <div class="rate">
+                  <div class="rate-bar"><div class="rate-fill" style="width:5%;"></div></div>
+                  <span class="rate-val" style="color:var(--muted);">0.5%</span>
+                </div>
+              </td>
+              <td style="font-size:12px;color:var(--muted);">5h 前</td>
+              <td>
+                <div class="actions" style="justify-content:flex-end;">
+                  <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                  <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg></button>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td>
+                <div class="handle">@bob_foodie</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">Bob 的美食</div>
+              </td>
+              <td><span class="platform-tag xiaohongshu">📕 小红书</span></td>
+              <td>
+                <div class="owner">
+                  <div class="mini-avatar" style="background:#10b981;">B</div>
+                  bob
+                </div>
+              </td>
+              <td>
+                <div class="status-group">
+                  <span class="st-draft">8</span>
+                  <span class="st-scheduled">12</span>
+                  <span class="st-published">96</span>
+                  <span class="st-failed">14</span>
+                </div>
+              </td>
+              <td>
+                <div class="rate">
+                  <div class="rate-bar"><div class="rate-fill" style="width:62%;"></div></div>
+                  <span class="rate-val" style="color:var(--danger);">12.7%</span>
+                </div>
+              </td>
+              <td style="font-size:12px;color:var(--muted);">1d 前</td>
+              <td>
+                <div class="actions" style="justify-content:flex-end;">
+                  <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                  <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg></button>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td>
+                <div class="handle">@carol_travel</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">Carol 漫游</div>
+              </td>
+              <td><span class="platform-tag instagram">📷 Instagram</span></td>
+              <td>
+                <div class="owner">
+                  <div class="mini-avatar" style="background:#ec4899;">C</div>
+                  carol
+                </div>
+              </td>
+              <td>
+                <div class="status-group">
+                  <span class="st-draft">2</span>
+                  <span class="st-scheduled">6</span>
+                  <span class="st-published">34</span>
+                  <span class="st-failed">0</span>
+                </div>
+              </td>
+              <td>
+                <div class="rate">
+                  <div class="rate-bar"><div class="rate-fill" style="width:0%;"></div></div>
+                  <span class="rate-val" style="color:var(--muted);">0%</span>
+                </div>
+              </td>
+              <td style="font-size:12px;color:var(--muted);">12h 前</td>
+              <td>
+                <div class="actions" style="justify-content:flex-end;">
+                  <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                  <button class="icon-btn danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg></button>
+                </div>
+              </td>
+            </tr>
+
+            <tr class="deleted">
+              <td>
+                <div class="handle">@old_spam_account</div>
+                <span class="st-deleted" style="font-size:11px;padding:1px 6px;border-radius:4px;margin-left:6px;">已删除</span>
+              </td>
+              <td><span class="platform-tag twitter">𝕏 Twitter</span></td>
+              <td>
+                <div class="owner">
+                  <div class="mini-avatar" style="background:#8b5cf6;">A</div>
+                  alice
+                </div>
+              </td>
+              <td colspan="3" style="font-size:12px;color:var(--muted);">
+                删除于 2026-06-15 · 由 admin 操作 · 删除原因：handle 重复
+              </td>
+              <td>
+                <div class="actions" style="justify-content:flex-end;">
+                  <button class="icon-btn warn" title="恢复"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+                  <button class="icon-btn danger" title="永久删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ Page 3: Logs ============ -->
+    <section id="page-logs" style="display:none;">
+      <div class="page-head">
+        <div>
+          <div class="crumb">超级管理 · <code>/admin/logs</code></div>
+          <h2>操作日志</h2>
+          <p>所有 admin 写操作的审计追踪 · 仅记录写操作（编辑/删除/恢复），不记录读取</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="filters">
+          <select class="select">
+            <option>所有操作者</option>
+            <option>admin</option>
+          </select>
+          <select class="select">
+            <option>所有操作类型</option>
+            <option>account.update</option>
+            <option>account.delete</option>
+            <option>account.restore</option>
+          </select>
+          <select class="select">
+            <option>所有对象</option>
+            <option>用户: alice</option>
+            <option>用户: bob</option>
+          </select>
+          <input class="input" type="date" value="2026-06-01" />
+          <span style="margin-left:auto;font-size:12px;color:var(--muted);">共 47 条 · 显示最近 20 条</span>
+        </div>
+
+        <ul class="timeline">
+          <li class="update">
+            <div class="timeline-head">
+              <span class="timeline-title">修改了账号 <code>@bob_foodie</code> 的 handle</span>
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#e0e7ff;color:#4338ca;font-weight:500;">account.update</span>
+            </div>
+            <div class="timeline-meta">
+              <span><strong>admin</strong> · 2026-06-20 01:38:12</span>
+              <span>对象归属：<code>bob</code></span>
+              <span>IP <code>203.0.113.42</code></span>
+            </div>
+            <div class="diff">
+              <div><span class="k">handle:</span> <span class="v-old">"@bob_food"</span> → <span class="v-new">"@bob_foodie"</span></div>
+              <div><span class="k">description:</span> <span class="v-old">"美食分享"</span> → <span class="v-new">"Bob 的美食"</span></div>
+            </div>
+          </li>
+
+          <li class="delete">
+            <div class="timeline-head">
+              <span class="timeline-title">删除了账号 <code>@old_spam_account</code></span>
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#fee2e2;color:#b91c1c;font-weight:500;">account.delete</span>
+            </div>
+            <div class="timeline-meta">
+              <span><strong>admin</strong> · 2026-06-15 14:22:08</span>
+              <span>对象归属：<code>alice</code></span>
+              <span>IP <code>203.0.113.42</code></span>
+            </div>
+            <div class="diff" style="border-left-color:var(--danger);">
+              <div><span class="k">deletedAt:</span> <span class="v-old">null</span> → <span class="v-new">"2026-06-15T14:22:08.000Z"</span></div>
+              <div><span class="k">deleteNote:</span> <span class="v-new">"handle 重复 — 已在 Twitter 平台核实为同一账号"</span></div>
+            </div>
+          </li>
+
+          <li class="restore">
+            <div class="timeline-head">
+              <span class="timeline-title">恢复了账号 <code>@carol_food_backup</code></span>
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#d1fae5;color:#047857;font-weight:500;">account.restore</span>
+            </div>
+            <div class="timeline-meta">
+              <span><strong>admin</strong> · 2026-06-12 09:15:44</span>
+              <span>对象归属：<code>carol</code></span>
+            </div>
+            <div class="diff" style="border-left-color:var(--primary);">
+              <div><span class="k">deletedAt:</span> <span class="v-old">"2026-06-10T..."</span> → <span class="v-new">null</span></div>
+            </div>
+          </li>
+
+          <li class="update">
+            <div class="timeline-head">
+              <span class="timeline-title">修改了账号 <code>@ai__cream</code> 的平台</span>
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#e0e7ff;color:#4338ca;font-weight:500;">account.update</span>
+            </div>
+            <div class="timeline-meta">
+              <span><strong>admin</strong> · 2026-06-08 16:42:01</span>
+              <span>对象归属：<code>alice</code></span>
+            </div>
+            <div class="diff">
+              <div><span class="k">platformId:</span> <span class="v-old">"plt_instagram"</span> → <span class="v-new">"plt_twitter"</span></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ Edit modal demo ============ -->
+<div class="modal-mask" id="editModal" style="display:none;">
+  <div class="modal">
+    <h4>编辑账号</h4>
+    <p class="modal-sub">
+      修改 <code>@bob_foodie</code>（归属用户 <strong>bob</strong>） ·
+      所有字段修改会写入操作日志，bob 下次登录会看到提示。
+    </p>
+    <div class="form-row">
+      <label>Handle</label>
+      <input class="input" value="@bob_foodie" style="width:100%;" />
+    </div>
+    <div class="form-row">
+      <label>显示名称</label>
+      <input class="input" value="Bob 的美食" style="width:100%;" />
+    </div>
+    <div class="form-row">
+      <label>平台</label>
+      <select class="select" style="width:100%;">
+        <option>📕 小红书</option>
+        <option>𝕏 Twitter</option>
+        <option>📷 Instagram</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>描述</label>
+      <input class="input" value="记录上海的咖啡店和brunch" style="width:100%;" />
+    </div>
+    <div class="footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('editModal').style.display='none';">取消</button>
+      <button class="btn btn-primary" onclick="document.getElementById('editModal').style.display='none';">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Delete modal demo ============ -->
+<div class="modal-mask" id="deleteModal" style="display:none;">
+  <div class="modal" style="border-top:4px solid var(--danger);">
+    <h4>确认删除账号</h4>
+    <p class="modal-sub">
+      将删除账号 <code style="color:var(--danger);">@bob_foodie</code> ·
+      该账号属于用户 <strong>bob</strong>，共关联 <strong>130</strong> 条帖子。
+      <br><br>
+      <strong>此操作会：</strong>
+      <br>· 软删除账号（可在 30 天回收站恢复）
+      <br>· <strong>不删除</strong>关联的帖子（帖子会显示"账号已删除"）
+      <br>· 写入操作日志，bob 会在站内看到提示
+    </p>
+    <div class="form-row">
+      <label>删除原因（必填，会显示给 bob）</label>
+      <input class="input" placeholder="例：账号已废弃 / 重复账号 / 平台封禁" style="width:100%;" />
+    </div>
+    <div class="footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('deleteModal').style.display='none';">取消</button>
+      <button class="btn btn-danger" onclick="document.getElementById('deleteModal').style.display='none';">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPage(name) {
+    document.querySelectorAll('section[id^="page-"]').forEach(s => s.style.display = 'none');
+    document.getElementById('page-' + name).style.display = 'block';
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>
